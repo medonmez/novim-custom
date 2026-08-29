@@ -4,13 +4,13 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-008`
+Current task: `TASK-009`
 Base branch: `main`
-Task branch: `task/TASK-008-settings-and-resizing`
+Task branch: `task/TASK-009-three-area-diff`
 Pull request: `NOT_OPEN`
-Last accepted task: `TASK-007`
-Last accepted commit: `d8f567a2b1b20d6ab9f9afba7e5ab9d2442ce1c9`
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/10`
+Last accepted task: `TASK-008`
+Last accepted commit: `6621cd84362bd1975106b8b1ba2e012d0682823a`
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/13`
 
 ## Current truth
 
@@ -68,20 +68,26 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/10`
   `origin/main`. The project browser now starts with a root-only lazy listing,
   expands folders one level at a time for the session, filters dotfiles at
   every level, and refuses true symlink ancestor cycles.
-- A fresh brief was accepted on 2026-08-30. TASK-008 is planned on
-  `task/TASK-008-settings-and-resizing` for themes, settings key help,
-  immediate settings close, and reliable pane resizing. TASK-009 remains a
-  proposed follow-up slice for three-area diff rendering.
+- `TASK-008` was locally reviewed `APPROVED` at candidate
+  `49b453e40c8d7ab5f1f39b6353b581da9d2fc2da`, delivered through GitHub PR #13,
+  and verified in merge commit `6621cd84362bd1975106b8b1ba2e012d0682823a` on
+  `origin/main`. The derivative now has six application-owned built-in themes
+  with persisted, safely-validated selection; settings key help pinned to real
+  mappings in both directions; immediate one-key `Esc` settings close; and a
+  bidirectional, minimum-width-clamped divider drag that never raises `E21`.
+- TASK-009 is planned on `task/TASK-009-three-area-diff` for three-area
+  side-by-side diff rendering with refresh on entry, per the accepted product
+  direction in ADR-003.
 
 ## Active blockers
 
-- No active blocker. TASK-007 is accepted on `origin/main`, and TASK-008 is
-  planned from verified `origin/main` commit `b98901f`. No hosted,
+- No active blocker. TASK-008 is accepted on `origin/main`, and TASK-009 is
+  planned from verified `origin/main` commit `6621cd8`. No hosted,
   production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Implement TASK-008 on its isolated task branch, then return a local handoff for
-review. TASK-001 through TASK-007 remain accepted; TASK-009 must wait for its
-dependency. The local distribution and upstream sync procedures remain
-documented in `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.
+Implement TASK-009 on its isolated task branch, then return a local handoff for
+review. TASK-001 through TASK-008 remain accepted. The local distribution and
+upstream sync procedures remain documented in `docs/LOCAL_DISTRIBUTION.md` and
+`docs/UPSTREAM_SYNC.md`.

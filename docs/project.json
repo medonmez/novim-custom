@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-008-settings-and-resizing",
+    "taskBranch": "task/TASK-009-three-area-diff",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -26,13 +26,13 @@
     "developmentCommandTask": "TASK-001"
   },
   "workflow": {
-    "currentTask": "TASK-008",
-    "currentTaskStatus": "READY_FOR_REVIEW",
+    "currentTask": "TASK-009",
+    "currentTaskStatus": "PLANNED",
     "pullRequest": null,
     "remoteChecks": "OPTIONAL / NOT_RUN",
-    "lastAcceptedTask": "TASK-007",
-    "lastAcceptedCommit": "d8f567a2b1b20d6ab9f9afba7e5ab9d2442ce1c9",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/10"
+    "lastAcceptedTask": "TASK-008",
+    "lastAcceptedCommit": "6621cd84362bd1975106b8b1ba2e012d0682823a",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/13"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
