@@ -1,4 +1,4 @@
--- novim/workbench.lua - Unified Project Browser & Read-Only Git Diff Workbench
+-- novim/workbench.lua - Project Browser & Three-Area Read-Only Git Diff Workbench
 -- Part of novim custom derivative
 
 local git = require("novim.git")
@@ -10,6 +10,10 @@ local keymaps = require("novim.keymaps")
 local uv = vim.uv or vim.loop
 
 local M = {}
+local on_left_click
+local on_left_drag
+local on_left_release
+local install_diff_middle_maps
 
 -- State
 local state = {
@@ -38,16 +42,19 @@ local state = {
 
   header_line_count = 4,
   buf_left = nil,
+  buf_middle = nil,
   win_left = nil,
+  win_middle = nil,
   buf_right = nil,
   win_right = nil,
-  drag = nil, -- active divider drag: { start_col, start_width }
+  drag = nil, -- active divider drag: { boundary, start_col, start_widths }
   ns_id = vim.api.nvim_create_namespace("novim_workbench"),
 }
 
--- Minimum usable pane widths in columns. The divider itself is one column,
--- so the widest the left pane may grow is (columns - MIN_RIGHT_WIDTH - 1).
+-- Minimum usable pane widths in columns. Each visible divider consumes one
+-- column, so a three-area Diff view keeps all three panes valid while dragging.
 local MIN_LEFT_WIDTH = 15
+local MIN_MIDDLE_WIDTH = 20
 local MIN_RIGHT_WIDTH = 20
 
 --- Create a scratch buffer with a fixed display name.
@@ -67,6 +74,13 @@ local function fresh_buffer(name)
     pcall(vim.api.nvim_buf_set_name, buf, name)
   end
   return buf
+end
+
+local function configure_scratch_buffer(buf)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "hide"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buflisted = false
 end
 
 -- Ensure highlights are set up
@@ -317,14 +331,103 @@ function M.render_left_pane()
   end
 end
 
---- Render the right pane (Project File Preview or Git Diff Preview)
+local function diff_status_lines()
+  if not state.is_git then
+    return { "# Not a Git repository", "# Diff panes show local changes against HEAD." }
+  elseif state.err then
+    return { "# Git status error", "# " .. tostring(state.err), "# Press 'r' to refresh." }
+  elseif #state.files == 0 then
+    return { "# Working tree is clean", "# No changed files relative to HEAD." }
+  end
+  return { "# No file selected" }
+end
+
+local function render_diff_content(buf, win, file, versions, side)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+
+  local lines
+  local binary = (side == "old") and versions.old_binary or versions.new_binary
+  if binary then
+    local path = (side == "old") and versions.old_path or versions.new_path
+    local location = (side == "old") and "HEAD" or "working tree"
+    lines = {
+      "# Binary file: " .. path,
+      "# Content preview suppressed (" .. location .. ").",
+      "# Status: " .. file.status,
+    }
+  else
+    lines = (side == "old") and versions.old_lines or versions.new_lines
+  end
+
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+  vim.bo[buf].filetype = "conf"
+  vim.api.nvim_buf_clear_namespace(buf, state.ns_id, 0, -1)
+
+  if not versions.is_binary then
+    local old_lines = versions.old_lines
+    local new_lines = versions.new_lines
+    for line_number = 1, #lines do
+      local changed = false
+      if side == "old" then
+        changed = line_number > #new_lines or old_lines[line_number] ~= new_lines[line_number]
+      else
+        changed = line_number > #old_lines or old_lines[line_number] ~= new_lines[line_number]
+      end
+      if changed then
+        local group = (side == "old") and "DiffDelete" or "DiffAdd"
+        pcall(vim.api.nvim_buf_add_highlight, buf, state.ns_id, group, line_number - 1, 0, -1)
+      end
+    end
+  end
+
+  if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+    pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
+  end
+end
+
+local function render_diff_pane(buf, win, side)
+  if not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return
+  end
+  if win and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) ~= buf then
+    vim.api.nvim_win_set_buf(win, buf)
+  end
+
+  if not state.is_git or state.err or #state.files == 0 then
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, diff_status_lines())
+    vim.bo[buf].modifiable = false
+    vim.bo[buf].readonly = true
+    vim.bo[buf].filetype = "conf"
+    vim.api.nvim_buf_clear_namespace(buf, state.ns_id, 0, -1)
+    return
+  end
+
+  local file = state.files[state.selected_index]
+  if not file then
+    return
+  end
+  render_diff_content(buf, win, file, git.get_file_versions(file, state.repo_root), side)
+end
+
+--- Render the middle old-file pane in Diff view.
+function M.render_middle_pane()
+  if state.view_mode ~= "diff" or not state.buf_middle then
+    return
+  end
+  render_diff_pane(state.buf_middle, state.win_middle, "old")
+end
+
+--- Render the right pane (Project File Preview or new-file Diff pane).
 function M.render_right_pane()
   if not state.buf_right or not vim.api.nvim_buf_is_valid(state.buf_right) then
     state.buf_right = fresh_buffer("[Workbench - Preview]")
-    vim.bo[state.buf_right].buftype = "nofile"
-    vim.bo[state.buf_right].bufhidden = "hide"
-    vim.bo[state.buf_right].swapfile = false
-    vim.bo[state.buf_right].buflisted = false
+    configure_scratch_buffer(state.buf_right)
   end
 
   if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
@@ -334,101 +437,21 @@ function M.render_right_pane()
     end
   end
 
-  vim.bo[state.buf_right].readonly = false
-  vim.bo[state.buf_right].modifiable = true
-
-  local lines = {}
-  local is_diff_syntax = false
-
-  if state.view_mode == "files" then
-    -- === Project File Preview ===
-    local selected_entry = state.project_files[state.selected_project_index]
-    local show_dots = settings.get("show_dotfiles")
-    lines, _ = browser.get_preview(selected_entry, state.root_dir, show_dots)
-    is_diff_syntax = false
-  else
-    -- === Git Diff Preview ===
-    if not state.is_git then
-      lines = {
-        "# ===================================================================",
-        "# Diff Workbench (Read-Only)",
-        "# ===================================================================",
-        "#",
-        "# Not a Git repository.",
-        "# The current directory is not part of a Git working tree.",
-        "#",
-        "# To use the Diff Workbench:",
-        "#   1. Navigate to a Git repository in your terminal.",
-        "#   2. Run: novim-dev",
-        "#",
-        "# Shortcuts:",
-        "#   [1] or [b]      Switch to Project Browser",
-        "#   [s]             Open Settings",
-        "#   [q] or [Esc Esc] Quit workbench",
-        "#   [?]             Show help",
-      }
-    elseif state.err then
-      lines = {
-        "# ===================================================================",
-        "# Git Status Error",
-        "# ===================================================================",
-        "#",
-        "# Error details:",
-        "# " .. tostring(state.err),
-        "#",
-        "# Press 'r' to retry / refresh.",
-      }
-    elseif #state.files == 0 then
-      lines = {
-        "# ===================================================================",
-        "# Diff Workbench (vs HEAD)",
-        "# ===================================================================",
-        "#",
-        "# ✓ Working tree is clean.",
-        "# No modified, added, deleted, or untracked files found relative to HEAD.",
-        "#",
-        "# Shortcuts:",
-        "#   [1] or [b]      Switch to Project Browser",
-        "#   [s]             Open Settings",
-        "#   [r]             Refresh Git status",
-        "#   [q] or [Esc Esc] Quit workbench",
-        "#   [?]             Show help",
-      }
-    else
-      local file = state.files[state.selected_index]
-      if file then
-        local diff_lines, is_binary = git.get_file_diff(file, state.repo_root)
-        if is_binary then
-          is_diff_syntax = true
-          lines = {
-            "diff --git a/" .. file.path .. " b/" .. file.path,
-            "# Binary file differs from HEAD",
-            "# Path: " .. file.path,
-            "# Status: " .. file.status .. " (" .. (file.is_untracked and "Untracked" or "Tracked") .. ")",
-            "# Note: Binary content preview is not text-renderable in diff view.",
-          }
-          for _, l in ipairs(diff_lines) do
-            table.insert(lines, l)
-          end
-        else
-          lines = diff_lines
-          is_diff_syntax = true
-        end
-      else
-        lines = { "# No file selected" }
-      end
-    end
+  if state.view_mode == "diff" then
+    render_diff_pane(state.buf_right, state.win_right, "new")
+    return
   end
 
+  vim.bo[state.buf_right].readonly = false
+  vim.bo[state.buf_right].modifiable = true
+  local selected_entry = state.project_files[state.selected_project_index]
+  local show_dots = settings.get("show_dotfiles")
+  local lines = browser.get_preview(selected_entry, state.root_dir, show_dots)
   vim.api.nvim_buf_set_lines(state.buf_right, 0, -1, false, lines)
   vim.bo[state.buf_right].modifiable = false
   vim.bo[state.buf_right].readonly = true
-
-  if is_diff_syntax then
-    vim.bo[state.buf_right].filetype = "diff"
-  else
-    vim.bo[state.buf_right].filetype = "conf"
-  end
+  vim.bo[state.buf_right].filetype = "conf"
+  vim.api.nvim_buf_clear_namespace(state.buf_right, state.ns_id, 0, -1)
 end
 
 --- Select a specific item in the active view and update preview
@@ -453,6 +476,7 @@ function M.select_file(index)
       state.selected_index = index
       M.render_left_pane()
     end
+    M.render_middle_pane()
     M.render_right_pane()
   end
 end
@@ -510,6 +534,80 @@ function M.open_selected_file()
   return false
 end
 
+local function set_preview_window_options(win, role)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return
+  end
+  vim.wo[win].number = true
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].wrap = false
+  vim.wo[win].cursorline = false
+  vim.wo[win].spell = false
+  vim.wo[win].foldenable = false
+  if role == "old" then
+    vim.wo[win].statusline = " %f %=[Old / HEAD]  [Tab] Next  [S-Tab] Files "
+  elseif role == "new" then
+    vim.wo[win].statusline = " %f %=[New / Worktree]  [S-Tab] Previous "
+  else
+    vim.wo[win].statusline = " %f %=[Tab] Explorer  [?] Help  [Esc Esc] Quit "
+  end
+end
+
+--- Add the old-file pane between the navigation and preview panes.
+local function ensure_diff_layout()
+  if not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
+    or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
+    return false
+  end
+  if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    return true
+  end
+
+  state.buf_middle = fresh_buffer("[Workbench - Old]")
+  configure_scratch_buffer(state.buf_middle)
+  local previous_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_set_current_win(state.win_left)
+  local ok = pcall(vim.cmd, "rightbelow vsplit")
+  if not ok then
+    pcall(vim.api.nvim_buf_delete, state.buf_middle, { force = true })
+    state.buf_middle = nil
+    if vim.api.nvim_win_is_valid(previous_win) then
+      vim.api.nvim_set_current_win(previous_win)
+    end
+    return false
+  end
+
+  state.win_middle = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(state.win_middle, state.buf_middle)
+  -- Establish a usable three-pane starting point. Subsequent drags preserve
+  -- the untouched pane and clamp the two panes adjacent to the boundary.
+  local initial_left = math.max(MIN_LEFT_WIDTH, math.min(28, math.floor(vim.o.columns * 0.24)))
+  local initial_middle = math.max(MIN_MIDDLE_WIDTH, math.min(35, math.floor(vim.o.columns * 0.32)))
+  pcall(vim.api.nvim_win_set_width, state.win_left, initial_left)
+  pcall(vim.api.nvim_win_set_width, state.win_middle, initial_middle)
+  if install_diff_middle_maps then
+    install_diff_middle_maps(state.buf_middle)
+  end
+  set_preview_window_options(state.win_middle, "old")
+  set_preview_window_options(state.win_right, "new")
+  if vim.api.nvim_win_is_valid(previous_win) and previous_win ~= state.win_middle then
+    vim.api.nvim_set_current_win(previous_win)
+  end
+  return true
+end
+
+local function leave_diff_layout()
+  if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    pcall(vim.api.nvim_win_close, state.win_middle, true)
+  end
+  if state.buf_middle and vim.api.nvim_buf_is_valid(state.buf_middle) then
+    pcall(vim.api.nvim_buf_delete, state.buf_middle, { force = true })
+  end
+  state.win_middle = nil
+  state.buf_middle = nil
+  state.drag = nil
+end
 
 --- Switch active view mode
 ---@param mode "files" | "diff"
@@ -518,8 +616,16 @@ function M.set_view(mode)
   if state.view_mode == mode then return end
 
   state.view_mode = mode
-  M.render_left_pane()
-  M.render_right_pane()
+  if mode == "diff" then
+    ensure_diff_layout()
+    -- Diff entry is an explicit refresh boundary: status and selected content
+    -- must reflect the current working tree and HEAD immediately.
+    M.refresh()
+  else
+    leave_diff_layout()
+    M.render_left_pane()
+    M.render_right_pane()
+  end
 end
 
 --- Toggle between "files" and "diff" views
@@ -648,6 +754,7 @@ function M.toggle_dir_expansion(entry)
   end
 
   M.render_left_pane()
+  M.render_middle_pane()
   M.render_right_pane()
 end
 
@@ -677,6 +784,7 @@ function M.refresh()
   end
 
   M.render_left_pane()
+  M.render_middle_pane()
   M.render_right_pane()
 end
 
@@ -701,38 +809,85 @@ local function on_left_cursor_moved()
     if f_idx and f_idx ~= state.selected_index then
       state.selected_index = f_idx
       M.render_left_pane()
+      M.render_middle_pane()
       M.render_right_pane()
     end
   end
 end
 
---- Screen column of the divider between the left and right panes, or nil
---- when the two panes are not adjacent (so no divider drag may start).
----@return integer? col
+--- Return visible divider columns in pane order.
+---@return table[] dividers
 local function divider_column()
   if not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
     or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
-    return nil
+    return {}
   end
-  local left_pos = vim.fn.win_screenpos(state.win_left)
-  local right_pos = vim.fn.win_screenpos(state.win_right)
-  local sep_col = right_pos[2] - 1
-  -- The divider exists only when the right window starts directly after
-  -- the left window plus the one-column separator.
-  if left_pos[2] + vim.api.nvim_win_get_width(state.win_left) ~= sep_col then
-    return nil
+
+  local windows = { state.win_left }
+  if state.view_mode == "diff" and state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    table.insert(windows, state.win_middle)
   end
-  return sep_col
+  table.insert(windows, state.win_right)
+
+  local dividers = {}
+  for i = 1, #windows - 1 do
+    local first_pos = vim.fn.win_screenpos(windows[i])
+    local next_pos = vim.fn.win_screenpos(windows[i + 1])
+    local sep_col = next_pos[2] - 1
+    if first_pos[2] + vim.api.nvim_win_get_width(windows[i]) == sep_col then
+      table.insert(dividers, { column = sep_col, boundary = i })
+    end
+  end
+  return dividers
+end
+
+--- Resize one Diff boundary while preserving the other pane widths.
+--- Boundary 1 is left/middle; boundary 2 is middle/right.
+---@param boundary integer
+---@param target_width number
+---@return integer actual_width
+function M.resize_diff_boundary(boundary, target_width)
+  if state.view_mode ~= "diff" or boundary < 1 or boundary > 2
+    or not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
+    or not state.win_middle or not vim.api.nvim_win_is_valid(state.win_middle)
+    or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
+    return 0
+  end
+
+  local widths = {
+    vim.api.nvim_win_get_width(state.win_left),
+    vim.api.nvim_win_get_width(state.win_middle),
+    vim.api.nvim_win_get_width(state.win_right),
+  }
+  local first = boundary
+  local second = boundary + 1
+  local minimum_first = (boundary == 1) and math.max(MIN_LEFT_WIDTH, vim.o.winminwidth or 0) or MIN_MIDDLE_WIDTH
+  local minimum_second = (boundary == 1) and MIN_MIDDLE_WIDTH or MIN_RIGHT_WIDTH
+  local available = widths[first] + widths[second]
+  local max_first = math.max(minimum_first, available - minimum_second)
+  local width = math.floor(tonumber(target_width) or 0)
+  width = math.max(minimum_first, math.min(max_first, width))
+  local second_width = available - width
+
+  local first_win = ({ state.win_left, state.win_middle })[first]
+  local second_win = ({ state.win_middle, state.win_right })[boundary]
+  pcall(vim.api.nvim_win_set_width, first_win, width)
+  pcall(vim.api.nvim_win_set_width, second_win, second_width)
+  return vim.api.nvim_win_get_width(first_win)
 end
 
 --- Resize the left pane to a target width, clamped so both panes stay usable.
---- Never raises: invalid windows are ignored and out-of-range targets clamp
---- to the minimum widths, so a drag can never produce E21 or invalid windows.
+--- In Diff view this is the left/middle boundary; in Files view it remains
+--- the accepted left/right two-pane behavior.
 ---@param target_width number
 ---@return integer actual_width
 function M.resize_left_pane(target_width)
   if not state.win_left or not vim.api.nvim_win_is_valid(state.win_left) then
     return 0
+  end
+
+  if state.view_mode == "diff" and state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    return M.resize_diff_boundary(1, target_width)
   end
 
   local total_cols = vim.o.columns
@@ -754,13 +909,28 @@ end
 --- Begin a divider drag anchored at the given screen column.
 ---@param screencol integer
 function M.pane_drag_start(screencol)
-  if not state.win_left or not vim.api.nvim_win_is_valid(state.win_left) then
-    return
+  for _, divider in ipairs(divider_column()) do
+    if divider.column == screencol then
+      if state.view_mode == "diff" then
+        state.drag = {
+          boundary = divider.boundary,
+          start_col = screencol,
+          start_widths = {
+            vim.api.nvim_win_get_width(state.win_left),
+            vim.api.nvim_win_get_width(state.win_middle),
+            vim.api.nvim_win_get_width(state.win_right),
+          },
+        }
+      else
+        state.drag = {
+          boundary = 1,
+          start_col = screencol,
+          start_widths = { vim.api.nvim_win_get_width(state.win_left) },
+        }
+      end
+      return
+    end
   end
-  state.drag = {
-    start_col = screencol,
-    start_width = vim.api.nvim_win_get_width(state.win_left),
-  }
 end
 
 --- Move an active divider drag to the given screen column and resize live.
@@ -771,7 +941,12 @@ function M.pane_drag_move(screencol)
     return
   end
   local delta = screencol - state.drag.start_col
-  M.resize_left_pane(state.drag.start_width + delta)
+  if state.view_mode == "diff" then
+    local boundary = state.drag.boundary
+    M.resize_diff_boundary(boundary, state.drag.start_widths[boundary] + delta)
+  else
+    M.resize_left_pane(state.drag.start_widths[1] + delta)
+  end
 end
 
 --- End the active divider drag.
@@ -779,17 +954,19 @@ function M.pane_drag_end()
   state.drag = nil
 end
 
---- Handle mouse click in left pane
-local function on_left_click()
+--- Handle mouse click in the workbench panes.
+on_left_click = function()
   local mouse = vim.fn.getmousepos()
 
   -- A press on the visible pane boundary starts a divider drag instead of
   -- changing the selection; dragging the boundary resizes both directions.
-  local sep_col = divider_column()
-  if sep_col and mouse.screencol == sep_col
-    and (mouse.winid == state.win_left or mouse.winid == state.win_right or mouse.winid == 0) then
-    M.pane_drag_start(mouse.screencol)
-    return
+  for _, divider in ipairs(divider_column()) do
+    if mouse.screencol == divider.column
+      and (mouse.winid == state.win_left or mouse.winid == state.win_middle
+        or mouse.winid == state.win_right or mouse.winid == 0) then
+      M.pane_drag_start(mouse.screencol)
+      return
+    end
   end
 
   if mouse.winid == state.win_left then
@@ -823,6 +1000,7 @@ local function on_left_click()
       if file_idx then
         state.selected_index = file_idx
         M.render_left_pane()
+        M.render_middle_pane()
         M.render_right_pane()
       end
     end
@@ -830,13 +1008,49 @@ local function on_left_click()
 end
 
 --- Handle mouse drag motion: resize the panes while a divider drag is active.
-local function on_left_drag()
+on_left_drag = function()
   M.pane_drag_move(vim.fn.getmousepos().screencol)
 end
 
 --- Handle mouse release: finish any active divider drag.
-local function on_left_release()
+on_left_release = function()
   M.pane_drag_end()
+end
+
+-- Bind the dynamically-created old-file buffer. This is also called when a
+-- running Files view transitions into Diff, not only during initial launch.
+install_diff_middle_maps = function(buf)
+  local opts = { buffer = buf, silent = true, noremap = true }
+  vim.keymap.set("n", "1", function() M.set_view("files") end, opts)
+  vim.keymap.set("n", "b", function() M.set_view("files") end, opts)
+  vim.keymap.set("n", "f", function() M.set_view("files") end, opts)
+  vim.keymap.set("n", "2", function() M.set_view("diff") end, opts)
+  vim.keymap.set("n", "d", function() M.set_view("diff") end, opts)
+  vim.keymap.set("n", "g", function() M.set_view("diff") end, opts)
+  vim.keymap.set("n", "s", M.open_settings, opts)
+  vim.keymap.set("n", "S", M.open_settings, opts)
+  vim.keymap.set("n", "j", function() M.select_file(state.selected_index + 1) end, opts)
+  vim.keymap.set("n", "k", function() M.select_file(state.selected_index - 1) end, opts)
+  vim.keymap.set("n", "<Down>", function() M.select_file(state.selected_index + 1) end, opts)
+  vim.keymap.set("n", "<Up>", function() M.select_file(state.selected_index - 1) end, opts)
+  vim.keymap.set("n", "<Tab>", function()
+    if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
+      vim.api.nvim_set_current_win(state.win_right)
+    end
+  end, opts)
+  vim.keymap.set("n", "<S-Tab>", function()
+    if state.win_left and vim.api.nvim_win_is_valid(state.win_left) then
+      vim.api.nvim_set_current_win(state.win_left)
+    end
+  end, opts)
+  vim.keymap.set("n", "<LeftMouse>", on_left_click, opts)
+  vim.keymap.set("n", "<LeftDrag>", on_left_drag, opts)
+  vim.keymap.set("n", "<LeftRelease>", on_left_release, opts)
+  vim.keymap.set("n", "r", M.refresh, opts)
+  vim.keymap.set("n", "<C-r>", M.refresh, opts)
+  vim.keymap.set("n", "?", M.show_help, opts)
+  vim.keymap.set("n", "q", function() M.close({ quit = true }) end, opts)
+  vim.keymap.set("n", "<Esc><Esc>", function() M.close({ quit = true }) end, opts)
 end
 
 
@@ -856,8 +1070,8 @@ function M.show_help()
     "   Enter / Double-Click  Open regular file in editor",
     "   Space            Preview selected item",
     "   Left Click       Select item / switch tabs",
-    "   Tab / S-Tab      Switch between left and right panes",
-    "   Drag Divider     Resize left/right panes with mouse",
+    "   Tab / S-Tab      Switch between visible panes",
+    "   Drag Divider     Resize adjacent panes with mouse",
     "   r                Refresh files and Git status",
     "   ?                Show this help",
     "   q or Esc Esc     Quit / Close workbench",
@@ -931,6 +1145,8 @@ function M.close(opts)
     state.tab_id = nil
     state.buf_left = nil
     state.win_left = nil
+    state.buf_middle = nil
+    state.win_middle = nil
     state.buf_right = nil
     state.win_right = nil
     pcall(vim.cmd, "tabclose")
@@ -945,6 +1161,9 @@ function M.close(opts)
   if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
     table.insert(wins, state.win_right)
   end
+  if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    table.insert(wins, state.win_middle)
+  end
 
   local all_wins = vim.api.nvim_list_wins()
 
@@ -955,8 +1174,10 @@ function M.close(opts)
       pcall(vim.api.nvim_win_close, w, true)
     end
     state.win_left = nil
+    state.win_middle = nil
     state.win_right = nil
     state.buf_left = nil
+    state.buf_middle = nil
     state.buf_right = nil
     return
   end
@@ -982,6 +1203,9 @@ function M.close(opts)
     end
   else
     state.is_open = false
+    if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+      pcall(vim.api.nvim_win_close, state.win_middle, true)
+    end
     if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
       pcall(vim.api.nvim_win_close, state.win_right, true)
     end
@@ -990,8 +1214,10 @@ function M.close(opts)
       pcall(vim.api.nvim_win_set_buf, state.win_left, empty_buf)
     end
     state.win_left = nil
+    state.win_middle = nil
     state.win_right = nil
     state.buf_left = nil
+    state.buf_middle = nil
     state.buf_right = nil
   end
 end
@@ -1010,6 +1236,11 @@ function M.open(opts)
       vim.api.nvim_set_current_tabpage(state.tab_id)
     end
     vim.api.nvim_set_current_win(state.win_left)
+    if state.view_mode == "diff" then
+      ensure_diff_layout()
+    else
+      leave_diff_layout()
+    end
     M.refresh()
     return
   end
@@ -1039,10 +1270,7 @@ function M.open(opts)
   state.buf_right = fresh_buffer("[Workbench - Preview]")
 
   for _, buf in ipairs({ state.buf_left, state.buf_right }) do
-    vim.bo[buf].buftype = "nofile"
-    vim.bo[buf].bufhidden = "hide"
-    vim.bo[buf].swapfile = false
-    vim.bo[buf].buflisted = false
+    configure_scratch_buffer(buf)
   end
 
 
@@ -1061,6 +1289,10 @@ function M.open(opts)
   -- Set left window width
   vim.api.nvim_win_set_width(state.win_left, left_width)
 
+  if state.view_mode == "diff" then
+    ensure_diff_layout()
+  end
+
   -- Window options
   local function set_win_opts(win, is_left)
     if not vim.api.nvim_win_is_valid(win) then return end
@@ -1074,7 +1306,7 @@ function M.open(opts)
     if is_left then
       vim.wo[win].statusline = " %f %=[1] Files  [2] Diff  [s] Settings  [r] Refresh  [?] Help "
     else
-      vim.wo[win].statusline = " %f %=[Tab] Explorer  [?] Help  [Esc Esc] Quit "
+      set_preview_window_options(win, state.view_mode == "diff" and "new" or "preview")
     end
   end
 
@@ -1206,8 +1438,12 @@ function M.open(opts)
 
     -- Pane switching
     vim.keymap.set("n", "<Tab>", function()
-      if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
-        vim.api.nvim_set_current_win(state.win_right)
+      local target = state.win_right
+      if state.view_mode == "diff" and state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+        target = state.win_middle
+      end
+      if target and vim.api.nvim_win_is_valid(target) then
+        vim.api.nvim_set_current_win(target)
       end
     end, opts)
 
@@ -1267,16 +1503,28 @@ function M.open(opts)
       end
     end, opts)
 
+    vim.keymap.set("n", "<LeftMouse>", on_left_click, opts)
+    vim.keymap.set("n", "<LeftDrag>", on_left_drag, opts)
+    vim.keymap.set("n", "<LeftRelease>", on_left_release, opts)
+
     -- Pane switching
     vim.keymap.set("n", "<Tab>", function()
-      if state.win_left and vim.api.nvim_win_is_valid(state.win_left) then
-        vim.api.nvim_set_current_win(state.win_left)
+      local target = state.win_left
+      if state.view_mode == "diff" and state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+        target = state.win_middle
+      end
+      if target and vim.api.nvim_win_is_valid(target) then
+        vim.api.nvim_set_current_win(target)
       end
     end, opts)
 
     vim.keymap.set("n", "<S-Tab>", function()
-      if state.win_left and vim.api.nvim_win_is_valid(state.win_left) then
-        vim.api.nvim_set_current_win(state.win_left)
+      local target = state.win_left
+      if state.view_mode == "diff" and state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+        target = state.win_middle
+      end
+      if target and vim.api.nvim_win_is_valid(target) then
+        vim.api.nvim_set_current_win(target)
       end
     end, opts)
 
@@ -1336,8 +1584,10 @@ function M.get_state()
     settings = settings.get_all(),
     header_line_count = state.header_line_count,
     win_left = state.win_left,
+    win_middle = state.win_middle,
     win_right = state.win_right,
     buf_left = state.buf_left,
+    buf_middle = state.buf_middle,
     buf_right = state.buf_right,
   }
 end

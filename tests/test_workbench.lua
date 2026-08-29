@@ -1222,6 +1222,16 @@ function tests.test_view_switching_and_active_tab_rendering()
   workbench.set_view("diff")
   local st2 = workbench.get_state()
   assert_eq(st2.view_mode, "diff", "view mode must be diff after set_view('diff')")
+  assert_true(st2.win_middle ~= nil and vim.api.nvim_win_is_valid(st2.win_middle),
+    "switching from Files to Diff must add the middle pane")
+  local middle_mouse_map = false
+  for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(st2.buf_middle, "n")) do
+    if mapping.lhs == "<LeftMouse>" then
+      middle_mouse_map = true
+      break
+    end
+  end
+  assert_true(middle_mouse_map, "dynamically-added middle pane must receive mouse mappings")
 
   local header_diff = vim.api.nvim_buf_get_lines(st2.buf_left, 1, 2, false)
   assert_true(header_diff[1]:find("▶ %[2: Git Diff%]") ~= nil, "header tab 2 must show active indicator in diff view")
@@ -1261,11 +1271,23 @@ function tests.test_changed_file_diff_rendering_and_return_to_files()
   local st_diff = workbench.get_state()
   assert_true(st_diff.git_file_count >= 3, "must have loaded changed git files")
 
-  -- Select a modified file
-  workbench.select_file(1)
-  local diff_lines = vim.api.nvim_buf_get_lines(st_diff.buf_right, 0, -1, false)
-  local diff_text = table.concat(diff_lines, "\n")
-  assert_true(diff_text:find("diff %-%-git") ~= nil, "right pane must render unified diff against HEAD")
+  -- Select a modified file and verify the separate old/new panes.
+  local modified_index = nil
+  for i, file in ipairs(st_diff.files) do
+    if file.path == "tracked_modified.txt" then
+      modified_index = i
+      break
+    end
+  end
+  assert_true(modified_index ~= nil, "modified fixture file must be present")
+  workbench.select_file(modified_index)
+  local old_lines = vim.api.nvim_buf_get_lines(st_diff.buf_middle, 0, -1, false)
+  local new_lines = vim.api.nvim_buf_get_lines(st_diff.buf_right, 0, -1, false)
+  local old_text = table.concat(old_lines, "\n")
+  local new_text = table.concat(new_lines, "\n")
+  assert_true(old_text:find("initial line 2", 1, true) ~= nil, "middle pane must render the HEAD version")
+  assert_true(new_text:find("MODIFIED line 2", 1, true) ~= nil, "right pane must render the working-tree version")
+  assert_true(new_text:find("diff --git", 1, true) == nil, "new pane must not fall back to unified diff text")
 
   -- Return to Files view
   workbench.set_view("files")
@@ -1825,6 +1847,137 @@ function tests.test_pane_drag_both_directions_with_minimum_clamp()
   local left_keys = buf_local_lhs(st.buf_left)
   assert_true(left_keys["<LeftDrag>"] ~= nil, "<LeftDrag> must be mapped for divider dragging")
   assert_true(left_keys["<LeftRelease>"] ~= nil, "<LeftRelease> must be mapped to end dragging")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+-- =========================================================================
+-- TASK-009 New Feature Tests (Three-Area Diff, Refresh & Boundary Dragging)
+-- =========================================================================
+
+function tests.test_three_area_diff_refresh_versions_special_files_and_drag()
+  local workbench = require("novim.workbench")
+  local git = require("novim.git")
+  workbench.close()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "diff" })
+  local state = workbench.get_state()
+  assert_true(state.win_middle ~= nil and vim.api.nvim_win_is_valid(state.win_middle),
+    "Diff view must create a valid middle pane")
+  assert_true(state.buf_middle ~= nil and vim.api.nvim_buf_is_valid(state.buf_middle),
+    "Diff view must create a valid old-file buffer")
+  assert_true(state.win_left ~= state.win_middle and state.win_middle ~= state.win_right,
+    "Diff view panes must be distinct")
+
+  local function file_index(path)
+    for i, file in ipairs(state.files) do
+      if file.path == path then return i, file end
+    end
+    return nil, nil
+  end
+
+  local modified_index = file_index("tracked_modified.txt")
+  assert_true(modified_index ~= nil, "modified file must be listed")
+  workbench.select_file(modified_index)
+  local old_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_middle, 0, -1, false), "\n")
+  local new_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+  assert_true(old_text:find("initial line 2", 1, true) ~= nil, "old pane must show HEAD content")
+  assert_true(new_text:find("MODIFIED line 2", 1, true) ~= nil, "new pane must show working-tree content")
+  assert_true(old_text:find("MODIFIED line 2", 1, true) == nil, "old pane must not show working-tree-only content")
+
+  local deleted_index, deleted_file = file_index("tracked_deleted.txt")
+  assert_true(deleted_index ~= nil and deleted_file.is_deleted, "deleted file must retain deleted metadata")
+  workbench.select_file(deleted_index)
+  old_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_middle, 0, -1, false), "\n")
+  new_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+  assert_true(old_text:find("to be deleted", 1, true) ~= nil, "deleted file old pane must retain HEAD content")
+  assert_true(new_text:find("deleted from working tree", 1, true) ~= nil, "deleted file new pane must show a readable placeholder")
+
+  local renamed_index, renamed_file = file_index("renamed -> destination.txt")
+  assert_true(renamed_index ~= nil and renamed_file.orig_path == "base_rename.txt", "rename metadata must retain the original path")
+  workbench.select_file(renamed_index)
+  old_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_middle, 0, -1, false), "\n")
+  new_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+  assert_true(old_text:find("rename base content", 1, true) ~= nil, "renamed file old pane must use the original HEAD path")
+  assert_true(new_text:find("rename base content", 1, true) ~= nil, "renamed file new pane must use the destination path")
+
+  local untracked_index, untracked_file = file_index("untracked_new.txt")
+  assert_true(untracked_index ~= nil and untracked_file.is_untracked, "untracked file must retain untracked metadata")
+  workbench.select_file(untracked_index)
+  old_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_middle, 0, -1, false), "\n")
+  new_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+  assert_true(old_text:find("No file in HEAD", 1, true) ~= nil, "untracked file old pane must show no-HEAD placeholder")
+  assert_true(new_text:find("untracked line 1", 1, true) ~= nil, "untracked file new pane must show working-tree content")
+
+  local binary_index, binary_file = file_index("binary_file.bin")
+  assert_true(binary_index ~= nil and binary_file.is_untracked, "binary fixture must be listed as untracked")
+  local versions = git.get_file_versions(binary_file, fixture)
+  assert_true(versions.is_binary and versions.new_binary, "Git version reader must identify binary working-tree content")
+  workbench.select_file(binary_index)
+  new_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+  assert_true(new_text:find("Binary file", 1, true) ~= nil, "binary new pane must use a readable placeholder")
+
+  -- Refresh happens on every Diff entry, not only through the manual command.
+  workbench.set_view("files")
+  local fresh = io.open(fixture .. "/entry_refresh.txt", "w")
+  fresh:write("appeared after leaving Diff\n")
+  fresh:close()
+  workbench.set_view("diff")
+  state = workbench.get_state()
+  local refreshed_index = file_index("entry_refresh.txt")
+  assert_true(refreshed_index ~= nil, "re-entering Diff must refresh newly changed files")
+  workbench.select_file(refreshed_index)
+  new_text = table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+  assert_true(new_text:find("appeared after leaving Diff", 1, true) ~= nil,
+    "re-entered Diff must render refreshed working-tree content")
+
+  -- Both visible Diff boundaries resize independently and keep minimum widths.
+  local function separator(left_win, right_win)
+    return vim.fn.win_screenpos(right_win)[2] - 1
+  end
+  local left_width = vim.api.nvim_win_get_width(state.win_left)
+  local middle_width = vim.api.nvim_win_get_width(state.win_middle)
+  local first_separator = separator(state.win_left, state.win_middle)
+  workbench.pane_drag_start(first_separator)
+  workbench.pane_drag_move(first_separator + 5)
+  assert_true(vim.api.nvim_win_get_width(state.win_left) > left_width, "first boundary drag must widen the left pane")
+  assert_true(vim.api.nvim_win_get_width(state.win_middle) < middle_width, "first boundary drag must narrow the middle pane")
+  assert_true(vim.api.nvim_win_get_width(state.win_middle) >= 20, "middle pane must keep its minimum width")
+
+  local second_separator = separator(state.win_middle, state.win_right)
+  local middle_before_second_drag = vim.api.nvim_win_get_width(state.win_middle)
+  local right_before_second_drag = vim.api.nvim_win_get_width(state.win_right)
+  workbench.pane_drag_start(second_separator)
+  workbench.pane_drag_move(second_separator + 5)
+  assert_true(vim.api.nvim_win_get_width(state.win_middle) > middle_before_second_drag,
+    "second boundary drag must widen the middle pane")
+  assert_true(vim.api.nvim_win_get_width(state.win_right) < right_before_second_drag,
+    "second boundary drag must narrow the right pane")
+  assert_true(vim.api.nvim_win_get_width(state.win_right) >= 20, "right pane must keep its minimum width")
+  workbench.pane_drag_end()
+
+  first_separator = separator(state.win_left, state.win_middle)
+  workbench.pane_drag_start(first_separator)
+  workbench.pane_drag_move(0)
+  assert_true(vim.api.nvim_win_get_width(state.win_left) >= 15, "first boundary extreme must clamp left pane")
+  assert_true(vim.api.nvim_win_get_width(state.win_middle) >= 20, "first boundary extreme must clamp middle pane")
+  workbench.pane_drag_end()
+
+  second_separator = separator(state.win_middle, state.win_right)
+  workbench.pane_drag_start(second_separator)
+  workbench.pane_drag_move(vim.o.columns)
+  assert_true(vim.api.nvim_win_get_width(state.win_middle) >= 20, "second boundary extreme must clamp middle pane")
+  assert_true(vim.api.nvim_win_get_width(state.win_right) >= 20, "second boundary extreme must clamp right pane")
+  workbench.pane_drag_end()
+  assert_true(vim.api.nvim_win_is_valid(state.win_left)
+    and vim.api.nvim_win_is_valid(state.win_middle)
+    and vim.api.nvim_win_is_valid(state.win_right), "all Diff panes must remain valid after dragging")
 
   workbench.close()
   vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))

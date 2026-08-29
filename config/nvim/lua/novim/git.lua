@@ -273,4 +273,103 @@ function M.get_file_diff(file, cwd)
   return out, false
 end
 
+--- Read the HEAD and working-tree versions of one changed file separately.
+--- This keeps the Diff Workbench's two content panes independent from the
+--- unified diff text while retaining the same working-tree-versus-HEAD
+--- baseline and read-only Git boundary.
+---@param file ChangedFile
+---@param cwd? string
+---@return table versions
+function M.get_file_versions(file, cwd)
+  local is_git, repo_root = M.get_repo_info(cwd)
+  if not is_git then
+    return {
+      old_lines = { "# Not a Git repository" },
+      new_lines = { "# Not a Git repository" },
+      old_exists = false,
+      new_exists = false,
+      is_binary = false,
+      old_binary = false,
+      new_binary = false,
+      old_path = file.path,
+      new_path = file.path,
+    }
+  end
+
+  local function content_to_lines(content)
+    if content == nil or content == "" then
+      return {}
+    end
+    local lines = vim.split(content, "\n", { plain = true, trimempty = false })
+    if lines[#lines] == "" then
+      table.remove(lines, #lines)
+    end
+    return lines
+  end
+
+  local function read_worktree(path)
+    local handle, err = io.open(repo_root .. "/" .. path, "rb")
+    if not handle then
+      return nil, false, err
+    end
+    local content = handle:read("*a") or ""
+    handle:close()
+    return content, content:find("\0", 1, true) ~= nil, nil
+  end
+
+  local old_path = file.orig_path or file.path
+  local old_content = nil
+  local old_binary = false
+  local old_exists = false
+  if M.has_head(repo_root) then
+    local _, code, raw = M.exec({ "show", "HEAD:" .. old_path }, repo_root)
+    if code == 0 then
+      old_content = raw or ""
+      old_exists = true
+      old_binary = old_content:find("\0", 1, true) ~= nil
+    end
+  end
+
+  local new_content = nil
+  local new_binary = false
+  local new_exists = false
+  local new_read_error = nil
+  if not file.is_deleted then
+    new_content, new_binary, new_read_error = read_worktree(file.path)
+    new_exists = new_content ~= nil
+  end
+
+  local old_lines = content_to_lines(old_content)
+  local new_lines = content_to_lines(new_content)
+
+  if not old_exists then
+    old_lines = { "# No file in HEAD" }
+  elseif #old_lines == 0 then
+    old_lines = { "# (Empty file)" }
+  end
+
+  if file.is_deleted then
+    new_lines = { "# File deleted from working tree" }
+  elseif not new_exists then
+    new_lines = { "# Unable to read working-tree file" }
+    if new_read_error then
+      new_lines[2] = "# " .. tostring(new_read_error)
+    end
+  elseif #new_lines == 0 then
+    new_lines = { "# (Empty file)" }
+  end
+
+  return {
+    old_lines = old_lines,
+    new_lines = new_lines,
+    old_exists = old_exists,
+    new_exists = new_exists,
+    is_binary = old_binary or new_binary,
+    old_binary = old_binary,
+    new_binary = new_binary,
+    old_path = old_path,
+    new_path = file.path,
+  }
+end
+
 return M

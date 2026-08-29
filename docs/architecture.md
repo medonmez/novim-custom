@@ -46,11 +46,14 @@ The repository is a direct clone of upstream novim at tag `v0.1.7`.
   controls, and immediate `Esc`/`q` close that restores workbench focus.
   Themes apply through `novim.themes` highlight mappings with no plugin
   dependency; theme state lives in the isolated settings file.
-- The current Diff view renders a selected file as unified text in the right
-  preview window. The visible pane boundary has an application-owned drag
-  state: pressing the divider starts a drag, `<LeftDrag>` resizes both
-  directions, and widths clamp to minimum pane widths (left 15, right 20
-  columns) without `E21` or invalid-window failures.
+- The current Diff view keeps the changed-file list on the left and renders
+  the selected file in separate old/HEAD and new/working-tree panes. Diff
+  status is refreshed whenever the view is entered; binary, deleted, renamed,
+  and untracked files use readable content or placeholders. Both visible
+  boundaries have application-owned drag state: pressing a divider starts a
+  drag, `<LeftDrag>` resizes the adjacent panes in both directions, and widths
+  clamp to minimum pane widths (left 15, middle 20, right 20 columns) without
+  `E21` or invalid-window failures.
 
 ### External boundaries
 
