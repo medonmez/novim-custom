@@ -2,7 +2,7 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-009`
-Status: `PLANNED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-009-three-area-diff`
@@ -122,8 +122,68 @@ implemented.
 
 ## Implementation handoff
 
-Status: `PLANNED`
+Status: `READY_FOR_REVIEW`
 
-Implement only TASK-009 on the recorded isolated branch. Return a local
-handoff with the candidate commit and observed validation; do not push, open a
-PR, merge, or mark the task accepted as the implementer.
+Implemented TASK-009 on the recorded isolated branch. Diff view now has a
+visible changed-file list plus separate old/HEAD and new/working-tree panes;
+entering Diff refreshes Git state, selection renders both versions, special
+files remain readable, and both visible boundaries have independently clamped
+drag behavior. Files view remains a two-pane layout.
+
+### Changed files
+
+- `config/nvim/lua/novim/git.lua` — read-only separate HEAD/working-tree
+  version retrieval with binary and missing-file metadata.
+- `config/nvim/lua/novim/workbench.lua` — dynamic three-pane Diff layout,
+  per-pane rendering, Diff-entry refresh, special-file placeholders, dynamic
+  middle-pane mappings, and two-boundary clamp-aware dragging.
+- `tests/test_workbench.lua` — three-area, version, refresh, special-file,
+  dynamic mapping, and boundary-drag coverage; updated the former unified
+  rendering assertion to the accepted side-by-side contract.
+- `tests/test_smoke.lua` — three visible Diff areas and read-only buffer smoke
+  assertions.
+- `docs/architecture.md` — recorded the implemented three-area Diff contract.
+
+### Validation evidence
+
+- `./tests/run_tests.sh` — PASS: 34/34 workbench tests, offline package suite,
+  and 7/7 regression smoke tests.
+- `bash -n bin/novim-dev bin/novim-dev-package tests/run_tests.sh
+  tests/run_smoke_tests.sh tests/run_package_tests.sh` — PASS.
+- Headless Lua load checks for `git.lua` and `workbench.lua` — PASS.
+- `python3 -m json.tool docs/project.json` — PASS.
+- `./bin/novim-dev --version` — `0.1.7-dev`; installed
+  `/Users/mert/.local/bin/novim --version` — `0.1.7`; both PASS and
+  installed release remained unchanged.
+- `git diff --check` and read-only scope scan — PASS. No Git mutation,
+  network, credential, plugin, installed-release, or out-of-scope TASK-007/
+  TASK-008 path was introduced.
+
+### Acceptance evidence
+
+- Three distinct valid Diff windows and buffers are created; old content is
+  read from `HEAD`, new content from the working tree, with no unified fallback.
+- Re-entering Diff after creating a new working-tree file refreshes the file
+  list and renders the new content.
+- Modified, deleted, renamed, untracked, and binary fixtures all render their
+  expected content or readable placeholders in the relevant panes.
+- Both Diff boundaries resize in both directions, clamp left/middle/right
+  minimum widths (15/20/20), preserve valid windows, and preserve selection.
+- Existing lazy browsing, source preview/editing, settings/themes, Esc-close,
+  read-only Git, package, launcher, and installed-release regression checks
+  remain green.
+
+### Residual risks and handoff
+
+- Validation is local/headless evidence only; no hosted, production,
+  recovery, or customer-acceptance claim is made.
+- Native interactive PTY drag was not separately exercised in this slice;
+  deterministic mouse callback mappings and live clamp behavior passed.
+- The task record's plan-time expected baseline is `6621cd8`; the checked-out
+  branch is at `9e5f6a1`, whose additional commit is the accepted
+  post-merge orchestration-record update and contains no product-source change.
+- Candidate: `HEAD (handoff commit)`
+
+Do not push, open a PR, merge, or mark the task accepted as the implementer.
+Run `$project-orchestrator` for independent local review and the project's
+lightweight delivery path.

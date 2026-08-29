@@ -485,6 +485,14 @@ function smoke_tests.test_smoke_git_diff_rendering_and_read_only_invariance()
   local state = workbench.get_state()
   assert_true(state.is_open, "workbench must be open")
   assert_eq(state.view_mode, "diff", "view mode must be diff")
+  assert_true(state.win_middle ~= nil and vim.api.nvim_win_is_valid(state.win_middle),
+    "Diff view must expose a middle old-file pane")
+  assert_true(state.buf_middle ~= nil and vim.api.nvim_buf_is_valid(state.buf_middle),
+    "Diff view must expose an old-file buffer")
+  assert_eq(#vim.api.nvim_tabpage_list_wins(vim.api.nvim_get_current_tabpage()), 3,
+    "Diff view must expose exactly three visible areas")
+  assert_eq(vim.bo[state.buf_middle].modifiable, false, "old-file buffer must be read-only")
+  assert_eq(vim.bo[state.buf_right].modifiable, false, "new-file buffer must be read-only")
 
   -- Exercise file selection and diff preview rendering
   for i = 1, #files do
