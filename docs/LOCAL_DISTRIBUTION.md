@@ -1,4 +1,5 @@
 # Local novim-custom Distribution
+Updated: 2026-08-31
 
 This is a local distribution path for this checkout. It is not a hosted
 release, a package-manager formula, or an update path for the installed
@@ -73,6 +74,16 @@ Verify the package manifest, `novim-dev --version`, and a headless launch from
 the temporary or dedicated derivative root before using it. A launch may
 create `.dev-data/`, `.dev-state/`, and `.dev-cache/` below that derivative
 root; those are runtime state and are never package inputs.
+
+Startup splash: on an interactive TTY launch, the checkout launchers
+(`bin/ohc` and `bin/novim-dev`) render a bounded approximately-one-second ANSI
+splash before starting Neovim. Version and help checks never render or wait for
+the splash, so the verification commands above stay immediate. For scripted or
+non-interactive full-startup verification, pass `--no-animation` (consumed by
+the launcher and never forwarded to Neovim) or set `OHC_NO_ANIMATION=1`, or run
+without a TTY (for example `--headless` or piped output); every bypass starts
+Neovim immediately. The splash performs no network call, credential flow,
+plugin load, or background process.
 
 Removal is limited to the exact derivative root and, after checking its link
 target, the optional `$HOME/.local/bin/novim-dev` link. Never remove or

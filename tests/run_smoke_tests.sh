@@ -208,13 +208,203 @@ run_passthrough_assert "$COMPAT_LAUNCHER" "novim-dev"
 echo "  ✓ PASS: File arguments and Neovim flags pass through both ohc and novim-dev"
 
 echo ""
-echo "--- Step 5: Headless Neovim Regression Smoke Suite (public ohc startup) ---"
+echo "--- Step 5: Interactive Splash PTY, Duration, and Script-Safe Bypass Coverage ---"
+
+SPLASH_TAGLINE="oh-my-code | terminal-first code workbench"
+# 5.1 --no-animation is consumed by the launchers and never forwarded to Neovim
+for PAIR in "$OHC_LAUNCHER:ohc" "$COMPAT_LAUNCHER:novim-dev"; do
+  LAUNCHER_PATH="${PAIR%%:*}"
+  LAUNCHER_LABEL="${PAIR##*:}"
+  if ! "$LAUNCHER_PATH" --no-animation --headless \
+      -c "lua local ok, err = pcall(function() assert(not vim.tbl_contains(vim.v.argv, '--no-animation'), 'splash disable flag was forwarded to Neovim') end) if not ok then io.stderr:write(tostring(err) .. '\n') vim.cmd('cquit 1') end" \
+      -c "qall!"; then
+    echo "Error: $LAUNCHER_LABEL forwarded --no-animation to Neovim." >&2
+    exit 1
+  fi
+done
+echo "  ✓ PASS: --no-animation is consumed and never forwarded by ohc and novim-dev"
+
+# 5.2 Help and version launches never render the splash
+for PAIR in "$OHC_LAUNCHER:ohc" "$COMPAT_LAUNCHER:novim-dev"; do
+  LAUNCHER_PATH="${PAIR%%:*}"
+  LAUNCHER_LABEL="${PAIR##*:}"
+  for FLAG in --version -v --help -h; do
+    if [[ "$("$LAUNCHER_PATH" "$FLAG")" == *"$SPLASH_TAGLINE"* ]]; then
+      echo "Error: $LAUNCHER_LABEL $FLAG rendered splash content." >&2
+      exit 1
+    fi
+  done
+done
+echo "  ✓ PASS: version and help launches for both commands stay splash-free"
+
+# 5.3 Direct PTY matrix: interactive splash rendering, the one-second duration
+# bound, and every bypass (flag, env, headless-under-TTY, piped) per launcher.
+if command -v python3 >/dev/null 2>&1; then
+  if ! python3 - "$OHC_LAUNCHER" "$COMPAT_LAUNCHER" "$BASE_VERSION" "$PROJECT_ROOT" <<'PY'
+import fcntl, os, pty, select, shutil, struct, subprocess, sys, tempfile, termios, time
+
+ohc_launcher, compat_launcher, base_version, project_root = sys.argv[1:5]
+tagline = "oh-my-code | terminal-first code workbench"
+final_marker = "v" + base_version + "-dev"
+art_row = "| |_| || | | || |___ "
+
+
+def fail(msg):
+    print("  [SPLASH-FAIL] " + msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def read_pty(cmd, cwd, env=None, keys=b":qa!\r", key_delay=1.5, timeout=30.0):
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 120, 0, 0))
+    proc = subprocess.Popen(cmd, cwd=cwd, stdin=slave, stdout=slave, stderr=slave,
+                            env=env, start_new_session=True)
+    os.close(slave)
+    chunks = []
+    start = time.monotonic()
+    sent = False
+    while True:
+        now = time.monotonic()
+        if not sent and (now - start) >= key_delay:
+            try:
+                os.write(master, keys)
+            except OSError:
+                pass
+            sent = True
+        if (now - start) > timeout:
+            proc.kill()
+            proc.wait()
+            fail("PTY run timed out: %r" % (cmd,))
+        r, _, _ = select.select([master], [], [], 0.05)
+        if master in r:
+            try:
+                data = os.read(master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            chunks.append((time.monotonic() - start, data))
+            continue
+        if proc.poll() is not None:
+            r, _, _ = select.select([master], [], [], 0.2)
+            if master in r:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:
+                    data = b""
+                if data:
+                    chunks.append((time.monotonic() - start, data))
+            break
+    rc = proc.wait()
+    end = time.monotonic() - start
+    os.close(master)
+    return chunks, rc, end
+
+
+def output(chunks):
+    return b"".join(d for _, d in chunks).decode("utf-8", "replace")
+
+
+def marker_time(chunks, marker):
+    acc = b""
+    for t, d in chunks:
+        acc += d
+        if marker.encode() in acc:
+            return t
+    return None
+
+
+fixture_root = os.environ.get("NOVIM_SMOKE_TEMP_ROOT") or tempfile.mkdtemp(prefix="splash_pty_")
+workdir = tempfile.mkdtemp(prefix="splash_work_", dir=fixture_root)
+with open(os.path.join(workdir, "splash_fixture.txt"), "w") as handle:
+    handle.write("splash fixture\n")
+
+try:
+    for launcher, label in ((ohc_launcher, "ohc"), (compat_launcher, "novim-dev")):
+        # Interactive TTY launch: splash renders, is bounded, then Neovim starts.
+        chunks, rc, _ = read_pty([launcher], cwd=workdir)
+        text = output(chunks)
+        if tagline not in text or art_row not in text:
+            fail(label + " interactive TTY launch did not render the splash")
+        elapsed = marker_time(chunks, final_marker)
+        if elapsed is None:
+            fail(label + " splash never reached its final frame")
+        if not (0.60 <= elapsed <= 1.80):
+            fail("%s splash duration %.2fs outside the one-second bound" % (label, elapsed))
+        first = chunks[0][0] if chunks else None
+        if first is None or first > 0.50:
+            fail("%s splash did not start promptly (%.2fs to first output)" % (label, first if first is not None else -1.0))
+        if rc != 0:
+            fail("%s interactive launch did not exit cleanly (rc=%d)" % (label, rc))
+
+        # --no-animation bypass: no splash frames, no pre-editor wait.
+        chunks, rc, _ = read_pty([launcher, "--no-animation"], cwd=workdir, key_delay=0.6)
+        text = output(chunks)
+        if tagline in text or final_marker in text:
+            fail(label + " rendered the splash despite --no-animation")
+        first = chunks[0][0] if chunks else None
+        if first is None or first > 0.50:
+            fail("%s --no-animation launch waited before starting (%.2fs)" % (label, first if first is not None else -1.0))
+        if rc != 0:
+            fail("%s --no-animation launch did not exit cleanly (rc=%d)" % (label, rc))
+
+        # OHC_NO_ANIMATION=1 bypass under the same PTY conditions.
+        env = dict(os.environ, OHC_NO_ANIMATION="1")
+        chunks, rc, _ = read_pty([launcher], cwd=workdir, env=env, key_delay=0.6)
+        text = output(chunks)
+        if tagline in text or final_marker in text:
+            fail(label + " rendered the splash despite OHC_NO_ANIMATION=1")
+        first = chunks[0][0] if chunks else None
+        if first is None or first > 0.50:
+            fail("%s OHC_NO_ANIMATION=1 launch waited before starting (%.2fs)" % (label, first if first is not None else -1.0))
+        if rc != 0:
+            fail("%s OHC_NO_ANIMATION=1 launch did not exit cleanly (rc=%d)" % (label, rc))
+
+        # --headless bypass even when stdout is a real TTY.
+        chunks, rc, total = read_pty([launcher, "--headless", "-c", "qall!"], cwd=workdir, keys=b"")
+        text = output(chunks)
+        if tagline in text or final_marker in text:
+            fail(label + " rendered the splash in --headless mode")
+        if rc != 0:
+            fail("%s --headless launch failed (rc=%d)" % (label, rc))
+        if total > 1.00:
+            fail("%s --headless launch waited %.2fs for the splash" % (label, total))
+
+        # Piped (non-TTY) launch bypasses the splash without waiting.
+        start = time.monotonic()
+        completed = subprocess.run([launcher, "-es"], input=b"qa!\n", cwd=workdir,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+        elapsed = time.monotonic() - start
+        text = completed.stdout.decode("utf-8", "replace")
+        if tagline in text or final_marker in text:
+            fail(label + " rendered the splash in piped (non-TTY) mode")
+        if completed.returncode != 0:
+            fail("%s piped launch failed (rc=%d): %s" % (label, completed.returncode, text[:200]))
+        if elapsed > 1.00:
+            fail("%s piped launch waited %.2fs for the splash" % (label, elapsed))
+finally:
+    shutil.rmtree(workdir, ignore_errors=True)
+
+print("  [SPLASH] interactive splash, duration bound, and all bypass controls verified")
+sys.exit(0)
+PY
+  then
+    echo "Error: Splash PTY coverage failed." >&2
+    exit 1
+  fi
+  echo "  ✓ PASS: PTY splash rendering, ~1s duration bound, and flag/env/headless/piped bypasses verified for both commands"
+else
+  echo "  [WARN] python3 not available; PTY splash matrix skipped (run direct PTY checks manually)"
+fi
+
+echo ""
+echo "--- Step 6: Headless Neovim Regression Smoke Suite (public ohc startup) ---"
 # Note: uses the public launcher's normal startup path (loads checkout config automatically, without -u)
 "$OHC_LAUNCHER" --headless -c "luafile $PROJECT_ROOT/tests/test_smoke.lua"
 echo "  ✓ PASS: All headless regression smoke tests passed under the public ohc launcher"
 
 echo ""
-echo "--- Step 6: Post-Run Artifact and Cleanup Verification ---"
+echo "--- Step 7: Post-Run Artifact and Cleanup Verification ---"
 
 # Verify no leftover test fixtures in the run-specific temp root
 LEFTOVER_COUNT=0
