@@ -2,7 +2,7 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-010`
-Status: `PLANNED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-010-pane-layout-persistence`
@@ -134,7 +134,95 @@ does not yet contain pane geometry.
 
 ## Implementation handoff
 
-Implement exactly this task on `task/TASK-010-pane-layout-persistence`, add
-the focused regression coverage, create one local handoff commit, and stop for
-`$project-orchestrator` review. Do not push, open a PR, merge, or mark the task
-accepted as the implementer.
+Status: `READY_FOR_REVIEW` (local implementer handoff; not yet reviewed or
+accepted)
+
+### Change summary
+
+- `settings.lua`: added a version-tolerant `layout` settings shape
+  (`{ files = { left }, diff = { left, middle } }`) validated by
+  `sanitize_width`/`sanitize_layout` (non-numeric, NaN/inf, out-of-range, and
+  unknown values fall back to defaults), `layout` loading in `M.load`,
+  layout preservation in `M.save`, and `M.set_layout` (per-view wholesale
+  merge; theme and dot-folder settings preserved; a write failure leaves the
+  in-memory layout unchanged).
+- `workbench.lua`: captures effective pane widths after a completed drag and
+  before every view/layout teardown (`pane_drag_end`, `set_view`, `M.close`),
+  stores logical column counts only (no window/buffer IDs) through the
+  existing settings boundary, and restores saved geometry on Diff re-entry and
+  on workbench launch, clamped to the current terminal width and the
+  15/20/20 minimums (`apply_files_geometry`/`apply_diff_geometry`). Restore
+  runs after the final focus switch because 'winwidth' (20) would otherwise
+  re-widen a freshly-focused pane narrower than 20 columns. Storage failures
+  are pcall-swallowed and never disturb the live layout. Files and Diff
+  geometry are saved and restored independently.
+
+### Files changed
+
+- `config/nvim/lua/novim/settings.lua`
+- `config/nvim/lua/novim/workbench.lua`
+- `tests/test_workbench.lua`
+- `tests/test_smoke.lua`
+- `docs/tasks/current-task.md` (this handoff)
+
+### Validation performed (local evidence only)
+
+- `./tests/run_tests.sh` — three consecutive runs, each exit 0: 38/38
+  integration tests, offline package suite PASS, 8/8 smoke tests (new
+  `test_smoke_pane_layout_persistence_and_clamping` included). Repeat runs
+  prove restore determinism across launches sharing persisted state.
+- Headless `loadfile` syntax checks on `workbench.lua`, `settings.lua`,
+  `test_workbench.lua`, `test_smoke.lua` via `bin/novim-dev --headless`: pass.
+- `bash -n` on `bin/novim-dev`, `bin/novim-dev-package`,
+  `tests/run_tests.sh`, `tests/run_smoke_tests.sh`,
+  `tests/run_package_tests.sh`: pass.
+- `python3 -m json.tool docs/project.json`: pass.
+- `bin/novim-dev --version` → `novim-dev 0.1.7-dev` (NVIM v0.12.5);
+  `/Users/mert/.local/bin/novim --version` → `novim 0.1.7`; installed release
+  untouched.
+- `git diff --check`: clean. Diff scan found no network, plugin, installed
+  release writes, or Git mutation commands.
+
+### Acceptance-criterion evidence
+
+- Files resize → Diff → Files restores the saved divider position exactly:
+  `tests.test_pane_layout_persists_across_view_switches_independently`
+  (equality assertions at the same terminal width).
+- Independent Diff boundary resizes → Files → Diff restore both boundaries
+  without resetting either to startup defaults: same test (boundary-1 and
+  boundary-2 equality assertions) plus the smoke test.
+- Closing and reopening the workbench restores both layouts from the isolated
+  settings file, including a cold settings cache and on-disk JSON
+  verification: `tests.test_pane_layout_persists_across_workbench_reopen`.
+- Missing/malformed/non-numeric/impossible geometry falls back to the
+  built-in layout while theme and dot-folder settings survive, and a
+  settings-write failure does not crash or corrupt the live layout:
+  `tests.test_pane_layout_malformed_values_fall_back_safely`.
+- Narrow-terminal clamping (120 → 70, plus extreme 50): saved widths clamp to
+  the current terminal, 15/20/20 minimums hold, panes fill the terminal
+  exactly, and a terminal that cannot fit three usable panes degrades to the
+  built-in start: `tests.test_pane_layout_clamps_to_narrow_terminal`
+  (headless `vim.o.columns` manipulation; the local environment permits it).
+- Files/Diff independence: each drag writes only its own view's geometry
+  (asserted in the integration and smoke tests).
+- Pre-existing behavior intact: all 34 prior integration tests and 7 prior
+  smoke tests pass with unchanged assertions (three width-sensitive tests pin
+  a clean layout start via `reset_saved_layout` because restore-on-open now
+  honors persisted geometry).
+
+### Residual risks / known gaps
+
+- Stored geometry is global rather than per-checkout, matching the task's
+  "restore on a later workbench launch"; a different checkout at a narrower
+  terminal clamps safely.
+- A Diff left pane narrower than 'winwidth' (20) is reachable because drags
+  bypass focus-time enforcement; restore deliberately re-applies widths after
+  focus so the saved effective position survives, matching what the user last
+  saw.
+- The TASK-009 review observation (stale `state.win_middle` after a manual
+  middle-pane `:q`) stays deferred; capture/restore guard against an invalid
+  middle window.
+
+### Commit
+
+HEAD (handoff commit)

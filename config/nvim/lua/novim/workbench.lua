@@ -57,6 +57,108 @@ local MIN_LEFT_WIDTH = 15
 local MIN_MIDDLE_WIDTH = 20
 local MIN_RIGHT_WIDTH = 20
 
+
+-- Logical pane geometry persistence. The workbench captures effective widths
+-- after a completed drag and before any view/layout teardown, stores plain
+-- column counts per view (never window or buffer IDs) through the isolated
+-- settings boundary, and clamps stored widths to the current terminal and
+-- the pane minimums before applying them.
+local function saved_layout()
+  local ok, layout = pcall(settings.get, "layout")
+  if not ok or type(layout) ~= "table" then
+    return nil
+  end
+  return layout
+end
+
+--- Apply a stored Files left width to the live two-pane layout, clamped to
+--- the current terminal and the pane minimums.
+---@param left_width number
+local function apply_files_geometry(left_width)
+  left_width = tonumber(left_width)
+  if not left_width
+    or not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
+    or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
+    return
+  end
+  local available = vim.o.columns - 1 -- one visible divider column
+  if available < MIN_LEFT_WIDTH + MIN_RIGHT_WIDTH then
+    return -- terminal too narrow for a valid two-pane layout; keep defaults
+  end
+  local left = math.max(MIN_LEFT_WIDTH,
+    math.min(math.floor(left_width), available - MIN_RIGHT_WIDTH))
+  pcall(vim.api.nvim_win_set_width, state.win_left, left)
+end
+
+--- Apply stored Diff left/middle widths to the live three-pane layout,
+--- clamped to the current terminal and the pane minimums so the untouched
+--- right pane stays valid.
+---@param left_width number
+---@param middle_width number
+local function apply_diff_geometry(left_width, middle_width)
+  left_width = tonumber(left_width)
+  middle_width = tonumber(middle_width)
+  if not left_width or not middle_width
+    or not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
+    or not state.win_middle or not vim.api.nvim_win_is_valid(state.win_middle)
+    or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
+    return
+  end
+  local available = vim.o.columns - 2 -- two visible divider columns
+  local min_total = MIN_LEFT_WIDTH + MIN_MIDDLE_WIDTH + MIN_RIGHT_WIDTH
+  if available < min_total then
+    return -- terminal too narrow for three usable panes; keep defaults
+  end
+  local left = math.max(MIN_LEFT_WIDTH,
+    math.min(math.floor(left_width), available - MIN_MIDDLE_WIDTH - MIN_RIGHT_WIDTH))
+  local middle = math.max(MIN_MIDDLE_WIDTH,
+    math.min(math.floor(middle_width), available - left - MIN_RIGHT_WIDTH))
+  local right = available - left - middle
+  pcall(vim.api.nvim_win_set_width, state.win_left, left)
+  pcall(vim.api.nvim_win_set_width, state.win_middle, middle)
+  pcall(vim.api.nvim_win_set_width, state.win_right, right)
+end
+
+--- Restore the saved geometry of the active view. Missing, malformed, or
+--- impossible values are ignored and leave the built-in starting layout.
+local function restore_saved_geometry()
+  local layout = saved_layout()
+  if not layout then
+    return
+  end
+  if state.view_mode == "diff" then
+    if type(layout.diff) == "table" and layout.diff.left and layout.diff.middle then
+      apply_diff_geometry(layout.diff.left, layout.diff.middle)
+    end
+  else
+    if type(layout.files) == "table" and layout.files.left then
+      apply_files_geometry(layout.files.left)
+    end
+  end
+end
+
+--- Persist the effective widths of the currently visible layout. Storage
+--- failures are non-fatal and never modify the live layout.
+local function save_current_view_geometry()
+  if not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
+    or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
+    return
+  end
+  if state.view_mode == "diff"
+    and state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    pcall(settings.set_layout, {
+      diff = {
+        left = vim.api.nvim_win_get_width(state.win_left),
+        middle = vim.api.nvim_win_get_width(state.win_middle),
+      },
+    })
+  elseif state.view_mode == "files" then
+    pcall(settings.set_layout, {
+      files = { left = vim.api.nvim_win_get_width(state.win_left) },
+    })
+  end
+end
+
 --- Create a scratch buffer with a fixed display name.
 --- Reopening the workbench in the same session would otherwise fail with
 --- E95 because a leftover buffer from the previous session holds the name.
@@ -615,14 +717,22 @@ function M.set_view(mode)
   if mode ~= "files" and mode ~= "diff" then return end
   if state.view_mode == mode then return end
 
+  -- Capture the outgoing view before any layout rebuild or teardown so the
+  -- user's last effective widths survive the switch.
+  save_current_view_geometry()
   state.view_mode = mode
   if mode == "diff" then
     ensure_diff_layout()
+    -- Restore after ensure_diff_layout so the saved widths are applied once
+    -- the final window focus has settled ('winwidth' would otherwise bump a
+    -- freshly-focused pane narrower than 20 columns back up).
+    restore_saved_geometry()
     -- Diff entry is an explicit refresh boundary: status and selected content
     -- must reflect the current working tree and HEAD immediately.
     M.refresh()
   else
     leave_diff_layout()
+    restore_saved_geometry()
     M.render_left_pane()
     M.render_right_pane()
   end
@@ -949,8 +1059,11 @@ function M.pane_drag_move(screencol)
   end
 end
 
---- End the active divider drag.
+--- End the active divider drag and persist the effective widths.
 function M.pane_drag_end()
+  if state.drag then
+    save_current_view_geometry()
+  end
   state.drag = nil
 end
 
@@ -1134,6 +1247,8 @@ function M.close(opts)
   end
 
   opts = opts or {}
+  -- Persist the effective layout before any teardown path runs.
+  save_current_view_geometry()
   local is_tab_mode = state.is_tab
   local tab_id = state.tab_id
   local all_tabs = vim.api.nvim_list_tabpages()
@@ -1241,6 +1356,7 @@ function M.open(opts)
     else
       leave_diff_layout()
     end
+    restore_saved_geometry()
     M.refresh()
     return
   end
@@ -1547,6 +1663,10 @@ function M.open(opts)
 
   -- Switch focus to left window
   vim.api.nvim_set_current_win(state.win_left)
+
+  -- Restore persisted geometry after the final focus switch; 'winwidth'
+  -- would otherwise widen a freshly-focused pane narrower than 20 columns.
+  restore_saved_geometry()
   state.is_open = true
 
   -- A new workbench launch always starts collapsed at the root

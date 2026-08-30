@@ -55,6 +55,15 @@ local function cleanup_dir(dir)
   end
 end
 
+--- Clear persisted pane geometry so a test starts from the built-in layout.
+--- TASK-010 restore-on-open must not inherit widths saved by other suites
+--- sharing the isolated development settings file.
+local function reset_saved_layout()
+  local settings = require("novim.settings")
+  settings.reset_cache()
+  settings.set_layout({ files = {}, diff = {} })
+end
+
 local function cleanup_all_fixtures()
   for _, dir in ipairs(created_fixtures) do
     if vim.fn.isdirectory(dir) == 1 then
@@ -249,6 +258,7 @@ function smoke_tests.test_smoke_workbench_two_pane_layout_and_views()
   local fixture = create_smoke_project_fixture()
   local workbench = require("novim.workbench")
   workbench.close()
+  reset_saved_layout()
 
   local old_cwd = vim.fn.getcwd()
   vim.cmd("cd " .. vim.fn.fnameescape(fixture))
@@ -667,6 +677,97 @@ function smoke_tests.test_smoke_settings_persistence_dotfile_toggle_and_error_re
 end
 
 -- =========================================================================
+-- 6. Pane Layout Persistence Across Views and Launches
+-- =========================================================================
+
+function smoke_tests.test_smoke_pane_layout_persistence_and_clamping()
+  local settings = require("novim.settings")
+  local workbench = require("novim.workbench")
+  local fixture = create_smoke_project_fixture()
+
+  -- Run-specific settings file keeps layout assertions deterministic.
+  local settings_temp_dir = create_temp_fixture_dir("smoke_layout_state")
+  local test_settings_file = settings_temp_dir .. "/novim_settings.json"
+  local orig_get_path = settings.get_settings_file_path
+  settings.get_settings_file_path = function()
+    return test_settings_file
+  end
+  settings.reset_cache()
+
+  local orig_columns = vim.o.columns
+
+  local ok, test_err = pcall(function()
+    workbench.close()
+    workbench.open({ view = "files" })
+    local st = workbench.get_state()
+
+    -- A completed Files drag is recorded in the isolated settings file.
+    local sep = vim.fn.win_screenpos(st.win_right)[2] - 1
+    workbench.pane_drag_start(sep)
+    workbench.pane_drag_move(sep + 9)
+    workbench.pane_drag_end()
+    local files_width = vim.api.nvim_win_get_width(st.win_left)
+    local parsed = vim.json.decode(table.concat(vim.fn.readfile(test_settings_file), "\n"))
+    assert_eq(parsed.layout.files.left, files_width, "settings file must record the Files width")
+    assert_true(parsed.layout.diff.left == nil and parsed.layout.diff.middle == nil,
+      "a Files drag must not record Diff geometry")
+
+    -- One Diff boundary drag records only Diff geometry.
+    workbench.set_view("diff")
+    st = workbench.get_state()
+    local sep1 = vim.fn.win_screenpos(st.win_middle)[2] - 1
+    workbench.pane_drag_start(sep1)
+    workbench.pane_drag_move(sep1 + 5)
+    workbench.pane_drag_end()
+    local diff_left = vim.api.nvim_win_get_width(st.win_left)
+
+    workbench.set_view("files")
+    assert_eq(vim.api.nvim_win_get_width(workbench.get_state().win_left), files_width,
+      "Files width must survive a Diff round-trip")
+
+    -- Reopen after a cold settings read restores both saved layouts.
+    workbench.close()
+    settings.reset_cache()
+    workbench.open({ view = "files" })
+    assert_eq(vim.api.nvim_win_get_width(workbench.get_state().win_left), files_width,
+      "reopened workbench must restore the saved Files width")
+    workbench.set_view("diff")
+    st = workbench.get_state()
+    assert_eq(vim.api.nvim_win_get_width(st.win_left), diff_left,
+      "reopened workbench must restore the Diff left boundary")
+    assert_true(vim.api.nvim_win_get_width(st.win_middle) >= 20
+      and vim.api.nvim_win_get_width(st.win_right) >= 20,
+      "reopened Diff panes must keep their minimum widths")
+    workbench.close()
+
+    -- A narrower terminal clamps the saved geometry safely.
+    vim.o.columns = math.max(56, files_width + 20)
+    settings.reset_cache()
+    workbench.open({ view = "files" })
+    st = workbench.get_state()
+    local clamped_left = vim.api.nvim_win_get_width(st.win_left)
+    assert_true(clamped_left <= vim.o.columns - 21,
+      "restored Files width must clamp to the narrower terminal")
+    assert_true(clamped_left >= 15
+      and vim.api.nvim_win_get_width(st.win_right) >= 20
+      and vim.api.nvim_win_is_valid(st.win_left)
+      and vim.api.nvim_win_is_valid(st.win_right),
+      "clamped Files layout must stay valid at the minimums")
+    workbench.close()
+  end)
+
+  vim.o.columns = orig_columns
+  settings.get_settings_file_path = orig_get_path
+  settings.reset_cache()
+  cleanup_dir(settings_temp_dir)
+  cleanup_dir(fixture)
+
+  if not ok then
+    error(test_err)
+  end
+end
+
+-- =========================================================================
 -- 6. Theme Selection, Settings Key Help, Immediate Esc Close & Pane Drag
 -- =========================================================================
 
@@ -813,6 +914,7 @@ local test_order = {
   "test_smoke_source_navigation_editing_and_buffer_preservation",
   "test_smoke_git_diff_rendering_and_read_only_invariance",
   "test_smoke_settings_persistence_dotfile_toggle_and_error_recovery",
+  "test_smoke_pane_layout_persistence_and_clamping",
   "test_smoke_theme_selection_key_help_and_esc_close",
   "test_smoke_deterministic_fixture_cleanup",
 }
