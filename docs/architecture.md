@@ -110,41 +110,62 @@ Identity boundary:
 - `bin/novim` remains the preserved upstream reference and is not modified by
   either launcher.
 
-### Local installation / linking
+### Local installation / installer
 
-To make the public launcher accessible from any terminal without overwriting
-the installed `novim`:
+`install.sh` is the public networked installer (synced to `docs/install` for
+`curl | bash` use). It downloads only the declared public Release asset
+(`oh-my-code-<VERSION>.tar.gz`) and its checksum companion, verifies the
+checksum, validates the archive structure fail-closed, and installs only
+below `~/.local/share/oh-my-code`. It creates `~/.local/bin/ohc` and the
+one-release `~/.local/bin/novim-dev` compatibility link only when absent or
+already pointing into the managed root, and refuses unrelated existing files,
+links, nonempty or symlinked roots, malformed archives, traversal entries,
+and failed downloads without changing the target.
 
-```bash
-ln -sf /Users/mert/novim-custom/bin/ohc ~/.local/bin/ohc
-```
+The installer requires Neovim 0.8.0+ to be present; it never installs Neovim
+through a package manager, never uses `sudo`, and never runs `novim --update`.
 
 Verification:
 - `ohc --version` reports the public launcher without network activity.
-- `novim-dev --version` remains available and explicitly labels the one-release compatibility alias.
+- `novim-dev --version` remains available and explicitly labels the
+  one-release compatibility alias.
+- `~/.local/bin/novim`, `~/.local/share/novim`, and the normal Neovim
+  configuration remain untouched by design.
+
 
 ### Local derivative packaging
 
-`bin/novim-dev-package` is the pre-release offline, allowlist-based
-distribution helper. The public package/installer migration is planned
-separately. The pre-release package continues to stage `bin/novim-dev` and its
-`<VERSION>-dev (custom checkout)` identity; migrating the packaged launcher and
-installer to the public `ohc` identity is part of the separate package-migration
-task (`TASK-017`):
+`bin/oh-my-code-package` is the public offline, allowlist-based distribution
+helper:
 
-- `package ARCHIVE` stages `bin/novim-dev`, the complete `config/nvim` tree,
-  `VERSION`, `LICENSE`, and `THIRD_PARTY_LICENSES.md` into a deterministic
-  `novim-custom-<VERSION>.tar.gz` archive;
-- the archive excludes Git metadata, `.dev-*` state, credentials, and private
-  runtime data and does not include the upstream `bin/novim` command; and
-- `install ARCHIVE INSTALL_ROOT` extracts only into a new or empty, explicitly
-  named derivative root. A launcher link, when desired, is user-created at
-  `~/.local/bin/novim-dev`; the installed `novim` path is never a target.
+- `package ARCHIVE` stages `bin/ohc`, the one-release `bin/novim-dev`
+  compatibility launcher, the complete `config/nvim` tree, `VERSION`,
+  `LICENSE`, and `THIRD_PARTY_LICENSES.md` into a deterministic
+  `oh-my-code-<VERSION>.tar.gz` archive rooted at `oh-my-code-<VERSION>`;
+  repeated runs are byte-identical and an existing output is never
+  overwritten;
+- the archive excludes Git metadata, `.dev-*` state, credentials, private
+  runtime data, links, and special files, and does not include the upstream
+  `bin/novim` command; and
+- `install ARCHIVE INSTALL_ROOT` validates the archive fail-closed and
+  extracts only into a new or empty, explicitly named local root. Command
+  links are owned by the public installer, not by this helper.
 
-Package creation and installation perform no network or Git history action.
-The manifest, temporary-target verification, and removal boundaries are
-documented in `docs/LOCAL_DISTRIBUTION.md`. Explicit upstream comparison and
-integration is documented separately in `docs/UPSTREAM_SYNC.md`.
+Package creation and the offline helper install perform no network or Git
+history action. The installer, checksum verification, manifest checks, and
+removal boundaries are documented in `docs/LOCAL_DISTRIBUTION.md`. Explicit
+upstream comparison and integration is documented separately in
+`docs/UPSTREAM_SYNC.md`.
+
+### Release workflow (preparation)
+
+`.github/workflows/release.yml` is prepared for the release-delivery task
+(`TASK-019`) and runs only on `v*` tag pushes. It verifies that the tag
+matches the checkout `VERSION` file, builds the public archive with
+`bin/oh-my-code-package`, verifies the archive manifest (including the
+absence of `bin/novim`), generates `oh-my-code-<VERSION>.tar.gz.sha256`,
+and attaches both assets to the release. The workflow never edits or
+packages `bin/novim` and does not run on ordinary pushes or pull requests.
 
 ## Local testing and regression smoke layer
 

@@ -2,7 +2,7 @@
 
 This checkout uses `origin` for the personal fork and `upstream` for
 `link2004/novim`. Synchronization is an explicit, user-mediated maintenance
-operation. `bin/novim-dev` and `bin/novim-dev-package` never fetch, merge,
+operation. `bin/novim-dev` and `bin/oh-my-code-package` never fetch, merge,
 rebase, cherry-pick, or push.
 
 ## 1. Record a named baseline and fetch explicitly
@@ -54,7 +54,7 @@ be inspected before recording history:
 git cherry-pick --no-commit <reviewed-upstream-commit>
 git diff --cached --stat
 ./tests/run_tests.sh
-bash -n bin/novim-dev bin/novim-dev-package tests/run_tests.sh
+bash -n bin/novim-dev bin/oh-my-code-package tests/run_tests.sh
 git diff --check
 # Commit only after the review checkpoint passes.
 git commit -m "sync: incorporate reviewed upstream change"

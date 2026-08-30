@@ -2,7 +2,7 @@
 
 Updated: 2026-08-31
 Task ID: `TASK-017`
-Status: `PLANNED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
@@ -135,3 +135,126 @@ one-release `novim-dev` compatibility boundary.
 The implementer must stop at a local handoff commit on this branch. No
 repository rename, tag, GitHub Release, or hosted installer acceptance is part
 of implementation.
+
+## Implementation handoff
+
+Implementer: `$stateless-implementer` (fresh context). Status:
+`READY_FOR_REVIEW`. Branch:
+`task/TASK-017-oh-my-code-package-installer`. The recorded expected baseline
+`9904324` is an ancestor of the branch point; the branch starts at the
+orchestrator planning merge `ced52a3` (PR #30) that created this task file,
+so implementation began from the branch as checked out.
+
+### Change summary
+
+- Replaced the pre-release package helper with the public
+  `bin/oh-my-code-package` (the old `bin/novim-dev-package` is removed;
+  ADR-006 requires package identities to move to the `oh-my-code`/`ohc`
+  identity). It builds the deterministic, byte-identical
+  `oh-my-code-<VERSION>.tar.gz` rooted at `oh-my-code-<VERSION>/`, refuses to
+  overwrite an existing output, and stages the allowlist: `bin/ohc`,
+  one-release `bin/novim-dev`, the complete `config/nvim/` tree, `VERSION`,
+  `LICENSE`, `THIRD_PARTY_LICENSES.md`. It rejects Git metadata, `.dev-*`
+  state, credential-like entries, links, and special files.
+- Replaced the legacy upstream installer with the public networked
+  `install.sh` (synced to `docs/install`). It downloads only the declared
+  release asset `oh-my-code-<VERSION>.tar.gz` plus its `.sha256` companion,
+  verifies the checksum, validates the archive fail-closed (single exact
+  root, strict allowlist, no traversal/absolute/backslash entries, no links
+  or special files, no forbidden entries, staged extraction with top-level
+  and `VERSION`-identity checks), installs only below
+  `~/.local/share/oh-my-code`, and creates `~/.local/bin/ohc` plus the
+  one-release `~/.local/bin/novim-dev` link only when absent or already
+  pointing into the managed root. It requires Neovim >= 0.8.0 and never
+  installs Neovim, uses `sudo`, or runs `novim --update`. All checks run
+  before any target mutation, and a rollback trap removes partial temporary
+  state. Local validation overrides (`OHC_INSTALL_ARCHIVE`,
+  `OHC_RELEASE_URL`) exist for offline fixture testing only.
+- Replaced `.github/workflows/release.yml`: tag-push (`v*`) only, verifies
+  the tag matches the checkout `VERSION`, builds the archive with
+  `bin/oh-my-code-package`, verifies the manifest (including the absence of
+  `bin/novim` and a `git diff --exit-code bin/novim` guard), generates the
+  checksum asset, syncs `docs/install`, and attaches both assets. No release
+  is created by this task; execution is TASK-019 scope.
+- Rewrote `tests/run_package_tests.sh` for the public archive, installer,
+  alias, collision, hostile-archive, failed-download, and invariance
+  boundaries. Updated `docs/LOCAL_DISTRIBUTION.md`, `docs/architecture.md`,
+  `docs/repository.md`, `docs/UPSTREAM_SYNC.md`, and mechanically fixed the
+  README's package commands (README redesign remains TASK-018). Added
+  `bin/oh-my-code-package` to the CI ShellCheck job.
+
+### Files changed
+
+- `bin/oh-my-code-package` (new, replaces `bin/novim-dev-package`)
+- `install.sh` (replaced) and `docs/install` (synced copy)
+- `.github/workflows/release.yml` (replaced)
+- `.github/workflows/ci.yml` (ShellCheck list)
+- `tests/run_package_tests.sh` (rewritten)
+- `docs/LOCAL_DISTRIBUTION.md`, `docs/architecture.md`,
+  `docs/repository.md`, `docs/UPSTREAM_SYNC.md`, `README.md`
+- `docs/tasks/current-task.md` (this handoff)
+
+### Validation performed (local evidence only)
+
+- `bash -n install.sh bin/oh-my-code-package tests/run_package_tests.sh
+  tests/run_tests.sh tests/run_smoke_tests.sh bin/ohc bin/novim-dev`: pass.
+- PyYAML parse plus structural checks of `.github/workflows/release.yml`
+  (tag-only trigger, pinned actions, no `bin/novim` mutation or packaging in
+  any run step, checksum asset present): pass.
+- `./tests/run_package_tests.sh`: pass. Covers byte-identical repeated
+  packaging (SHA-256 `7b9062c7...`), overwrite refusal, full manifest
+  inspection, offline helper install, both launcher identities
+  (`oh-my-code (ohc) 0.1.7-dev`, `novim-dev 0.1.7-dev (custom checkout)`),
+  splash bypasses, isolated config/data/state/cache stdpaths, hostile
+  fixtures (traversal, absolute path, symlink member, allowlist violation,
+  malformed), sandboxed installer happy path, owned-link reuse, reinstall
+  refusal, collisions (unrelated file, unrelated link, symlinked root,
+  nonempty root, symlinked bin dir) all failing closed with unchanged
+  targets, networked download over a local fixture server with exactly two
+  GET requests (asset + checksum), checksum digest- and name-mismatch
+  refusals, 404 and unreachable-host download failures leaving the sandbox
+  unchanged, and before/after snapshots proving installed `novim`,
+  `~/.local/share/novim`, the normal Neovim configuration, `~/.local/bin/ohc`,
+  `~/.local/bin/novim-dev`, `bin/novim`, and the checkout (HEAD + status)
+  are unchanged.
+- `./tests/run_smoke_tests.sh`: pass (CLI identities, isolation, passthrough,
+  PTY splash matrix with duration bound and all bypasses, 9/9 headless
+  regression suite, cleanup verification).
+- `./tests/run_tests.sh`: pass (Lua unit/integration suite, package suite,
+  full smoke runner).
+- `git diff --check`: clean.
+
+### Acceptance-criterion evidence
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| Byte-identical `oh-my-code-<VERSION>.tar.gz`, overwrite refusal | PASS | `run_package_tests.sh` "Deterministic public package" section: `cmp` equality, equal SHA-256, refused second `package` call. |
+| Allowlisted archive, one safe root, no forbidden entries | PASS | Manifest assertions plus hostile-fixture refusals in the same suite. |
+| Installer downloads/validates declared asset, installs below `~/.local/share/oh-my-code`, creates both links | PASS | Networked fixture-server happy path (exactly two GETs) and sandboxed local-mode happy path with link-target assertions. |
+| Fail-closed collisions and failures | PASS | Collision, symlink, nonempty, hostile-archive, checksum-mismatch, 404, and unreachable-host cases all fail with unchanged sandbox snapshots. |
+| Installed temporary package launches through `ohc` with alias identity, bypass controls, isolated paths | PASS | Headless launches through the installed `bin/ohc` asserting identities, `--no-animation`/`OHC_NO_ANIMATION=1` bypasses, `stdpath` isolation, Workbench/Settings commands, and `.dev-*` directories. |
+| Release workflow builds from `VERSION`/`bin/ohc`, checksum asset, no `bin/novim` mutation, not executed | PASS | Workflow structure validation in the package suite; no tag or release was created. |
+| Focused tests, full suite, syntax checks, `git diff --check`, invariance snapshots | PASS | Commands and results recorded above. |
+
+### Residual risks and notes
+
+- The hosted installer URL default points at the accepted public target
+  `medonmez/oh-my-code`; that repository/rename and the `v1.0.0` release do
+  not exist yet, so a real hosted install is intentionally expected to fail
+  until TASK-019. All installer evidence here is local fixture evidence.
+- The installer supports local validation overrides
+  (`OHC_INSTALL_ARCHIVE`, `OHC_RELEASE_URL`); they are documented as
+  local-evidence paths and perform the same fail-closed validation.
+- Reinstall over an existing root is refused by design (no in-place update;
+  update/uninstall commands are out of scope).
+- `readdir`-order determinism relies on the existing
+  fixed-timestamp/ustar/gzip-normalization approach; archives are verified
+  byte-identical on this machine, not yet on the CI runner.
+- The Python fixture server and hostile-archive fixtures require `python3`;
+  the YAML structure check skips with a notice if PyYAML is unavailable.
+
+### Commit
+
+Commit reference: HEAD (handoff commit) on
+`task/TASK-017-oh-my-code-package-installer`. No push, pull request,
+repository rename, tag, or GitHub Release was performed.

@@ -18,4 +18,5 @@ jobs:
       - name: Run ShellCheck
         run: |
           shellcheck install.sh
+          shellcheck bin/oh-my-code-package
           shellcheck bin/novim

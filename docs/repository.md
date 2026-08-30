@@ -57,7 +57,9 @@ created.
 - Sensitive-data boundaries: source and Git metadata are local. Do not put
   credentials, tokens, private source, or raw user data into repository docs.
   The development command must not perform network actions by default.
-- Packaging boundary: the current `bin/novim-dev-package` is a pre-release
-  offline helper. The public `oh-my-code` package, installer, and release
-  asset are separate planned slices and must not package `bin/novim`, write
-  the installed `novim` paths, or perform upstream synchronization.
+- Packaging boundary: `bin/oh-my-code-package` builds the public
+  deterministic `oh-my-code-<VERSION>.tar.gz` archive, and `install.sh`
+  (synced to `docs/install`) is the networked installer for the declared
+  public Release asset. Neither packages `bin/novim`, writes the installed
+  `novim` paths, or performs upstream synchronization. Hosted release
+  publication remains TASK-019 scope.
