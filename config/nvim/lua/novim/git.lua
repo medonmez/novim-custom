@@ -3,6 +3,10 @@
 
 local M = {}
 
+-- Sentinel ref for the working tree when used as a comparison endpoint.
+-- It is not a valid Git revision, so revision readers can branch on it.
+M.WORKTREE_REF = "@WORKTREE@"
+
 --- Check if git binary is available
 ---@return boolean
 function M.is_git_available()
@@ -273,14 +277,52 @@ function M.get_file_diff(file, cwd)
   return out, false
 end
 
---- Read the HEAD and working-tree versions of one changed file separately.
---- This keeps the Diff Workbench's two content panes independent from the
---- unified diff text while retaining the same working-tree-versus-HEAD
---- baseline and read-only Git boundary.
+--- Read one file's content at a revision/location endpoint (read-only).
+--- The working tree endpoint reads the file from disk; every other endpoint
+--- is read through `git show <ref>:<path>` without touching the repository.
+---@param ref string revision ref or the WORKTREE_REF sentinel
+---@param path string repo-relative path
+---@param cwd? string
+---@return string? content
+---@return boolean is_binary
+---@return string? error_msg
+function M.read_revision_content(ref, path, cwd)
+  local is_git, repo_root = M.get_repo_info(cwd)
+  if not is_git then
+    return nil, false, "Not a git repository"
+  end
+
+  if ref == M.WORKTREE_REF then
+    local handle, err = io.open(repo_root .. "/" .. path, "rb")
+    if not handle then
+      return nil, false, tostring(err or "unable to read working-tree file")
+    end
+    local content = handle:read("*a") or ""
+    handle:close()
+    return content, content:find("\0", 1, true) ~= nil, nil
+  end
+
+  local _, code, raw = M.exec({ "show", ref .. ":" .. path }, repo_root)
+  if code ~= 0 then
+    return nil, false, "unavailable revision content"
+  end
+  raw = raw or ""
+  return raw, raw:find("\0", 1, true) ~= nil, nil
+end
+
+--- Read the old and new versions of one changed file between two explicit
+--- comparison endpoints. Each endpoint is a table { kind, ref, label } where
+--- kind is "head", "commit", or "worktree". The canonical default pair
+--- (HEAD versus working tree) keeps the original rename-aware old-path
+--- semantics and all placeholder messages unchanged.
 ---@param file ChangedFile
+---@param old_endpoint table
+---@param new_endpoint table
 ---@param cwd? string
 ---@return table versions
-function M.get_file_versions(file, cwd)
+function M.get_file_versions_between(file, old_endpoint, new_endpoint, cwd)
+  local old_label = (old_endpoint and old_endpoint.label) or "?"
+  local new_label = (new_endpoint and new_endpoint.label) or "?"
   local is_git, repo_root = M.get_repo_info(cwd)
   if not is_git then
     return {
@@ -293,6 +335,8 @@ function M.get_file_versions(file, cwd)
       new_binary = false,
       old_path = file.path,
       new_path = file.path,
+      old_label = old_label,
+      new_label = new_label,
     }
   end
 
@@ -307,35 +351,23 @@ function M.get_file_versions(file, cwd)
     return lines
   end
 
-  local function read_worktree(path)
-    local handle, err = io.open(repo_root .. "/" .. path, "rb")
-    if not handle then
-      return nil, false, err
-    end
-    local content = handle:read("*a") or ""
-    handle:close()
-    return content, content:find("\0", 1, true) ~= nil, nil
+  -- Rename metadata describes the HEAD-to-worktree change, so the original
+  -- path only applies to the canonical default comparison pair.
+  local is_default_pair = old_endpoint.kind == "head" and new_endpoint.kind == "worktree"
+  local old_path = file.path
+  if is_default_pair and file.orig_path then
+    old_path = file.orig_path
   end
 
-  local old_path = file.orig_path or file.path
-  local old_content = nil
-  local old_binary = false
-  local old_exists = false
-  if M.has_head(repo_root) then
-    local _, code, raw = M.exec({ "show", "HEAD:" .. old_path }, repo_root)
-    if code == 0 then
-      old_content = raw or ""
-      old_exists = true
-      old_binary = old_content:find("\0", 1, true) ~= nil
-    end
-  end
+  local old_content, old_binary, old_read_error = M.read_revision_content(old_endpoint.ref, old_path, repo_root)
+  local old_exists = old_content ~= nil
 
-  local new_content = nil
-  local new_binary = false
-  local new_exists = false
-  local new_read_error = nil
-  if not file.is_deleted then
-    new_content, new_binary, new_read_error = read_worktree(file.path)
+  local new_content, new_binary, new_read_error
+  local new_exists
+  if file.is_deleted and new_endpoint.ref == M.WORKTREE_REF then
+    new_content, new_binary, new_exists = nil, false, false
+  else
+    new_content, new_binary, new_read_error = M.read_revision_content(new_endpoint.ref, file.path, repo_root)
     new_exists = new_content ~= nil
   end
 
@@ -343,17 +375,21 @@ function M.get_file_versions(file, cwd)
   local new_lines = content_to_lines(new_content)
 
   if not old_exists then
-    old_lines = { "# No file in HEAD" }
+    old_lines = { "# No file in " .. old_label }
   elseif #old_lines == 0 then
     old_lines = { "# (Empty file)" }
   end
 
-  if file.is_deleted then
+  if file.is_deleted and new_endpoint.ref == M.WORKTREE_REF then
     new_lines = { "# File deleted from working tree" }
   elseif not new_exists then
-    new_lines = { "# Unable to read working-tree file" }
-    if new_read_error then
-      new_lines[2] = "# " .. tostring(new_read_error)
+    if new_endpoint.ref == M.WORKTREE_REF then
+      new_lines = { "# Unable to read working-tree file" }
+      if new_read_error then
+        new_lines[2] = "# " .. tostring(new_read_error)
+      end
+    else
+      new_lines = { "# No file in " .. new_label }
     end
   elseif #new_lines == 0 then
     new_lines = { "# (Empty file)" }
@@ -365,11 +401,113 @@ function M.get_file_versions(file, cwd)
     old_exists = old_exists,
     new_exists = new_exists,
     is_binary = old_binary or new_binary,
-    old_binary = old_binary,
-    new_binary = new_binary,
+    old_binary = old_binary or false,
+    new_binary = new_binary or false,
     old_path = old_path,
     new_path = file.path,
+    old_label = old_label,
+    new_label = new_label,
   }
+end
+
+--- Read the HEAD and working-tree versions of one changed file separately.
+--- This keeps the Diff Workbench's two content panes independent from the
+--- unified diff text while retaining the same working-tree-versus-HEAD
+--- baseline and read-only Git boundary.
+---@param file ChangedFile
+---@param cwd? string
+---@return table versions
+function M.get_file_versions(file, cwd)
+  return M.get_file_versions_between(file,
+    { kind = "head", ref = "HEAD", label = "HEAD" },
+    { kind = "worktree", ref = M.WORKTREE_REF, label = "Worktree" },
+    cwd)
+end
+
+--- Resolve a revision to a full commit hash (read-only).
+---@param rev string revision or ref name
+---@param cwd? string
+---@return string? hash
+function M.resolve_revision(rev, cwd)
+  if type(rev) ~= "string" or rev == "" or rev == M.WORKTREE_REF then
+    return nil
+  end
+  local lines, code = M.exec({ "rev-parse", "--verify", "--quiet", rev .. "^{commit}" }, cwd)
+  if code == 0 and #lines > 0 and lines[1] and lines[1] ~= "" then
+    return lines[1]
+  end
+  return nil
+end
+
+--- Return the current branch name, or "HEAD" when detached (read-only).
+---@param cwd? string
+---@return string? branch
+function M.get_current_branch(cwd)
+  local is_git, repo_root = M.get_repo_info(cwd)
+  if not is_git then
+    return nil
+  end
+  local lines, code = M.exec({ "rev-parse", "--abbrev-ref", "HEAD" }, repo_root)
+  if code == 0 and #lines > 0 and lines[1] and lines[1] ~= "" then
+    return lines[1]
+  end
+  return nil
+end
+
+--- Get the full commit history reachable from the current branch, including
+--- merge nodes and local ref decorations. Git's own --graph rendering is
+--- preserved verbatim so merge edge lines stay accurate; fields are split
+--- with unit/record separator bytes that cannot appear in commit metadata.
+--- Each entry is a commit ({ kind="commit", graph, hash, parents, refs,
+--- author, date, subject }) or a graph edge line ({ kind="edge", graph }).
+---@param cwd? string
+---@return table entries
+---@return string? error_msg
+function M.get_history(cwd)
+  local is_git, repo_root = M.get_repo_info(cwd)
+  if not is_git then
+    return {}, "Not a git repository"
+  end
+
+  local lines, code = M.exec({
+    "log", "--graph", "--date-order", "--no-color", "--decorate=short",
+    "--format=%H%x1f%P%x1f%D%x1f%aN%x1f%at%x1f%s%x1e",
+  }, repo_root)
+  if code ~= 0 then
+    return {}, "Git log failed with code " .. code
+  end
+
+  local entries = {}
+  for _, line in ipairs(lines) do
+    if line ~= "" and line:find("\31", 1, true) then
+      local art, hash, fields = line:match("^(.-)([0-9a-f]+)\31(.*)$")
+      if art and hash and fields then
+        local parts = vim.split(fields, "\31", { plain = true })
+        local parents = {}
+        if parts[1] and parts[1] ~= "" then
+          for parent in parts[1]:gmatch("%S+") do
+            table.insert(parents, parent)
+          end
+        end
+        local subject = parts[5] or ""
+        subject = subject:gsub("\30$", "")
+        table.insert(entries, {
+          kind = "commit",
+          graph = art,
+          hash = hash,
+          parents = parents,
+          refs = parts[2] or "",
+          author = parts[3] or "",
+          date = tonumber(parts[4]),
+          subject = subject,
+        })
+      end
+    elseif line ~= "" then
+      table.insert(entries, { kind = "edge", graph = line })
+    end
+  end
+
+  return entries, nil
 end
 
 return M

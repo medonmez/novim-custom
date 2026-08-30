@@ -499,8 +499,11 @@ function smoke_tests.test_smoke_git_diff_rendering_and_read_only_invariance()
     "Diff view must expose a middle old-file pane")
   assert_true(state.buf_middle ~= nil and vim.api.nvim_buf_is_valid(state.buf_middle),
     "Diff view must expose an old-file buffer")
-  assert_eq(#vim.api.nvim_tabpage_list_wins(vim.api.nvim_get_current_tabpage()), 3,
-    "Diff view must expose exactly three visible areas")
+  assert_eq(#vim.api.nvim_tabpage_list_wins(vim.api.nvim_get_current_tabpage()), 4,
+    "Diff view must expose exactly four visible areas (changes, history, old, new)")
+  assert_true(state.win_history ~= nil and vim.api.nvim_win_is_valid(state.win_history)
+    and state.buf_history ~= nil and vim.api.nvim_buf_is_valid(state.buf_history),
+    "Diff view must expose a Source Control history pane below the changes list")
   assert_eq(vim.bo[state.buf_middle].modifiable, false, "old-file buffer must be read-only")
   assert_eq(vim.bo[state.buf_right].modifiable, false, "new-file buffer must be read-only")
 
