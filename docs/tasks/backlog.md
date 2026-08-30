@@ -18,12 +18,12 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | ACCEPTED | TASK-008 (accepted) |
 | 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | ACCEPTED | TASK-009 (accepted) |
 | 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | ACCEPTED | TASK-010 (accepted) |
-| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | PLANNED | TASK-011 (accepted) |
-| 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | PROPOSED | TASK-012 (accepted) |
+| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | ACCEPTED | TASK-011 (accepted) |
+| 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | PLANNED | TASK-012 (accepted) |
 
-TASK-012 is the only actionable current task. TASK-013 has accepted product
-direction but remains a successor slice until TASK-012 is accepted; no later
-task may absorb its features incidentally.
+TASK-013 is the only actionable current task. Its accepted product direction
+is recorded in ADR-004 and `docs/tasks/current-task.md`; no later task may
+absorb its features incidentally.
 
 ## Accepted task notes
 
@@ -39,6 +39,9 @@ task may absorb its features incidentally.
 - TASK-011 was accepted after local review and merge as PR #19. Its focus
   state remains session-only, and the close affordance uses the existing safe
   Settings cleanup path.
+- `TASK-012` was accepted after local review and merge as PR #21. The full
+  current-branch Source Control graph, two-endpoint read-only comparison, and
+  current changes/history split are now part of the mainline surface.
 
 ## New task notes
 
@@ -49,22 +52,22 @@ task may absorb its features incidentally.
   Left/Right changes theme only while the theme row is selected, Space
   activates the selected control, `Esc` closes immediately, and the panel
   exposes a top-right mouse close control.
-- `TASK-012` is now the only actionable planned slice. It must keep current
-  changes/status above a full current-branch graph with merge nodes, support
-  two explicit comparison endpoints, and remain read-only without checkout.
+- `TASK-012` is accepted. It keeps current changes/status above a full
+  current-branch graph with merge nodes, supports two explicit comparison
+  endpoints, and remains read-only without checkout.
 - `TASK-012` should use a horizontal split inside the left Git area: current
   changes/status above and current-branch history below. It must not silently
   check out or mutate a branch. The full reachable ancestry graph, merge nodes,
   and two user-selected revision/location endpoints are accepted in ADR-004.
-- `TASK-013` is limited to file-level local stage/unstage/commit with a
-  user-entered message. Push, pull, fetch, merge, rebase, branch checkout,
-  discard, amend, remote synchronization, credentials, and partial-line
-  staging remain excluded.
+- `TASK-013` is now the only actionable planned slice. It is limited to
+  file-level local stage/unstage/commit with a user-entered message. Push,
+  pull, fetch, merge, rebase, branch checkout, discard, amend, remote
+  synchronization, credentials, and partial-line staging remain excluded.
 
-- `TASK-012` must show the full ancestry graph reachable from the current
-  branch, including merge nodes, and let the user choose two revision/location
-  endpoints for a read-only comparison. The default comparison remains
-  working tree versus `HEAD`; selecting history must not check out a branch.
+- `TASK-012` is accepted with the full ancestry graph reachable from the
+  current branch, including merge nodes, and two revision/location endpoints
+  for a read-only comparison. Its default remains working tree versus `HEAD`;
+  selecting history does not check out a branch.
 
 ## Preserved boundaries
 

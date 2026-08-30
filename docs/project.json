@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-012-source-control-graph",
+    "taskBranch": "task/TASK-013-local-git-writes",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -26,13 +26,13 @@
     "developmentCommandTask": "TASK-001"
   },
   "workflow": {
-    "currentTask": "TASK-012",
+    "currentTask": "TASK-013",
     "currentTaskStatus": "PLANNED",
     "pullRequest": null,
     "remoteChecks": "OPTIONAL / NOT_RUN",
-    "lastAcceptedTask": "TASK-011",
-    "lastAcceptedCommit": "ca1edaf",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/19"
+    "lastAcceptedTask": "TASK-012",
+    "lastAcceptedCommit": "915624c",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/21"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
