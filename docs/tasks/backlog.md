@@ -20,11 +20,10 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | ACCEPTED | TASK-010 (accepted) |
 | 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | ACCEPTED | TASK-011 (accepted) |
 | 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | ACCEPTED | TASK-012 (accepted) |
-| 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | PLANNED | TASK-013 (accepted) |
+| 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | ACCEPTED | TASK-013 (accepted) |
 
-TASK-014 is the only actionable current task. Its accepted product direction
-is recorded in ADR-005 and `docs/tasks/current-task.md`; no later task may
-absorb its editor interaction behavior incidentally.
+TASK-001 through TASK-014 are accepted. The planned backlog is exhausted; the
+next slice requires new product direction before a successor task is planned.
 
 ## Accepted task notes
 
@@ -79,6 +78,13 @@ absorb its editor interaction behavior incidentally.
   current branch, including merge nodes, and two revision/location endpoints
   for a read-only comparison. Its default remains working tree versus `HEAD`;
   selecting history does not check out a branch.
+
+- `TASK-014` was accepted after local review and merge as PR #25. It provides
+  editable-file mouse selection auto-copy to the local system clipboard,
+  direct all-mode `Esc` return to the same file's Preview, explicit
+  unsaved-buffer confirmation with in-memory recovery, and statusline guidance.
+  Preview/Diff read-only panes, keyboard-only auto-copy, auto-save, and remote
+  clipboard synchronization remain excluded.
 
 ## Preserved boundaries
 

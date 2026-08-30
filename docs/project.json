@@ -26,15 +26,13 @@
     "developmentCommandTask": "TASK-001"
   },
   "workflow": {
-    "currentTask": "TASK-013",
     "currentTask": "TASK-014",
-    "currentTaskStatus": "PLANNED",
-    "currentTaskBaseline": "2f72937134a3965a8c5294641c1589dd38a6a04c",
-    "pullRequest": null,
+    "currentTaskStatus": "ACCEPTED",
+    "pullRequest": "https://github.com/medonmez/novim-custom/pull/25",
     "remoteChecks": "OPTIONAL / NOT_RUN",
-    "lastAcceptedTask": "TASK-013",
-    "lastAcceptedCommit": "f19e529c",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/23"
+    "lastAcceptedTask": "TASK-014",
+    "lastAcceptedCommit": "7972460",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/25"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",

@@ -6,10 +6,11 @@ Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
 Baseline: `2f72937134a3965a8c5294641c1589dd38a6a04c` (`origin/main`)
 Candidate: `f4413b7` (`task/TASK-014-auto-copy-preview-exit`)
-Pull request: `NOT_OPEN` at review time
+Pull request: `https://github.com/medonmez/novim-custom/pull/25` (`MERGED`)
 Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `NOT_ATTEMPTED` at review time
-Target branch contains change: `NO` at review time
+Merge status: `MERGED`
+Target branch contains change: `YES` (`origin/main`)
+Merge commit: `79724608028685b95d780af113f5e64caae5622a` (`origin/main`)
 
 ## Review result
 
@@ -70,10 +71,11 @@ Non-blocking observations retained from the handoff:
 
 ## Validation performed
 
-- Confirmed the checkout is `task/TASK-014-auto-copy-preview-exit`, clean,
-  and exactly one commit ahead of `origin/task/TASK-014-auto-copy-preview-exit`
-  at `779749a`; `origin/main` is `2f72937` and is an ancestor of the
-  candidate.
+- Confirmed before delivery that the checkout was
+  `task/TASK-014-auto-copy-preview-exit`, clean, and exactly one implementation
+  commit plus one review-record commit ahead of
+  `origin/task/TASK-014-auto-copy-preview-exit` at `779749a`; `origin/main`
+  was `2f72937` and was an ancestor of the candidate.
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
   task, backlog, prior review, product/architecture records, ADR-005, and the
   complete candidate diff.
@@ -87,20 +89,24 @@ Non-blocking observations retained from the handoff:
   package, and test scripts, `python3 -m json.tool docs/project.json`, both
   development/installed version checks, `git diff --check`, and the local
   native PTY validation (`/tmp/pty_task014.py`): all passed.
+- Pushed the reviewed branch, opened PR #25, confirmed it was
+  `MERGEABLE`/`CLEAN` with no reported checks, merged it, and fetched
+  `origin/main`; the remote default branch now contains the reviewed
+  implementation and review record at `7972460`.
 
 All evidence above is local review evidence. It is not hosted, production,
 recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-The candidate is locally `APPROVED`. LIGHTWEIGHT delivery is authorized:
-push this task branch, open one traceability PR targeting `main`, and merge
-promptly if it is mergeable and no explicit repository/provider rule blocks
-the merge. Do not wait for optional checks or invent a second approval gate.
+`ACCEPTED` after lightweight PR #25 merge. The reviewed candidate and review
+record are contained in `origin/main` at merge commit `7972460`; the complete
+local validation evidence is recorded above. Remote checks were optional and
+none were reported. No hosted, production, recovery, or customer-acceptance
+claim is made.
 
-## Post-merge requirement
+## Next action
 
-Only after the remote default branch contains the merged result, update
-`project-state.md`, `docs/tasks/backlog.md`, `docs/tasks/current-task.md`,
-`docs/project.json`, and this review record to the accepted merged state. Do
-not issue a successor task until the merge is verified.
+TASK-014 is complete and the planned backlog through TASK-014 is exhausted.
+No successor task is issued; new work requires product direction from the
+user before another task is planned.
