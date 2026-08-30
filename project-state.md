@@ -4,13 +4,13 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-011` (`PLANNED`)
+Current task: `TASK-012` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-011-settings-focus-close`
-Pull request: `https://github.com/medonmez/novim-custom/pull/17` (`MERGED`)
-Last accepted task: `TASK-010`
-Last accepted commit: `a039f29` (`origin/main` merge of PR #17)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/17`
+Task branch: `task/TASK-012-source-control-graph`
+Pull request: `NOT_OPEN`
+Last accepted task: `TASK-011`
+Last accepted commit: `ca1edaf` (`origin/main` merge of PR #19)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/19`
 
 ## Current truth
 
@@ -88,9 +88,17 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/17`
   persists independent logical Files/Diff pane geometry across view switches
   and local launches, clamps it to the current terminal, and preserves the
   existing theme/dot-folder settings and write-failure boundary.
-- `TASK-011` is the only actionable successor, planned on
-  `task/TASK-011-settings-focus-close` from `origin/main` `a63bd76`; it will
-  make Settings focus-driven and add the accepted mouse close affordance.
+- `TASK-011` was locally reviewed `APPROVED` at candidate `67bc379` with
+  review record `41fb79f`, delivered through GitHub PR #19, and verified in
+  merge commit `ca1edaf` on `origin/main`. Settings now has session-only
+  control focus, control-only navigation, context-aware theme activation,
+  immediate Esc close, and a top-right mouse close affordance. Existing
+  settings persistence, pane geometry, and local-only boundaries remain
+  intact.
+- `TASK-012` is now the only actionable successor, planned on
+  `task/TASK-012-source-control-graph` from `origin/main` `ca1edaf`. It will
+  add the accepted Source Control layout, full current-branch graph, and
+  explicit two-endpoint read-only comparison.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -101,14 +109,15 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/17`
 
 ## Active blockers
 
-- TASK-011 has no active product blocker.
-- TASK-012 and TASK-013 have no remaining product-decision blocker, but wait
-  for their ordered dependencies (`TASK-011` and `TASK-012`) to be accepted.
+- TASK-012 has no active product or dependency blocker.
+- TASK-013 has no remaining product-decision blocker, but waits for TASK-012
+  to be accepted.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Implement `TASK-011` on its isolated task branch, then return a local handoff
-for review. Resolve the recorded Git direction's dependency order before
-issuing either Git successor. Local distribution and upstream sync remain
-documented in `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.
+Implement `TASK-012` on its isolated task branch, then return a local handoff
+for review. Keep the full Source Control graph and two-endpoint comparison
+read-only; resolve the recorded dependency order before issuing TASK-013.
+Local distribution and upstream sync remain documented in
+`docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.

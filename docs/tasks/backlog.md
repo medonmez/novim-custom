@@ -17,13 +17,13 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 8 | TASK-008 | Add six built-in themes, settings key help, immediate settings close, and reliable mouse pane resizing | ACCEPTED | TASK-007 (accepted) |
 | 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | ACCEPTED | TASK-008 (accepted) |
 | 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | ACCEPTED | TASK-009 (accepted) |
-| 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | PLANNED | TASK-010 (accepted) |
-| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | PROPOSED | TASK-011 (accepted) |
+| 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | ACCEPTED | TASK-010 (accepted) |
+| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | PLANNED | TASK-011 (accepted) |
 | 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | PROPOSED | TASK-012 (accepted) |
 
-TASK-011 is the only actionable current task. TASK-012 and TASK-013 have
-accepted product direction but remain successor slices until their dependencies
-are accepted; no later task may absorb those features incidentally.
+TASK-012 is the only actionable current task. TASK-013 has accepted product
+direction but remains a successor slice until TASK-012 is accepted; no later
+task may absorb its features incidentally.
 
 ## Accepted task notes
 
@@ -36,16 +36,22 @@ are accepted; no later task may absorb those features incidentally.
 - Settings currently persist theme and dot-folder visibility in isolated state;
   TASK-011 must preserve both values and make focus state visible and
   testable.
+- TASK-011 was accepted after local review and merge as PR #19. Its focus
+  state remains session-only, and the close affordance uses the existing safe
+  Settings cleanup path.
 
 ## New task notes
 
 - `TASK-010` is accepted. It stores logical per-view geometry, not transient
   Neovim window or buffer IDs, survives view switching and a later local
   launch, and clamps safely to the current terminal width.
-- `TASK-011` must ensure Up/Down changes only the selected Settings control,
-  Left/Right changes theme only while the theme row is selected, and Space
-  activates the selected control. The Settings panel must visibly document
-  `Esc` close and expose a top-right mouse close control.
+- `TASK-011` is accepted. Up/Down changes only the selected Settings control,
+  Left/Right changes theme only while the theme row is selected, Space
+  activates the selected control, `Esc` closes immediately, and the panel
+  exposes a top-right mouse close control.
+- `TASK-012` is now the only actionable planned slice. It must keep current
+  changes/status above a full current-branch graph with merge nodes, support
+  two explicit comparison endpoints, and remain read-only without checkout.
 - `TASK-012` should use a horizontal split inside the left Git area: current
   changes/status above and current-branch history below. It must not silently
   check out or mutate a branch. The full reachable ancestry graph, merge nodes,
