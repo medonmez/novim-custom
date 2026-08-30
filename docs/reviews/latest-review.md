@@ -96,5 +96,5 @@ branch containment verified after merge.
 
 TASK-011 is complete. Durable records are reconciled and TASK-012 is now the
 single actionable planned successor on
-`task/TASK-012-source-control-graph` from `origin/main` `ca1edaf`. The
+`task/TASK-012-source-control-graph` from `origin/main` `8b76dad`. The
 implementation branch and PR remain traceable as PR #19.
