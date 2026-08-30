@@ -4,13 +4,13 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-013` (`CHANGES_REQUESTED`)
+Current task: `NONE` (backlog exhausted; awaiting product direction)
 Base branch: `main`
-Task branch: `task/TASK-013-local-git-writes`
-Pull request: `NOT_OPEN`
-Last accepted task: `TASK-012`
-Last accepted commit: `915624c` (`origin/main` merge of PR #21)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/21`
+Task branch: `task/TASK-013-local-git-writes` (merged)
+Pull request: `https://github.com/medonmez/novim-custom/pull/23` (`MERGED`)
+Last accepted task: `TASK-013`
+Last accepted commit: `f19e529c` (`origin/main` merge of PR #23)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/23`
 
 ## Current truth
 
@@ -100,27 +100,32 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/21`
   merge commit `915624c` on `origin/main`. The Diff view now provides the
   accepted Source Control layout, full current-branch graph, and explicit
   two-endpoint read-only comparison.
+- `TASK-013` was locally reviewed `APPROVED` at candidate `4fef7ef` with
+  review record `a99e5ab`, delivered through GitHub PR #23, and verified in
+  merge commit `f19e529c` on `origin/main`. The Source Control view now
+  supports file-level local stage/unstage and local staged commits with a
+  transient user-entered message, bounded notices, and the three review
+  corrections for history-pane `N`, clean-state notices, and selected-path
+  preservation.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
   surface. The Git direction is now accepted in ADR-004: full current-branch
   graph, two user-selected comparison endpoints, and file-level local
-  stage/unstage/commit only. These are still successor slices, not current
-  implementation work.
+  stage/unstage/commit only. These slices are now implemented and accepted in
+  the mainline history.
 
 ## Active blockers
 
-- TASK-013 has no product or dependency blocker, but local review of candidate
-  `c90f863` requested three corrections: restore the history-pane `N` endpoint
-  mapping, render write notices after the changes list becomes empty, and
-  preserve selected change paths across commit refresh.
+- The planned backlog is exhausted. No product or dependency blocker exists;
+  a successor task requires new product direction from the user.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Return `TASK-013` to `$stateless-implementer` on its existing isolated branch
-for the recorded review corrections. Keep the write surface file-level and
-local; preserve the full Source Control graph, two-endpoint comparison, and
-dependency boundaries. No PR or remote delivery was attempted.
+No successor task is issued. Keep the accepted local Git write surface
+file-level and local, and preserve the full Source Control graph,
+two-endpoint comparison, and dependency boundaries when a new product slice
+is planned.
 Local distribution and upstream sync remain documented in
 `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.

@@ -27,12 +27,12 @@
   },
   "workflow": {
     "currentTask": "TASK-013",
-    "currentTaskStatus": "CHANGES_REQUESTED",
-    "pullRequest": null,
+    "currentTaskStatus": "ACCEPTED",
+    "pullRequest": "https://github.com/medonmez/novim-custom/pull/23",
     "remoteChecks": "OPTIONAL / NOT_RUN",
-    "lastAcceptedTask": "TASK-012",
-    "lastAcceptedCommit": "915624c",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/21"
+    "lastAcceptedTask": "TASK-013",
+    "lastAcceptedCommit": "f19e529c",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/23"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
@@ -57,7 +57,8 @@
       "toggle": "show dot-prefixed files and folders",
       "allowlist": false
     },
-    "gitMutation": false,
+    "gitMutation": true,
+    "gitMutationBoundary": "File-level local stage/unstage and local staged commit only; no remote, checkout, history-rewrite, discard, amend, or partial-line operation",
     "pluginDependency": false,
     "settings": ["dot-folder visibility", "six built-in themes", "settings key help"],
     "projectBrowser": {
