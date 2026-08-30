@@ -9,14 +9,24 @@ local M = {}
 
 local DIVIDER = " ────────────────────────────────────────────────────────"
 
+--- Ordered Settings controls. Focus navigation (Up/Down) moves only within
+--- this list, so help and informational lines are never selectable controls.
+local CONTROL_ORDER = { "dotfiles", "theme" }
+
+--- Top-right mouse close affordance rendered on the title row.
+local CLOSE_LABEL = "Close [x]"
+
 local state = {
   win = nil,
   buf = nil,
   on_change = nil,
   last_error = nil,
   prev_win = nil,
+  selected = CONTROL_ORDER[1],
   dotfiles_row = nil,
   theme_row = nil,
+  close_row = nil,
+  close_col = nil,
   ns_id = vim.api.nvim_create_namespace("novim_settings_ui"),
 }
 
@@ -65,6 +75,39 @@ function M.close()
   restore_focus()
 end
 
+--- Selected control id (for diagnostics / testing)
+---@return string
+function M.get_selected_control()
+  return state.selected or CONTROL_ORDER[1]
+end
+
+--- Move the focus indicator between controls (+1 down, -1 up), wrapping
+--- consistently. Help and informational lines are never focused.
+---@param direction integer
+function M.move_focus(direction)
+  if not M.is_open() then
+    return
+  end
+  local idx = 1
+  for i, id in ipairs(CONTROL_ORDER) do
+    if id == state.selected then
+      idx = i
+      break
+    end
+  end
+  state.selected = CONTROL_ORDER[((idx - 1 + direction) % #CONTROL_ORDER) + 1]
+  M.render()
+end
+
+--- Activate the currently selected control (Space / Enter). Activating the
+--- theme control cycles to the next theme, matching the theme row click.
+function M.activate_selected()
+  if M.get_selected_control() == "theme" then
+    return M.cycle_theme(1)
+  end
+  return M.toggle_dotfiles()
+end
+
 --- Render settings content in buffer
 function M.render()
   if not state.buf or not vim.api.nvim_buf_is_valid(state.buf) then
@@ -97,20 +140,40 @@ function M.render()
     display_path = "..." .. display_path:sub(#display_path - 49)
   end
 
+  -- Title row with the top-right mouse close affordance. The button is
+  -- right-aligned to the float width and closes through the same safe path
+  -- as Esc/q (see handle_click).
+  local title = " novim-dev Settings & Preferences"
+  local win_width = 60
+  if state.win and vim.api.nvim_win_is_valid(state.win) then
+    win_width = vim.api.nvim_win_get_width(state.win)
+  end
+  local pad = win_width - #title - #CLOSE_LABEL
+  if pad < 1 then
+    pad = 1
+  end
+  local close_prefix = title .. string.rep(" ", pad)
+  state.close_row = 1
+  state.close_col = #close_prefix + 1
+
   local lines = {
-    " novim-dev Settings & Preferences",
+    close_prefix .. CLOSE_LABEL,
     DIVIDER,
     "",
     " Display Options:",
     "",
   }
 
+  -- Exactly one visible selected-control indicator: only the focused row
+  -- shows the ▶ marker, help text is never marked.
   local dot_row, theme_row
-  table.insert(lines, string.format("   ▶ %s Show Dot-Folders & Hidden Files", checkbox))
+  local dot_prefix = (state.selected == "dotfiles") and "   ▶ " or "     "
+  local theme_prefix = (state.selected == "theme") and "   ▶ " or "     "
+  table.insert(lines, string.format("%s%s Show Dot-Folders & Hidden Files", dot_prefix, checkbox))
   dot_row = #lines -- 1-based window row (lines[1] renders at window row 1)
   table.insert(lines, string.format("       Status: %s", status_text))
   table.insert(lines, "")
-  table.insert(lines, string.format("   ▶ Theme:  ‹ %s ›", theme_label))
+  table.insert(lines, string.format("%sTheme:  ‹ %s ›", theme_prefix, theme_label))
   theme_row = #lines
   table.insert(lines, string.format("       Status: Palette %d of %d applied  ([h]/[l] to change)", theme_pos, #theme_list))
   table.insert(lines, "")
@@ -158,14 +221,37 @@ function M.render()
     return row - 1 -- window row (1-based) to buffer line (0-based)
   end
 
-  add_hl(0, 0, -1, "Title")
+  -- Title and the top-right close affordance
+  add_hl(0, 0, #title, "Title")
+  add_hl(0, state.close_col - 1, -1, "WorkbenchKeyHint")
   add_hl(1, 0, -1, "WorkbenchDivider")
   add_hl(3, 0, -1, "WorkbenchHeader")
-  add_hl(row0(dot_row), 5, 8, show_dot and "WorkbenchClean" or "WorkbenchSummary")
-  add_hl(row0(dot_row), 9, -1, "Normal")
-  add_hl(row0(dot_row) + 1, 7, -1, show_dot and "WorkbenchClean" or "WorkbenchSubHeader")
-  add_hl(row0(theme_row), 5, -1, "WorkbenchKeyHint")
+
+  -- Control rows: ranges are located by their text because the selected-row
+  -- prefix contains a 3-byte glyph that shifts byte columns.
+  local function highlight_indicator(row)
+    local marker = lines[row]:find("▶", 1, true)
+    if marker then
+      add_hl(row0(row), marker - 1, marker - 1 + #("▶"), "WorkbenchActiveMarker")
+    end
+  end
+
+  add_hl(row0(theme_row), 0, -1, "WorkbenchKeyHint")
+  if state.selected == "theme" then
+    highlight_indicator(theme_row)
+  end
   add_hl(row0(theme_row) + 1, 7, -1, "WorkbenchSubHeader")
+
+  local dot_line = lines[dot_row]
+  local cb_col = dot_line:find(checkbox, 1, true)
+  if cb_col then
+    add_hl(row0(dot_row), cb_col - 1, cb_col - 1 + #checkbox, show_dot and "WorkbenchClean" or "WorkbenchSummary")
+    add_hl(row0(dot_row), cb_col + #checkbox, -1, "Normal")
+  end
+  if state.selected == "dotfiles" then
+    highlight_indicator(dot_row)
+  end
+  add_hl(row0(dot_row) + 1, 7, -1, show_dot and "WorkbenchClean" or "WorkbenchSubHeader")
 
   if error_line_idx then
     add_hl(error_line_idx, 0, -1, "WorkbenchError")
@@ -236,6 +322,33 @@ function M.cycle_theme(direction)
   return M.set_theme(list[next_pos].id)
 end
 
+--- Handle a left mouse click inside the settings window. Clicking the
+--- top-right Close affordance closes through the same safe close path as
+--- Esc/q; clicking a control row focuses it and activates it. Clicks
+--- elsewhere (help text, workbench panes) are ignored. Exposed as a
+--- function of explicit coordinates so the hit-testing is deterministically
+--- testable without a real mouse event.
+---@param line integer 1-based window row
+---@param column integer 1-based buffer column of the click
+---@param winid integer? window the click landed in
+function M.handle_click(line, column, winid)
+  if winid ~= state.win then
+    return
+  end
+  if state.close_row and line == state.close_row
+      and state.close_col and column >= state.close_col then
+    M.close()
+    return
+  end
+  if state.theme_row and line == state.theme_row then
+    state.selected = "theme"
+    M.cycle_theme(1)
+  elseif state.dotfiles_row and line == state.dotfiles_row then
+    state.selected = "dotfiles"
+    M.toggle_dotfiles()
+  end
+end
+
 --- Open the settings modal
 ---@param on_change? fun(key: string, value: any)
 function M.open(on_change)
@@ -246,6 +359,7 @@ function M.open(on_change)
   end
 
   state.last_error = nil
+  state.selected = CONTROL_ORDER[1]
   state.on_change = on_change
   state.prev_win = vim.api.nvim_get_current_win()
 
@@ -282,30 +396,40 @@ function M.open(on_change)
   -- Keymaps
   local opts = { buffer = state.buf, silent = true, noremap = true }
 
-  vim.keymap.set("n", "<Space>", M.toggle_dotfiles, opts)
-  vim.keymap.set("n", "<CR>", M.toggle_dotfiles, opts)
+  -- Focus navigation moves the indicator only between the actual controls;
+  -- it never moves the cursor through the rendered help section.
+  vim.keymap.set("n", "<Up>", function() M.move_focus(-1) end, opts)
+  vim.keymap.set("n", "<Down>", function() M.move_focus(1) end, opts)
+  vim.keymap.set("n", "k", function() M.move_focus(-1) end, opts)
+  vim.keymap.set("n", "j", function() M.move_focus(1) end, opts)
+
+  -- Activation applies to the selected control (Space / Enter)
+  vim.keymap.set("n", "<Space>", M.activate_selected, opts)
+  vim.keymap.set("n", "<CR>", M.activate_selected, opts)
   vim.keymap.set("n", "t", M.toggle_dotfiles, opts)
 
-  -- Theme selection
-  vim.keymap.set("n", "h", function() M.cycle_theme(-1) end, opts)
-  vim.keymap.set("n", "<Left>", function() M.cycle_theme(-1) end, opts)
-  vim.keymap.set("n", "[", function() M.cycle_theme(-1) end, opts)
-  vim.keymap.set("n", "l", function() M.cycle_theme(1) end, opts)
-  vim.keymap.set("n", "<Right>", function() M.cycle_theme(1) end, opts)
-  vim.keymap.set("n", "]", function() M.cycle_theme(1) end, opts)
+  -- Theme changes apply only while the theme control is selected
+  local function cycle_theme_if_selected(direction)
+    return function()
+      if state.selected == "theme" then
+        M.cycle_theme(direction)
+      end
+    end
+  end
+  vim.keymap.set("n", "h", cycle_theme_if_selected(-1), opts)
+  vim.keymap.set("n", "<Left>", cycle_theme_if_selected(-1), opts)
+  vim.keymap.set("n", "[", cycle_theme_if_selected(-1), opts)
+  vim.keymap.set("n", "l", cycle_theme_if_selected(1), opts)
+  vim.keymap.set("n", "<Right>", cycle_theme_if_selected(1), opts)
+  vim.keymap.set("n", "]", cycle_theme_if_selected(1), opts)
 
   vim.keymap.set("n", ":", ":", { buffer = state.buf, noremap = true, silent = false })
 
-  -- Clicking a control row toggles it; the theme row cycles to the next theme
+  -- Mouse: the top-right Close affordance and the control rows route through
+  -- handle_click; the close button shares the safe close path with Esc/q.
   vim.keymap.set("n", "<LeftMouse>", function()
     local mouse = vim.fn.getmousepos()
-    if mouse.winid == state.win then
-      if state.theme_row and mouse.line == state.theme_row then
-        M.cycle_theme(1)
-      elseif state.dotfiles_row and mouse.line == state.dotfiles_row then
-        M.toggle_dotfiles()
-      end
-    end
+    M.handle_click(mouse.line, mouse.column, mouse.winid)
   end, opts)
 
   -- Single Esc closes immediately; q stays a direct close action

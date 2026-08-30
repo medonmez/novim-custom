@@ -30,9 +30,11 @@ M.workbench = {
 
 --- Settings panel shortcuts.
 M.settings = {
-  { display = "h / ← / [", keys = { "h", "<Left>", "[" }, desc = "Previous theme" },
-  { display = "l / → / ]", keys = { "l", "<Right>", "]" }, desc = "Next theme" },
-  { display = "t / Space / Enter", keys = { "t", "<Space>", "<CR>" }, desc = "Toggle dot-folder visibility" },
+  { display = "j / k or ↑ / ↓", keys = { "j", "k", "<Up>", "<Down>" }, desc = "Move control selection" },
+  { display = "Space / Enter", keys = { "<Space>", "<CR>" }, desc = "Activate selected control" },
+  { display = "h / ← / [", keys = { "h", "<Left>", "[" }, desc = "Previous theme (Theme selected)" },
+  { display = "l / → / ]", keys = { "l", "<Right>", "]" }, desc = "Next theme (Theme selected)" },
+  { display = "t", keys = { "t" }, desc = "Toggle dot-folder visibility" },
   { display = "q / Esc", keys = { "q", "<Esc>" }, desc = "Close settings (Esc closes immediately)" },
 }
 

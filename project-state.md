@@ -89,7 +89,7 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/17`
   and local launches, clamps it to the current terminal, and preserves the
   existing theme/dot-folder settings and write-failure boundary.
 - `TASK-011` is the only actionable successor, planned on
-  `task/TASK-011-settings-focus-close` from `origin/main` `a039f29`; it will
+  `task/TASK-011-settings-focus-close` from `origin/main` `a63bd76`; it will
   make Settings focus-driven and add the accepted mouse close affordance.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and

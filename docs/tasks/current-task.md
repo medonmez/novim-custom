@@ -2,11 +2,11 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-011`
-Status: `PLANNED`
+Status: `IN_PROGRESS`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-011-settings-focus-close`
-Expected baseline: `a039f29` (`origin/main`)
+Expected baseline: `a63bd76` (`origin/main`)
 Pull request: `NOT_OPEN`
 
 ## Outcome
@@ -122,8 +122,78 @@ already accepted pane-geometry persistence.
 
 ## Implementation handoff
 
-Status: `PLANNED` (awaiting implementation on the recorded isolated branch)
+Status: `READY_FOR_REVIEW`
 
-Implement TASK-011 only after reading this task, the repository instructions,
-and the latest review. Return a local `READY_FOR_REVIEW` handoff; do not push,
-open a PR, merge, or mark the task accepted as the implementer.
+### Change summary
+
+`settings_ui.lua` now keeps an in-memory selected-control model
+(`CONTROL_ORDER = { "dotfiles", "theme" }`, never persisted). Exactly one
+visible `▶` indicator marks the selected row; Up/Down (and j/k) move focus
+only between the two controls with consistent wraparound and never move the
+buffer cursor through the rendered help section. Space/Enter activate the
+selected control (dot-folder toggle or next-theme cycle); `t` remains a
+direct dot-folder toggle. Left/Right (and h/l/[/]) change the theme only
+while the theme control is selected and are inert otherwise. One-key `Esc`
+still closes immediately through the unchanged `M.close()` path, and a new
+right-aligned `Close [x]` affordance on the title row closes through the
+same path when clicked (new `M.handle_click(line, column, winid)` hit-test,
+also covering control-row clicks). Existing synchronous save/error behavior,
+the settings persistence boundary, and all pane-geometry code are reused
+unchanged. `keymaps.lua` settings help entries were rewritten to match the
+real mappings in both directions. `M.close()` clears only its own state.
+
+### Files changed
+
+- `config/nvim/lua/novim/settings_ui.lua` — focus model, activation,
+  theme-only arrows, mouse close affordance, focus-aware rendering.
+- `config/nvim/lua/novim/keymaps.lua` — settings help entries updated to
+  the real focus-model mappings.
+- `tests/test_workbench.lua` — `buffer_map_callback` helper plus four new
+  focused regression tests.
+- `docs/tasks/current-task.md` — this handoff.
+
+### Validation commands and results (local evidence only)
+
+- `./tests/run_tests.sh` — PASS: 42/42 integration tests, offline package
+  suite passed, 8/8 smoke tests, zero fixture residue.
+- `luajit -bl` on `settings_ui.lua`, `keymaps.lua`, `test_workbench.lua` —
+  PASS (Lua syntax).
+- `bash -n` on `bin/novim-dev`, `bin/novim-dev-package`, and all three test
+  runners — PASS (shell syntax).
+- `python3 -m json.tool docs/project.json` — PASS.
+- Version checks: `bin/novim-dev --version` → `novim-dev 0.1.7-dev (custom
+  checkout)`; installed `/Users/mert/.local/bin/novim --version` →
+  `novim 0.1.7` (installed release untouched); in-checkout upstream launcher
+  `bin/novim --version` → `novim 0.1.0` (vendored upstream version string).
+- `git diff --check` — PASS.
+- Diff inspection: changes limited to the four task-owned files; no
+  pane-geometry, settings-storage, network, plugin, Git-mutation, or
+  installed-release changes.
+
+### Acceptance-criterion evidence
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| Opens with exactly one visible selected control; indicator never selects help | PASS | `tests/test_workbench.lua` `test_settings_focus_indicator_rendering_and_movement`: opens with one `▶` on the dot row; headless render dump shows one indicator, `selected=dotfiles` |
+| Up/Down changes only the selected control, wraps consistently, never moves cursor through help | PASS | Same test: Down/Up wrap dotfiles↔theme, exactly one indicator after each move, cursor position unchanged, indicator always above the help section; real `<Up>`/`<Down>` mapping callbacks asserted |
+| Left/Right changes theme only when theme control is selected | PASS | `test_settings_arrow_theme_only_and_space_activation`: theme unchanged after Left/Right on dotfiles control; theme cycles tokyo_night→nord→tokyo_night with persistence once the theme control is selected |
+| Space activates the selected control incl. dot-folder toggle, preserving synchronous save/error behavior | PASS | Same test: Space cycles theme and toggles dot-folder visibility with immediate persistence; `test_settings_focus_survives_failed_settings_writes`: blocked settings path renders the error, effective value and selected control stay coherent |
+| One-key `Esc` closes immediately, restores workbench focus, remains documented | PASS | Existing `test_settings_single_esc_close_restores_workbench_focus` (unchanged, passing); help entry `q / Esc` still rendered via `keymaps.settings` |
+| Visible top-right mouse close affordance closes through the same safe path without changing settings | PASS | `test_settings_mouse_close_affordance`: `Close [x]` rendered flush right on the title row; click closes, restores workbench focus, leaves theme/dot-folder values unchanged; off-control clicks never close |
+| Existing theme catalog, dot-folder behavior, pane geometry, workbench contracts, launcher isolation, installed-release boundaries intact | PASS | Full 42/42 + 8/8 suites; `workbench.lua`, `settings.lua`, `themes.lua` untouched; version checks unchanged |
+
+### Residual risks
+
+- The mouse close hit-test is verified through `M.handle_click` with
+  explicit coordinates plus the wired `<LeftMouse>` mapping; a real PTY
+  mouse click on the button itself was not exercised headlessly (consistent
+  with prior TASK-002 PTY-level mouse verification).
+- `j`/`k` previously moved the free cursor inside the settings buffer; they
+  now drive control focus instead. This is the intended focused-menu
+  behavior, but it changes pre-existing incidental j/k cursor movement.
+- Focus selection is intentionally session-only and never persisted, per
+  the decision guardrails.
+
+### Commit reference
+
+HEAD (handoff commit)
