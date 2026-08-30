@@ -1,18 +1,19 @@
 {
   "schemaVersion": "1.0",
   "project": {
-    "name": "novim-custom",
-    "purpose": "A terminal-first novim derivative for focused repository navigation, code inspection, and local Git review.",
+    "name": "oh-my-code",
+    "purpose": "A friendly terminal-first code workbench for project navigation, editing, and local Git review.",
     "lifecycle": "ACTIVE_DEVELOPMENT",
     "deliveryPolicy": "LIGHTWEIGHT"
   },
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-014-auto-copy-preview-exit",
+    "taskBranch": "task/TASK-015-oh-my-code-identity",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
+    "publicTargetUrl": "https://github.com/medonmez/oh-my-code",
     "upstreamRemoteName": "upstream",
     "githubForkUrl": "https://github.com/medonmez/novim-custom",
     "baselineCommit": "8e36d447ee9c73d29b75f3dfc50db9452a2addf1",
@@ -21,15 +22,16 @@
   },
   "runtime": {
     "installedCommand": "novim",
-    "developmentCommand": "novim-dev",
-    "developmentCommandStatus": "available",
-    "developmentCommandTask": "TASK-001"
+    "developmentCommand": "ohc",
+    "compatibilityCommand": "novim-dev",
+    "developmentCommandStatus": "planned",
+    "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "TASK-014",
-    "currentTaskStatus": "ACCEPTED",
-    "pullRequest": "https://github.com/medonmez/novim-custom/pull/25",
-    "remoteChecks": "OPTIONAL / NOT_RUN",
+    "currentTask": "TASK-015",
+    "currentTaskStatus": "PLANNED",
+    "pullRequest": null,
+    "remoteChecks": "STRICT FOR HOSTED RELEASE; NOT APPLICABLE TO LOCAL PLAN",
     "lastAcceptedTask": "TASK-014",
     "lastAcceptedCommit": "7972460",
     "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/25"
@@ -46,8 +48,14 @@
     "taskSchema": "docs/tasks/task.schema.json"
   },
   "openDecisions": [],
+  "release": {
+    "targetVersion": "1.0.0",
+    "status": "PLANNED",
+    "delivery": "GitHub Release plus networked installer",
+    "animation": "one-second interactive-TTY ANSI splash with explicit disable controls"
+  },
   "acceptedProductDirection": {
-    "primaryWorkflow": "read-only local Git diff review",
+    "primaryWorkflow": "terminal-first project navigation, editing, and bounded local Git review",
     "layout": "Files view: left lazy project tree plus right source preview; Diff view: left changed-file list plus middle old-file and right new-file panes",
     "paneResize": "mouse-draggable, width-constrained boundaries between visible panes",
     "diffBaseline": "working tree versus HEAD, including untracked files",
@@ -64,6 +72,13 @@
       "mouseSelection": "Completed mouse selections in editable file buffers copy to the local system clipboard; preview and read-only Diff panes do not auto-copy",
       "escape": "Esc returns directly from Insert, Normal, or Visual to the same file Preview; modified buffers require confirmation and are never silently saved or discarded",
       "statusline": "Bottom editor hints explain mouse auto-copy and Esc Preview alongside copy, cut, paste, save, and undo"
+    },
+    "publicIdentity": {
+      "application": "oh-my-code",
+      "primaryCommand": "ohc",
+      "compatibilityCommand": "novim-dev",
+      "repositoryTarget": "https://github.com/medonmez/oh-my-code",
+      "installedUpstreamCommand": "novim"
     },
     "pluginDependency": false,
     "settings": ["dot-folder visibility", "six built-in themes", "settings key help"],

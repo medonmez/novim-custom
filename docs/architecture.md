@@ -7,6 +7,19 @@ Status: `OBSERVED_BASELINE_WITH_ACCEPTED_EXTENSION`
 
 The repository is a direct clone of upstream novim at tag `v0.1.7`.
 
+### Public oh-my-code boundary
+
+The public product identity is `oh-my-code` and its primary command is `ohc`.
+The repository is transitioning from `medonmez/novim-custom` to the public
+GitHub target `medonmez/oh-my-code`; the hosted rename is a release-delivery
+action, not a local assumption. `novim-dev` remains a one-release compatibility
+alias. The internal Lua modules under `config/nvim/lua/novim/` remain stable
+implementation namespaces for this release.
+
+The public installation root is `~/.local/share/oh-my-code` and the primary
+link is `~/.local/bin/ohc`. The existing `~/.local/share/novim` and
+`~/.local/bin/novim` installation remain independent and must not be replaced.
+
 ### Launcher
 
 - `bin/novim` is a Bash wrapper, not a compiled editor.
@@ -66,7 +79,8 @@ The repository is a direct clone of upstream novim at tag `v0.1.7`.
 
 ## Development boundary and launcher
 
-`TASK-001` added a dedicated repository-local launcher via `bin/novim-dev`:
+`TASK-001` added a dedicated repository-local launcher via `bin/novim-dev`.
+The public successor uses `bin/ohc` with the same isolation guarantees:
 - Resolves its repository root dynamically through symlinks and from any working directory.
 - Sets `XDG_CONFIG_HOME` to this checkout's `config` directory (`config/nvim/init.lua`).
 - Sets separate runtime paths `XDG_DATA_HOME` (`.dev-data/`), `XDG_STATE_HOME` (`.dev-state/`), and `XDG_CACHE_HOME` (`.dev-cache/`) inside the checkout root, keeping runtime state strictly isolated from installed `novim` and standard Neovim configurations.
@@ -75,19 +89,23 @@ The repository is a direct clone of upstream novim at tag `v0.1.7`.
 
 ### Local installation / linking
 
-To make `novim-dev` accessible from any terminal without overwriting the installed `novim`:
+To make the public launcher accessible from any terminal without overwriting
+the installed `novim`:
 
 ```bash
-ln -sf /Users/mert/novim-custom/bin/novim-dev ~/.local/bin/novim-dev
+ln -sf /Users/mert/novim-custom/bin/ohc ~/.local/bin/ohc
 ```
 
 Verification:
-- `novim-dev --version` reports the development launcher without network activity.
+- `ohc --version` reports the public launcher without network activity.
+- `novim-dev --version` remains available as the one-release compatibility alias.
 - `novim --version` continues to invoke the upstream release at `~/.local/bin/novim`.
 
 ### Local derivative packaging
 
-`bin/novim-dev-package` is an offline, allowlist-based distribution helper:
+`bin/novim-dev-package` is the pre-release offline, allowlist-based
+distribution helper. The public package/installer migration is planned
+separately:
 
 - `package ARCHIVE` stages `bin/novim-dev`, the complete `config/nvim` tree,
   `VERSION`, `LICENSE`, and `THIRD_PARTY_LICENSES.md` into a deterministic
@@ -127,8 +145,9 @@ The accepted next target is a read-only multi-pane diff workbench:
   expansion and on-demand child scanning;
 - settings: an in-app panel with six built-in themes, dot-folder visibility,
   and an accurate key-help section;
-- Git: local status/history/diff inspection only, with no stage, commit, push,
-  discard, or other repository mutation;
+- Git: local status/history/diff inspection plus file-level stage/unstage and
+  local staged commit, with no push, pull, checkout, discard, amend, or other
+  unbounded repository mutation;
 - initial diff baseline: working tree versus `HEAD`, including untracked files;
 - diff entry: refresh Git status and selected content on entry, while keeping
   continuous background polling out of scope;
@@ -172,7 +191,8 @@ required for the first workbench slice.
 
 ## Preserved contracts
 
-- Public/user command: installed `novim` remains unchanged.
+- Public/user command: `ohc` is the public command; `novim-dev` is a temporary
+  compatibility alias; installed `novim` remains unchanged.
 - Configuration isolation: the derivative must not load or overwrite the
   user's normal Neovim config.
 - Editing behavior: Ctrl/Cmd save, undo, copy, paste, mouse interaction, and
@@ -180,6 +200,17 @@ required for the first workbench slice.
 - License and attribution: retain MIT and third-party notices.
 - Privacy: no source, credentials, or raw private data leave the machine by
   default.
+
+## Accepted public release direction
+
+- `ohc` shows a one-second ANSI startup animation only on interactive TTY
+  launches. `--no-animation` and `OHC_NO_ANIMATION=1` disable it, and
+  non-interactive/test/help/version paths skip it.
+- The first public release is `v1.0.0`, delivered through a GitHub Release
+  and a dedicated installer. Release assets use the `oh-my-code` identity and
+  never target the installed upstream `novim` paths.
+- The public README uses a real terminal GIF and explanatory architecture
+  graphic; synthetic or unobserved hosted claims are not release evidence.
 
 ## Known risks and unknowns
 
