@@ -6,7 +6,7 @@ Status: `PLANNED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-012-source-control-graph`
-Expected baseline: `ca1edaf` (`origin/main` before this reconciliation)
+Expected baseline: `8b76dad` (`origin/main`)
 Pull request: `NOT_OPEN`
 
 ## Outcome

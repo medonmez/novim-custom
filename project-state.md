@@ -96,7 +96,7 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/19`
   settings persistence, pane geometry, and local-only boundaries remain
   intact.
 - `TASK-012` is now the only actionable successor, planned on
-  `task/TASK-012-source-control-graph` from `origin/main` `ca1edaf`. It will
+  `task/TASK-012-source-control-graph` from `origin/main` `8b76dad`. It will
   add the accepted Source Control layout, full current-branch graph, and
   explicit two-endpoint read-only comparison.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
