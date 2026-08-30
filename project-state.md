@@ -4,13 +4,13 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-009`
+Current task: `NONE` (backlog exhausted; awaiting product direction)
 Base branch: `main`
-Task branch: `task/TASK-009-three-area-diff`
-Pull request: `NOT_OPEN`
-Last accepted task: `TASK-008`
-Last accepted commit: `6621cd84362bd1975106b8b1ba2e012d0682823a`
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/13`
+Task branch: `task/TASK-009-three-area-diff` (merged)
+Pull request: `https://github.com/medonmez/novim-custom/pull/15` (`MERGED`)
+Last accepted task: `TASK-009`
+Last accepted commit: `b5cae85` (`origin/main` merge of PR #15)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/15`
 
 ## Current truth
 
@@ -75,19 +75,22 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/13`
   with persisted, safely-validated selection; settings key help pinned to real
   mappings in both directions; immediate one-key `Esc` settings close; and a
   bidirectional, minimum-width-clamped divider drag that never raises `E21`.
-- TASK-009 is planned on `task/TASK-009-three-area-diff` for three-area
-  side-by-side diff rendering with refresh on entry, per the accepted product
-  direction in ADR-003.
+- `TASK-009` was locally reviewed `APPROVED` at candidate
+  `06552998199263bbd6dfaa9f5064af569566267d`, delivered through GitHub
+  PR #15, and verified in merge commit `b5cae85` on `origin/main`. The Diff
+  view now renders a three-area side-by-side read-only diff — changed-file
+  list, old/HEAD pane, new/working-tree pane — with refresh on entry,
+  readable special-file handling, and two independently clamped boundary
+  drags.
 
 ## Active blockers
 
-- No active blocker. TASK-008 is accepted on `origin/main`, and TASK-009 is
-  planned from verified `origin/main` commit `6621cd8`. No hosted,
-  production, recovery, or customer-acceptance claim is made.
+- No active blocker. TASK-001 through TASK-009 are accepted on `origin/main`
+  and the planned ADR-003 backlog is exhausted. No hosted, production,
+  recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Implement TASK-009 on its isolated task branch, then return a local handoff for
-review. TASK-001 through TASK-008 remain accepted. The local distribution and
-upstream sync procedures remain documented in `docs/LOCAL_DISTRIBUTION.md` and
-`docs/UPSTREAM_SYNC.md`.
+No actionable task is issued. Planning the next slice (TASK-010) requires new
+product direction from the user; local distribution and upstream sync remain
+documented in `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.

@@ -15,10 +15,10 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 6 | TASK-006 | Package the local derivative and document a safe upstream sync procedure | ACCEPTED | TASK-005 (accepted) |
 | 7 | TASK-007 | Start quickly with a root-only lazy project browser and session-only folder expansion | ACCEPTED | TASK-006 (accepted) |
 | 8 | TASK-008 | Add six built-in themes, settings key help, immediate settings close, and reliable mouse pane resizing | ACCEPTED | TASK-007 (accepted) |
-| 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | PLANNED | TASK-008 (accepted) |
+| 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | ACCEPTED | TASK-008 (accepted) |
 
-TASK-001 through TASK-008 are accepted. TASK-009 is the only actionable
-current task, planned on `task/TASK-009-three-area-diff`.
+TASK-001 through TASK-009 are accepted. The planned backlog is exhausted; the
+next slice requires new product direction before a successor task is planned.
 
 ## Task notes
 
