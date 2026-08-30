@@ -1,15 +1,13 @@
-# Current Task
+# TASK-017 — oh-my-code public package and safe installer
 
-Updated: 2026-08-31
-Task ID: `TASK-017`
-Status: `PLANNED`
-Delivery policy: `LIGHTWEIGHT`
-Base branch: `main`
-Task branch: `task/TASK-017-oh-my-code-package-installer`
-Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
-Pull request: not opened
-PR target: `origin/main`
-Dependency: `TASK-016` (accepted in PR #29)
+- Status: `PLANNED`
+- Delivery policy: `LIGHTWEIGHT`
+- Base branch: `main`
+- Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
+- Task branch: `task/TASK-017-oh-my-code-package-installer`
+- PR target: `origin/main`
+- Dependency: `TASK-016` (accepted in PR #29)
+- Follow-up: `TASK-018` README and real demo assets
 
 ## Outcome
 

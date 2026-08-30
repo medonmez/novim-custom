@@ -22,13 +22,13 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | ACCEPTED | TASK-012 (accepted) |
 | 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | ACCEPTED | TASK-013 (accepted) |
 | 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | ACCEPTED | TASK-014 (accepted) |
-| 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | PLANNED | TASK-015 (accepted) |
-| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | PROPOSED | TASK-015, TASK-016 (accepted) |
+| 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | ACCEPTED | TASK-015 (accepted) |
+| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | PLANNED | TASK-015, TASK-016 (accepted) |
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PROPOSED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PROPOSED | TASK-015 through TASK-018 (accepted) |
 
-TASK-001 through TASK-015 are accepted. The public release direction is
-accepted in ADR-006; only TASK-016 is currently actionable.
+TASK-001 through TASK-016 are accepted. The public release direction is
+accepted in ADR-006; only TASK-017 is currently actionable.
 
 ## Accepted task notes
 
@@ -94,9 +94,11 @@ accepted in ADR-006; only TASK-016 is currently actionable.
 - `TASK-015` was accepted after local review and merge as PR #27 at
   `8457dbf`. It establishes the `ohc` public launcher and keeps `novim-dev` as
   a one-release compatibility alias without changing installed `novim`.
-- `TASK-016` adds the one-second interactive-TTY splash and must not delay
-  help, version, headless, piped, or test launches. Its current task record
-  defines the accepted disable controls and compatibility-alias boundary.
+- `TASK-016` was accepted after local review and merge as PR #29 at
+  `9904324`. It adds the one-second interactive-TTY splash to both checkout
+  launchers, consumes `--no-animation`, honors `OHC_NO_ANIMATION=1`, and must
+  not delay help, version, headless, piped, or test launches. Its task record
+  contains the local review closure and acceptance evidence.
 - `TASK-017` owns public archive naming, installer paths, safe alias handling,
   and release workflow assets. Normal `ohc` launch remains network-free.
 - `TASK-018` owns the public README, Mermaid/terminal explanation, and a real

@@ -1,10 +1,13 @@
 # TASK-016 — oh-my-code interactive startup splash
 
-- Status: `PLANNED`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Expected baseline: `8457dbf0e0274d642e09481a01fa6b9d777b9377`
-- Task branch: `task/TASK-016-oh-my-code-startup-splash`
+- Task branch: `task/TASK-016-oh-my-code-startup-splash` (merged)
+- Candidate: `6072f25` (review record `32568a4`)
+- Pull request: `#29` (`MERGED`)
+- Merge commit: `9904324ba79c666be46e6efe92e932eb1ea8e2d4` (`origin/main`)
 - PR target: `origin/main`
 - Dependency: `TASK-015` (accepted in PR #27)
 - Follow-up: `TASK-017` public package and installer
@@ -99,3 +102,18 @@ launches must not wait for or render the splash.
 
 The implementer must stop at a local handoff commit on this branch. No push,
 PR, repository rename, or release action is part of implementation.
+
+## Closure
+
+TASK-016 was locally reviewed `APPROVED` after inspecting the real diff and
+running the focused and full local validation. PR #29 was merged into `main`,
+and the remote default branch was fetched and verified to contain the reviewed
+implementation and review record at `9904324`.
+
+All acceptance criteria passed. Both checkout launchers now render the
+bounded interactive-TTY splash, consume `--no-animation`, honor
+`OHC_NO_ANIMATION=1`, and bypass the splash for help, version, headless, piped,
+and test launches. `novim-dev` keeps its one-release compatibility identity;
+`bin/novim`, installed `novim`, and the normal Neovim configuration remain
+independent. Local evidence does not imply hosted, production, recovery, or
+customer acceptance.
