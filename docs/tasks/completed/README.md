@@ -20,3 +20,6 @@ the real diff and completed the repository's delivery policy.
 - `TASK-007-lazy-project-browser.md` — root-only lazy project browser and
   session-only folder expansion, accepted after local review and GitHub PR #10
   merge.
+- `TASK-014-auto-copy-preview-exit.md` — editable-file mouse auto-copy and
+  direct same-file Preview exit, accepted after local review and GitHub PR #25
+  merge.
