@@ -19,9 +19,18 @@ end
 ---@return string[] lines
 ---@return integer exit_code
 ---@return string raw_stdout
-function M.exec(args, cwd)
+--- Run a git command and capture stdout and stderr separately.
+--- All calls use a structured argument vector; repository paths and user
+--- input are never concatenated into shell command strings.
+---@param args string[] arguments to git
+---@param cwd? string working directory
+---@return string[] lines
+---@return integer exit_code
+---@return string raw_stdout
+---@return string raw_stderr
+local function exec_capture(args, cwd)
   if not M.is_git_available() then
-    return { "git executable not found in PATH" }, 127, ""
+    return { "git executable not found in PATH" }, 127, "", "git executable not found in PATH"
   end
 
   local cmd = { "git", "-c", "core.quotepath=false" }
@@ -43,7 +52,18 @@ function M.exec(args, cwd)
     end
   end
 
-  return lines, res.code or 0, stdout
+  return lines, res.code or 0, stdout, res.stderr or ""
+end
+
+--- Run a read-only git command safely and return output lines and exit code.
+---@param args string[] arguments to git
+---@param cwd? string working directory
+---@return string[] lines
+---@return integer exit_code
+---@return string raw_stdout
+function M.exec(args, cwd)
+  local lines, code, stdout = exec_capture(args, cwd)
+  return lines, code, stdout
 end
 
 --- Check if directory is inside a git repository
@@ -508,6 +528,142 @@ function M.get_history(cwd)
   end
 
   return entries, nil
+end
+
+-- =========================================================================
+-- Local write boundary (TASK-013)
+-- =========================================================================
+-- These functions are the only mutation entry points in this module. Each
+-- call is one structured argument vector executed through exec_capture;
+-- repository paths, entry names, and commit messages are passed as separate
+-- argv elements and never concatenated into shell command strings. Only
+-- file-level index updates and local staged commits are authorized here.
+
+--- Collapse a Git failure into one bounded readable line. Stderr carries
+--- most commit/stage failures; "nothing to commit" summaries live on stdout.
+---@param stderr string
+---@param stdout string
+---@param code integer
+---@return string message
+local function summarize_git_error(stderr, stdout, code)
+  local function first_line(text)
+    for _, line in ipairs(vim.split(text, "\n", { plain = true })) do
+      local trimmed = line:match("^%s*(.-)%s*$")
+      if trimmed ~= "" then
+        return trimmed
+      end
+    end
+    return nil
+  end
+
+  local message = first_line(stderr)
+  if not message then
+    for _, line in ipairs(vim.split(stdout, "\n", { plain = true })) do
+      if line:find("nothing to commit", 1, true)
+        or line:find("no changes added", 1, true)
+        or line:find("nothing added to commit", 1, true) then
+        message = line:match("^%s*(.-)%s*$")
+        break
+      end
+    end
+  end
+  if not message then
+    message = first_line(stdout) or ("git failed with exit code " .. tostring(code))
+  end
+  if #message > 160 then
+    message = message:sub(1, 157) .. "..."
+  end
+  return message
+end
+
+--- Validate one change entry for a file-level index update. The entry comes
+--- from get_changed_files (or the workbench selection), so paths are exact
+--- repository-relative bytes.
+---@param entry table|nil
+---@return boolean ok
+---@return string? error_msg
+local function validate_write_entry(entry)
+  if type(entry) ~= "table" or type(entry.path) ~= "string" or entry.path == "" then
+    return false, "no file selected for the requested action"
+  end
+  return true, nil
+end
+
+--- Stage exactly one file-level change entry (tracked, untracked, deleted,
+--- renamed, or unmerged) into the index. This is a local index update only:
+--- nothing is pushed, committed, checked out, or staged in bulk.
+---@param entry ChangedFile
+---@param cwd? string
+---@return boolean ok
+---@return string? error_msg
+function M.stage_file(entry, cwd)
+  local ok, err = validate_write_entry(entry)
+  if not ok then
+    return false, err
+  end
+
+  local _, code, _, stderr = exec_capture({ "add", "--", entry.path }, cwd)
+  if code ~= 0 then
+    return false, summarize_git_error(stderr, "", code)
+  end
+  return true, nil
+end
+
+--- Unstage exactly one file-level change entry, restoring its index state
+--- from HEAD (or removing it from the index before the first commit). A
+--- rename entry carries both of its paths, so both leave the index together
+--- as one logical change. Worktree bytes are never touched.
+---@param entry ChangedFile
+---@param cwd? string
+---@return boolean ok
+---@return string? error_msg
+function M.unstage_file(entry, cwd)
+  local ok, err = validate_write_entry(entry)
+  if not ok then
+    return false, err
+  end
+
+  local args
+  if M.has_head(cwd) then
+    args = { "reset", "--", entry.path }
+    -- One rename entry is one change: reset both of its paths together.
+    if type(entry.orig_path) == "string" and entry.orig_path ~= ""
+      and entry.orig_path ~= entry.path then
+      table.insert(args, entry.orig_path)
+    end
+  else
+    -- Unborn HEAD: nothing is committed yet, so unstaging removes the
+    -- entries from the index entirely.
+    args = { "rm", "--cached", "--force", "--quiet", "--", entry.path }
+  end
+
+  local _, code, _, stderr = exec_capture(args, cwd)
+  if code ~= 0 then
+    return false, summarize_git_error(stderr, "", code)
+  end
+  return true, nil
+end
+
+--- Create one local commit from the currently staged index. The message is
+--- passed as its own argv element; unstaged files are never auto-staged and
+--- nothing outside the local repository is touched.
+---@param message string
+---@param cwd? string
+---@return boolean ok
+---@return string? error_msg
+---@return string? commit_hash full hash of the created commit on success
+function M.commit_staged(message, cwd)
+  if type(message) ~= "string" or message:match("^%s*$") then
+    return false, "commit message must not be empty", nil
+  end
+
+  local _, code, stdout, stderr = exec_capture({ "commit", "-m", message }, cwd)
+  if code ~= 0 then
+    return false, summarize_git_error(stderr, stdout, code), nil
+  end
+
+  local hash = M.resolve_revision("HEAD", cwd)
+  return true, nil, hash
 end
 
 return M

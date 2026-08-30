@@ -3072,6 +3072,796 @@ function tests.test_source_control_empty_error_states()
 end
 
 -- =========================================================================
+-- TASK-013: file-level stage/unstage and local staged commit
+-- =========================================================================
+
+--- Byte-exact stdout of one git subcommand run against the fixture.
+local function git_bytes(dir, args)
+  local cmd = { "git", "-C", dir }
+  for _, a in ipairs(args) do
+    table.insert(cmd, a)
+  end
+  local res = vim.system(cmd, { text = true }):wait()
+  if res.code ~= 0 then
+    error("git -C " .. tostring(dir) .. " " .. table.concat(args, " ")
+      .. " failed: " .. tostring(res.stderr))
+  end
+  return res.stdout or ""
+end
+
+--- Byte-for-byte worktree snapshot: every file outside .git with its exact
+--- contents. Stage/unstage/commit must never change any of these bytes.
+local function snapshot_worktree_bytes(dir)
+  local chunks = {}
+  local function walk(path, rel)
+    for name, kind in vim.fs.dir(path) do
+      if name ~= ".git" then
+        local child = path .. "/" .. name
+        local child_rel = (rel == "") and name or (rel .. "/" .. name)
+        if kind == "directory" then
+          walk(child, child_rel)
+        else
+          local f = io.open(child, "rb")
+          local content = f and f:read("*a") or ""
+          if f then f:close() end
+          table.insert(chunks, child_rel .. "\0" .. content)
+        end
+      end
+    end
+  end
+  walk(dir, "")
+  table.sort(chunks)
+  return table.concat(chunks, "\30")
+end
+
+--- Parse porcelain v1 -z status into a path -> raw-code map. Rename/copy
+--- entries consume the following NUL chunk as the original path and are
+--- recorded as "code|orig" so byte-level comparisons stay exact.
+local function status_map(dir)
+  local raw = git_bytes(dir, { "status", "--porcelain=v1", "-z", "-uall" })
+  local map = {}
+  local chunks = vim.split(raw, "\0", { plain = true })
+  local i = 1
+  while i <= #chunks do
+    local chunk = chunks[i]
+    if chunk == "" then break end
+    if #chunk >= 3 then
+      local code = chunk:sub(1, 2)
+      local path = chunk:sub(4)
+      if code:find("[RC]", 1) then
+        i = i + 1
+        map[path] = code .. "|" .. tostring(chunks[i])
+      else
+        map[path] = code
+      end
+    end
+    i = i + 1
+  end
+  return map
+end
+
+local function index_entries(dir)
+  return git_bytes(dir, { "ls-files", "-s" })
+end
+
+local function head_hash(dir)
+  return (git_bytes(dir, { "rev-parse", "HEAD" }):gsub("%s+$", ""))
+end
+
+--- Exact worktree bytes of one fixture file.
+local function read_worktree_file(dir, path)
+  local f = io.open(dir .. "/" .. path, "rb")
+  assert_true(f ~= nil, "fixture file must exist: " .. path)
+  local content = f:read("*a")
+  f:close()
+  return content
+end
+
+local function log_count(dir)
+  local n = 0
+  for _, l in ipairs(vim.split(git_bytes(dir, { "log", "--format=%H %P %s" }), "\n", { plain = true })) do
+    if l ~= "" then n = n + 1 end
+  end
+  return n
+end
+
+local function find_file_index(files, path)
+  for i, f in ipairs(files) do
+    if f.path == path then return i end
+  end
+  return nil
+end
+
+--- Raw byte-exact porcelain status output for round-trip comparisons.
+local function status_bytes(dir)
+  return git_bytes(dir, { "status", "--porcelain=v1", "-z", "-uall" })
+end
+
+
+--- Visible text of a floating window's title. nvim_win_get_config returns
+--- the title as extmark chunks, so the bytes are re-joined here.
+local function window_title_text(win)
+  local t = vim.api.nvim_win_get_config(win).title
+  if type(t) == "string" then return t end
+  if type(t) == "table" then
+    local parts = {}
+    for _, chunk in ipairs(t) do
+      table.insert(parts, type(chunk) == "table" and tostring(chunk[1]) or tostring(chunk))
+    end
+    return table.concat(parts)
+  end
+  return ""
+end
+
+function tests.test_stage_unstage_file_level_mutations_and_invariance()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  -- Byte/state baseline before any mutation
+  local before_status = status_map(fixture)
+  local before_status_bytes = status_bytes(fixture)
+  local before_index = index_entries(fixture)
+  local before_head = head_hash(fixture)
+  local before_tree = snapshot_worktree_bytes(fixture)
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+  assert_true(st.is_git, "fixture must be a git repository")
+
+  local mod_idx = find_file_index(st.files, "tracked_modified.txt")
+  assert_true(mod_idx ~= nil, "fixture must list the modified tracked file")
+  assert_eq(st.files[mod_idx].raw_status, " M", "fixture modification must start unstaged")
+
+  -- Keyboard affordance: 'a' stages exactly the selected entry
+  local stage_cb = buffer_map_callback(st.buf_left, "a")
+  local unstage_cb = buffer_map_callback(st.buf_left, "u")
+  assert_true(stage_cb ~= nil and unstage_cb ~= nil, "changes pane must map a/u stage and unstage")
+  workbench.select_file(mod_idx)
+  assert_true(stage_cb(), "'a' must stage the selected change")
+  st = workbench.get_state()
+
+  -- Rendered state: staged tag, staged count, preserved selection context
+  local staged_idx = find_file_index(st.files, "tracked_modified.txt")
+  assert_true(staged_idx ~= nil and st.files[staged_idx].is_staged, "staged state must render after 'a'")
+  assert_eq(st.selected_index, staged_idx, "staging must preserve the user's selection context")
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "ok"
+    and st.write_notice.text:find("Staged: tracked_modified%.txt") ~= nil,
+    "a successful stage must surface a bounded ok notice")
+  local left_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_left, 0, -1, false), "\n")
+  assert_true(left_text:find("[M+]", 1, true) ~= nil, "changes rows must render the staged '+' tag")
+  assert_true(left_text:find("staged: ", 1, true) ~= nil, "summary must show the staged count")
+
+  -- Repository effect: only this entry moved into the index
+  local after_stage_status = status_map(fixture)
+  assert_eq(after_stage_status["tracked_modified.txt"], "M ",
+    "staging must record the path in the index")
+  for path, code in pairs(before_status) do
+    if path ~= "tracked_modified.txt" then
+      assert_eq(after_stage_status[path], code, "no other entry may change when staging: " .. path)
+    end
+  end
+  -- Staged blob must now be the exact worktree bytes; every other index
+  -- entry keeps its pre-stage bytes.
+  assert_eq(git_bytes(fixture, { "show", ":tracked_modified.txt" }),
+    read_worktree_file(fixture, "tracked_modified.txt"),
+    "the staged blob must equal the worktree bytes")
+  local function index_lines_without(text, path)
+    local kept = {}
+    for _, l in ipairs(vim.split(text, "\n", { plain = true })) do
+      if l ~= "" and not l:find(path, 1, true) then
+        table.insert(kept, l)
+      end
+    end
+    return table.concat(kept, "\n")
+  end
+  assert_eq(index_lines_without(index_entries(fixture), "tracked_modified.txt"),
+    index_lines_without(before_index, "tracked_modified.txt"),
+    "no other index entry may change when staging")
+  assert_eq(head_hash(fixture), before_head, "staging must not create or move commits")
+  assert_eq(snapshot_worktree_bytes(fixture), before_tree, "staging must never touch worktree bytes")
+
+  -- Keyboard affordance: 'u' unstages and restores the exact prior state
+  workbench.select_file(staged_idx)
+  assert_true(unstage_cb(), "'u' must unstage the selected change")
+  st = workbench.get_state()
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "ok"
+    and st.write_notice.text:find("Unstaged") ~= nil, "unstage must surface an ok notice")
+  local unstaged_idx = find_file_index(st.files, "tracked_modified.txt")
+  assert_true(unstaged_idx ~= nil and not st.files[unstaged_idx].is_staged,
+    "unstaged state must render after 'u'")
+  assert_eq(status_bytes(fixture), before_status_bytes, "unstage must restore the exact porcelain state")
+  assert_eq(index_entries(fixture), before_index, "unstage must restore the exact index bytes")
+  assert_eq(head_hash(fixture), before_head, "unstage must not create or move commits")
+  assert_eq(snapshot_worktree_bytes(fixture), before_tree, "unstage must never touch worktree bytes")
+
+  -- Mouse affordance: double-click hit-testing covers every change row and
+  -- toggles exactly the clicked entry
+  st = workbench.get_state()
+  local mapped_rows = 0
+  for _, idx in pairs(st.line_to_file_index) do
+    mapped_rows = mapped_rows + 1
+    assert_true(idx >= 1 and idx <= st.git_file_count, "mapped change row must be valid")
+  end
+  assert_eq(mapped_rows, st.git_file_count, "every change row must be mouse-toggleable")
+  local toggle_idx = find_file_index(st.files, "tracked_modified.txt")
+  assert_true(workbench.toggle_stage_for_index(toggle_idx), "mouse toggle must stage an unstaged entry")
+  st = workbench.get_state()
+  assert_true(st.files[find_file_index(st.files, "tracked_modified.txt")].is_staged,
+    "mouse toggle must leave the entry staged")
+  assert_true(buffer_map_callback(st.buf_left, "<2-LeftMouse>") ~= nil,
+    "double-click must be mapped as the mouse toggle affordance")
+  assert_true(workbench.toggle_stage_for_index(toggle_idx), "mouse toggle must unstage a staged entry")
+  assert_eq(status_bytes(fixture), before_status_bytes, "toggles must round-trip the repository state")
+
+  workbench.close()
+  assert_eq(workbench.get_state().write_notice, nil, "closing the workbench must discard the notice")
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_stage_unstage_special_paths_untracked_deleted_renamed()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_fixture_repo()
+  -- Additional adversarial untracked names: option-like and spaced paths
+  local dash = io.open(fixture .. "/-dash-prefixed.txt", "wb")
+  dash:write("dash\n")
+  dash:close()
+  local spaced = io.open(fixture .. "/spaced name.txt", "wb")
+  spaced:write("spaced\n")
+  spaced:close()
+
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local before_status_bytes = status_bytes(fixture)
+  local before_head = head_hash(fixture)
+  local before_tree = snapshot_worktree_bytes(fixture)
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+
+  -- Untracked entries with spaces, quotes, tabs, unicode, option-like and
+  -- arrow-bearing names: every one stages as its own entry and round-trips.
+  local special_paths = {
+    "untracked_new.txt",
+    "spaced name.txt",
+    'quote"name.txt',
+    "tab\tname.txt",
+    "unicode_ğüşıöç.txt",
+    "-dash-prefixed.txt",
+    "arrow -> name.txt",
+  }
+  for _, path in ipairs(special_paths) do
+    st = workbench.get_state()
+    local idx = find_file_index(st.files, path)
+    assert_true(idx ~= nil and st.files[idx].is_untracked,
+      "fixture must list the untracked path: " .. path)
+    assert_true(workbench.stage_selected_file(st.files[idx]),
+      "staging must succeed for: " .. path)
+    assert_eq(status_map(fixture)[path], "A ", "staged entry must be added: " .. path)
+    assert_true(workbench.unstage_selected_file(st.files[idx]),
+      "unstaging must succeed for: " .. path)
+    assert_eq(status_map(fixture)[path], "??", "unstaged entry must return to untracked: " .. path)
+    assert_eq(status_bytes(fixture), before_status_bytes,
+      "unstage must round-trip the exact porcelain bytes: " .. path)
+  end
+
+  -- Deleted tracked file: staging records the deletion in the index,
+  -- unstaging restores the index entry without recreating worktree bytes.
+  local del_before_bytes = status_bytes(fixture)
+  st = workbench.get_state()
+  local del_idx = find_file_index(st.files, "tracked_deleted.txt")
+  assert_true(del_idx ~= nil and st.files[del_idx].is_deleted and not st.files[del_idx].is_staged,
+    "fixture must list the unstaged deletion")
+  assert_true(workbench.stage_selected_file(st.files[del_idx]), "staging a deletion must succeed")
+  assert_eq(status_map(fixture)["tracked_deleted.txt"], "D ",
+    "staged deletion must be recorded in the index")
+  assert_true(index_entries(fixture):find("tracked_deleted.txt", 1, true) == nil,
+    "staged deletion must remove the path from the index")
+  assert_true(workbench.unstage_selected_file(st.files[del_idx]),
+    "unstaging a deletion must succeed")
+  assert_eq(status_bytes(fixture), del_before_bytes,
+    "deletion round-trip must restore the exact porcelain bytes")
+  assert_true(index_entries(fixture):find("tracked_deleted.txt", 1, true) ~= nil,
+    "unstaging must restore the index entry for the deleted file")
+
+  -- Renamed entry: unstaging splits the one logical change into its two
+  -- paths (old deleted, new untracked); restaging both halves re-forms the
+  -- exact staged rename.
+  local rename_before_bytes = status_bytes(fixture)
+  st = workbench.get_state()
+  local re_idx = find_file_index(st.files, "renamed -> destination.txt")
+  assert_true(re_idx ~= nil and st.files[re_idx].status == "R"
+    and st.files[re_idx].orig_path == "base_rename.txt",
+    "fixture must list the staged rename with its original path")
+  assert_true(workbench.unstage_selected_file(st.files[re_idx]),
+    "unstaging a rename must succeed")
+  assert_eq(status_map(fixture)["base_rename.txt"], " D",
+    "unstage must return the old rename path to a worktree deletion")
+  assert_eq(status_map(fixture)["renamed -> destination.txt"], "??",
+    "unstage must return the new rename path to untracked")
+
+  st = workbench.get_state()
+  local old_idx = find_file_index(st.files, "base_rename.txt")
+  assert_true(old_idx ~= nil and st.files[old_idx].is_deleted,
+    "the old rename path must appear as its own deletion entry")
+  assert_true(workbench.stage_selected_file(st.files[old_idx]),
+    "staging the old rename path must succeed")
+  assert_eq(status_map(fixture)["base_rename.txt"], "D ",
+    "staged old path must be a staged deletion")
+  st = workbench.get_state()
+  local new_idx = find_file_index(st.files, "renamed -> destination.txt")
+  assert_true(new_idx ~= nil and st.files[new_idx].is_untracked,
+    "the new rename path must appear as its own untracked entry")
+  assert_true(workbench.stage_selected_file(st.files[new_idx]),
+    "staging the new rename path must succeed")
+  assert_eq(status_bytes(fixture), rename_before_bytes,
+    "restaging both halves must re-form the exact staged rename")
+
+  assert_eq(head_hash(fixture), before_head, "no commit may be created by stage/unstage actions")
+  assert_eq(snapshot_worktree_bytes(fixture), before_tree, "worktree bytes must never change")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_commit_message_validation_cancel_and_local_commit()
+  local workbench = require("novim.workbench")
+  local git = require("novim.git")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local before_head = head_hash(fixture)
+  local before_tree = snapshot_worktree_bytes(fixture)
+  local before_log_count = log_count(fixture)
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+
+  -- Stage one entry through the keyboard affordance
+  local mod_idx = find_file_index(st.files, "tracked_modified.txt")
+  workbench.select_file(mod_idx)
+  local stage_cb = buffer_map_callback(st.buf_left, "a")
+  assert_true(stage_cb(), "'a' must stage the selected change")
+  st = workbench.get_state()
+  local index_with_staged = index_entries(fixture)
+
+  -- Open the commit-message input through 'c'
+  local commit_cb = buffer_map_callback(st.buf_left, "c")
+  assert_true(commit_cb ~= nil, "changes pane must map 'c' to the commit input")
+  assert_true(commit_cb(), "'c' must open the commit-message input")
+  st = workbench.get_state()
+  assert_true(st.commit_input.open, "commit input must be open")
+  assert_eq(vim.api.nvim_get_current_win(), st.commit_input.win,
+    "commit input must take bounded focus")
+
+  local confirm_cb = buffer_map_callback(st.commit_input.buf, "<CR>")
+  local cancel_cb = buffer_map_callback(st.commit_input.buf, "<Esc>")
+  assert_true(confirm_cb ~= nil and cancel_cb ~= nil, "commit input must map Enter and Esc")
+
+  -- Blank message: visible rejection, no mutation, input stays open
+  vim.api.nvim_buf_set_lines(st.commit_input.buf, 0, -1, false, { "" })
+  assert_true(not confirm_cb(), "blank confirm must be rejected")
+  st = workbench.get_state()
+  assert_true(st.commit_input.open, "blank message must keep the input open")
+  assert_true(st.commit_input.error ~= nil, "blank rejection must surface a visible error")
+  local title = window_title_text(st.commit_input.win)
+  assert_true(title:find("cannot be empty", 1, true) ~= nil,
+    "the rejection must be visible in the input title")
+  assert_eq(head_hash(fixture), before_head, "blank confirm must not create a commit")
+
+  -- Whitespace-only message: same visible rejection
+  vim.api.nvim_buf_set_lines(st.commit_input.buf, 0, -1, false, { "   \t " })
+  assert_true(not confirm_cb(), "whitespace-only confirm must be rejected")
+  st = workbench.get_state()
+  assert_true(st.commit_input.open and st.commit_input.error ~= nil,
+    "whitespace-only rejection must stay visible")
+  assert_eq(head_hash(fixture), before_head, "whitespace confirm must not create a commit")
+
+  -- Cancel path: Esc closes with no Git mutation; staged state unchanged
+  assert_true(cancel_cb(), "Esc must cancel the input")
+  st = workbench.get_state()
+  assert_true(not st.commit_input.open, "cancel must close the input")
+  assert_eq(st.commit_input.buf, nil,
+    "the transient input buffer must be discarded on close")
+  assert_eq(head_hash(fixture), before_head, "cancel must not create a commit")
+  assert_eq(index_entries(fixture), index_with_staged,
+    "cancel must leave the staged index untouched")
+
+  -- Successful commit from the staged index
+  assert_true(commit_cb(), "commit input must reopen")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.commit_input.buf, 0, -1, false,
+    { "fixture commit from TASK-013" })
+  assert_true(confirm_cb(), "a valid message must commit")
+  st = workbench.get_state()
+  assert_true(not st.commit_input.open, "successful commit must close the input")
+
+  -- Exactly one new local commit with the entered message and correct parent
+  assert_true(head_hash(fixture) ~= before_head, "commit must advance HEAD")
+  local log_lines = vim.split(git_bytes(fixture, { "log", "--format=%H %P %s" }), "\n", { plain = true })
+  local hash, parent, subject = log_lines[1]:match("^(%x+) (%x+) (.*)$")
+  assert_true(hash ~= nil, "the new log line must parse")
+  assert_eq(parent, before_head, "the new commit's parent must be the previous HEAD")
+  assert_eq(subject, "fixture commit from TASK-013", "the entered message must be the commit subject")
+  assert_eq(log_count(fixture), before_log_count + 1, "exactly one commit must be added")
+
+  -- Staged index became the commit: staged column empty afterwards, the
+  -- committed blob holds the staged bytes, unstaged/untracked state remains.
+  local after_status = status_map(fixture)
+  for path, code in pairs(after_status) do
+    local index_char = code:sub(1, 1)
+    assert_true(index_char == " " or index_char == "?",
+      "the staged index must be empty after commit: " .. path .. " -> " .. code)
+  end
+  assert_eq(git_bytes(fixture, { "show", "HEAD:tracked_modified.txt" }),
+    read_worktree_file(fixture, "tracked_modified.txt"),
+    "the commit must record the staged content bytes")
+  assert_eq(after_status["tracked_deleted.txt"], " D", "unstaged deletions must remain unstaged")
+  assert_eq(after_status["untracked_new.txt"], "??", "untracked files must remain untracked")
+  assert_eq(snapshot_worktree_bytes(fixture), before_tree, "commit must never touch worktree bytes")
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "ok"
+    and st.write_notice.text:find(hash:sub(1, 7), 1, true) ~= nil,
+    "the success notice must carry the actual commit hash")
+
+  -- History refreshed with the new commit; comparison stays the default
+  -- read-only pair and every pane remains usable.
+  assert_eq(st.history_commits[1].hash, hash, "history must list the new commit first")
+  local hist_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+  assert_true(hist_text:find("fixture commit from TASK-013", 1, true) ~= nil,
+    "history graph must render the new commit subject")
+  assert_eq(st.compare.old.ref, "HEAD", "commit must keep the default old endpoint")
+  assert_eq(st.compare.new.ref, git.WORKTREE_REF, "commit must keep the default new endpoint")
+  assert_true(vim.api.nvim_win_is_valid(st.win_left) and vim.api.nvim_win_is_valid(st.win_history)
+    and vim.api.nvim_win_is_valid(st.win_middle) and vim.api.nvim_win_is_valid(st.win_right),
+    "all Source Control panes must remain valid after the commit")
+  local untracked_idx = find_file_index(st.files, "untracked_new.txt")
+  workbench.select_file(untracked_idx)
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_right, 0, -1, false), "\n")
+    :find("untracked line 1", 1, true) ~= nil,
+    "comparison panes must still render selected entries after commit")
+
+  -- Transient state never persists: a fresh entry starts clean
+  workbench.close()
+  workbench.open({ view = "diff" })
+  st = workbench.get_state()
+  assert_eq(st.write_notice, nil, "a fresh entry must not inherit the write notice")
+  assert_true(not st.commit_input.open, "a fresh entry must not reopen the commit input")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_failed_writes_bounded_and_state_consistent()
+  local workbench = require("novim.workbench")
+  local git = require("novim.git")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local before_head = head_hash(fixture)
+  local before_status_bytes = status_bytes(fixture)
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+
+  -- (a) Failed stage: an unknown path fails visibly and mutates nothing
+  assert_true(not workbench.stage_selected_file({ path = "missing/ghost path.txt" }),
+    "staging an unknown path must fail")
+  st = workbench.get_state()
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "error"
+    and st.write_notice.text:find("Stage failed", 1, true) ~= nil
+    and #st.write_notice.text <= 200,
+    "a failed stage must surface a bounded error notice")
+  assert_eq(status_bytes(fixture), before_status_bytes, "a failed stage must not change the index")
+  assert_eq(head_hash(fixture), before_head, "a failed stage must not create commits")
+
+  -- (b) Failed unstage before the first commit: without HEAD the unstage
+  -- uses git rm --cached, which refuses a path unknown to the index with a
+  -- fatal pathspec error. Nothing in the repository changes.
+  workbench.close()
+  local unborn = vim.fn.tempname() .. "_unborn_repo_fixture"
+  vim.fn.mkdir(unborn, "p")
+  vim.fn.system("git -C " .. vim.fn.shellescape(unborn) .. " init -q")
+  local fresh = io.open(unborn .. "/fresh.txt", "wb")
+  fresh:write("fresh\n")
+  fresh:close()
+  vim.cmd("cd " .. vim.fn.fnameescape(unborn))
+  workbench.open({ view = "diff" })
+  st = workbench.get_state()
+  assert_true(st.has_head == false, "the unborn fixture must have no HEAD")
+  local unborn_before = status_bytes(unborn)
+  assert_true(not workbench.unstage_selected_file({ path = "never-added.txt" }),
+    "unstaging an unknown path without HEAD must fail")
+  st = workbench.get_state()
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "error"
+    and st.write_notice.text:find("Unstage failed", 1, true) ~= nil,
+    "a failed unstage must surface a bounded error notice")
+  assert_eq(status_bytes(unborn), unborn_before,
+    "a failed unstage must not change the repository state")
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  workbench.open({ view = "diff" })
+
+  -- (c) Module boundary: blank and whitespace messages are refused before
+  -- Git runs and without any repository mutation.
+  assert_true(not git.commit_staged("", fixture), "the empty message must be refused by the git boundary")
+  assert_true(not git.commit_staged("   \t", fixture), "a whitespace message must be refused")
+  assert_eq(head_hash(fixture), before_head, "refused messages must not create commits")
+
+  -- (d) Commit with nothing staged: the full input path fails visibly,
+  -- closes the input, and leaves the repository untouched.
+  workbench.close()
+  local clean_repo = vim.fn.tempname() .. "_clean_repo_fixture"
+  vim.fn.mkdir(clean_repo, "p")
+  vim.fn.system("git -C " .. vim.fn.shellescape(clean_repo) .. " init -q")
+  vim.fn.system("git -C " .. vim.fn.shellescape(clean_repo) .. " config user.email 't@example.com'")
+  vim.fn.system("git -C " .. vim.fn.shellescape(clean_repo) .. " config user.name 'T'")
+  local only = io.open(clean_repo .. "/only.txt", "wb")
+  only:write("only\n")
+  only:close()
+  vim.fn.system("git -C " .. vim.fn.shellescape(clean_repo) .. " add .")
+  vim.fn.system("git -C " .. vim.fn.shellescape(clean_repo) .. " commit -q -m base")
+  local clean_head = head_hash(clean_repo)
+  vim.cmd("cd " .. vim.fn.fnameescape(clean_repo))
+  workbench.open({ view = "diff" })
+  assert_true(workbench.open_commit_input(), "the commit input must open in a clean repository")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.commit_input.buf, 0, -1, false, { "no staged changes here" })
+  assert_true(not buffer_map_callback(st.commit_input.buf, "<CR>")(),
+    "committing an empty staged index must fail")
+  st = workbench.get_state()
+  assert_true(not st.commit_input.open, "a failed commit must close the input")
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "error"
+    and st.write_notice.text:find("Commit failed", 1, true) ~= nil,
+    "a failed commit must surface a bounded error")
+  assert_eq(head_hash(clean_repo), clean_head, "a failed commit must not create history")
+  assert_true(vim.api.nvim_win_is_valid(st.win_left) and vim.api.nvim_win_is_valid(st.win_history),
+    "the workbench must stay usable after a failed commit")
+
+  -- (e) Commit failure through a local pre-commit hook: bounded error, no
+  -- history entry, staged index preserved, then success after the cause is
+  -- removed proves the failure was real and nothing else broke.
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  workbench.open({ view = "diff" })
+  st = workbench.get_state()
+  local mod_idx = find_file_index(st.files, "tracked_modified.txt")
+  workbench.select_file(mod_idx)
+  assert_true(workbench.stage_selected_file(), "staging must succeed before the hook failure")
+  local hook_head = head_hash(fixture)
+  local hook_path = fixture .. "/.git/hooks/pre-commit"
+  local hook = io.open(hook_path, "wb")
+  hook:write("#!/bin/sh\nexit 1\n")
+  hook:close()
+  vim.fn.system("chmod +x " .. vim.fn.shellescape(hook_path))
+  assert_true(not workbench.commit_staged("hook refuses this commit"),
+    "a commit refused by the pre-commit hook must fail")
+  st = workbench.get_state()
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "error"
+    and st.write_notice.text:find("Commit failed", 1, true) ~= nil,
+    "the hook failure must surface a bounded error")
+  assert_eq(head_hash(fixture), hook_head, "the refused commit must not create history")
+  assert_eq(status_map(fixture)["tracked_modified.txt"], "M ",
+    "the staged entry must remain staged after the failed commit")
+  os.remove(hook_path)
+  assert_true(workbench.commit_staged("hook removed commit succeeds"),
+    "the commit must succeed once the failure cause is removed")
+  st = workbench.get_state()
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "ok",
+    "success must be reported only on success")
+  assert_true(head_hash(fixture) ~= hook_head, "the restored commit must advance HEAD")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+  cleanup_dir(clean_repo)
+  cleanup_dir(unborn)
+end
+
+--- Minimal deterministic repository: commits the named base files, then
+--- modifies every one of them in the worktree so each starts as an
+--- unstaged change row.
+local function create_modified_files_repo(names)
+  local dir = vim.fn.tempname() .. "_commit_refresh_repo"
+  vim.fn.mkdir(dir, "p")
+  local function run(cmd)
+    vim.fn.system(cmd)
+    assert_true(vim.v.shell_error == 0, "fixture command failed: " .. cmd)
+  end
+  run("git -C " .. vim.fn.shellescape(dir) .. " init -q")
+  run("git -C " .. vim.fn.shellescape(dir) .. " config user.email 'test@example.com'")
+  run("git -C " .. vim.fn.shellescape(dir) .. " config user.name 'Test Runner'")
+  for _, name in ipairs(names) do
+    local f = io.open(dir .. "/" .. name, "wb")
+    f:write("base " .. name .. "\n")
+    f:close()
+  end
+  run("git -C " .. vim.fn.shellescape(dir) .. " add .")
+  run("git -C " .. vim.fn.shellescape(dir) .. " commit -q -m base")
+  for _, name in ipairs(names) do
+    local f = io.open(dir .. "/" .. name, "wb")
+    f:write("changed " .. name .. "\n")
+    f:close()
+  end
+  return dir
+end
+
+function tests.test_history_pane_new_endpoint_mapping_restored()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_merge_history_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+
+  -- The documented O / N endpoint pair must both exist on the history pane
+  assert_true(buffer_map_callback(st.buf_history, "O") ~= nil,
+    "history pane must keep the 'O' old-endpoint mapping")
+  local new_cb = buffer_map_callback(st.buf_history, "N")
+  assert_true(new_cb ~= nil, "history pane must keep the 'N' new-endpoint mapping")
+
+  -- Invoking 'N' assigns the selected history entry as the new endpoint
+  local target_idx, target
+  for i, c in ipairs(st.history_commits) do
+    if c.subject == "C1 base" then target_idx, target = i, c end
+  end
+  assert_true(target ~= nil, "fixture must contain the C1 base commit")
+  workbench.select_history(target_idx)
+  -- The mapping callback mirrors the key handler and discards its result;
+  -- the assignment is proven by the resulting comparison state.
+  new_cb()
+  st = workbench.get_state()
+  assert_eq(st.compare.new.ref, target.hash,
+    "invoking 'N' must assign the selected history commit as the new endpoint")
+  assert_eq(st.compare.old.ref, "HEAD", "'N' must not move the old endpoint")
+  local hist_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+  assert_true(hist_text:find("[New] " .. target.hash:sub(1, 7), 1, true) ~= nil,
+    "the history pane must render the assigned new endpoint")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_write_notice_renders_when_changes_list_empties()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  -- One modified tracked file: committing it empties the changes list
+  local fixture = create_modified_files_repo({ "only_change.txt" })
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+  assert_eq(#st.files, 1, "fixture must start with exactly one change")
+
+  -- Stage and commit the final change through the real input path
+  assert_true(workbench.stage_selected_file(), "staging the only change must succeed")
+  assert_true(workbench.open_commit_input(), "the commit input must open")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.commit_input.buf, 0, -1, false, { "final change commit" })
+  assert_true(buffer_map_callback(st.commit_input.buf, "<CR>")(), "the commit must succeed")
+  st = workbench.get_state()
+
+  -- The commit consumed the last change: the clean-working-tree state must
+  -- still render the bounded success notice in the left buffer.
+  assert_eq(#st.files, 0, "the commit must leave no changed rows")
+  local commit_hash = head_hash(fixture)
+  local left_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_left, 0, -1, false), "\n")
+  assert_true(left_text:find("Working tree clean", 1, true) ~= nil,
+    "the clean-working-tree state must render after the final commit")
+  assert_true(left_text:find("✓ Committed: " .. commit_hash:sub(1, 7), 1, true) ~= nil,
+    "the success notice must stay visible in the clean state")
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "ok",
+    "the success notice state must survive the refresh")
+
+  -- A follow-up commit from the now-empty staged index must fail visibly
+  -- in the same clean state, with no change rows to attach the error to.
+  assert_true(workbench.open_commit_input(), "the commit input must open again")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.commit_input.buf, 0, -1, false, { "nothing staged" })
+  assert_true(not buffer_map_callback(st.commit_input.buf, "<CR>")(),
+    "a commit from an empty staged index must fail")
+  st = workbench.get_state()
+  assert_true(not st.commit_input.open, "the failed commit must close the input")
+  assert_eq(head_hash(fixture), commit_hash, "the failed commit must not create history")
+  left_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_left, 0, -1, false), "\n")
+  assert_true(left_text:find("! Commit failed", 1, true) ~= nil,
+    "the failed-commit error must be visible in the clean state")
+  assert_true(left_text:find("Working tree clean", 1, true) ~= nil,
+    "the clean state must render alongside the error notice")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_commit_refresh_preserves_selected_change_path()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  -- Three modified files; the alphabetically earlier one is staged and
+  -- committed while the user's selection sits on a still-changed later row.
+  local fixture = create_modified_files_repo({ "a_first.txt", "c_selected.txt", "d_last.txt" })
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  local before_head = head_hash(fixture)
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+  local a_idx = find_file_index(st.files, "a_first.txt")
+  assert_true(a_idx ~= nil, "fixture must list the earlier entry")
+  assert_true(workbench.stage_selected_file(st.files[a_idx]),
+    "staging the earlier entry must succeed")
+  st = workbench.get_state()
+  local c_idx = find_file_index(st.files, "c_selected.txt")
+  assert_true(c_idx ~= nil and c_idx > a_idx,
+    "the staged entry must precede the selected one in the changes list")
+  workbench.select_file(c_idx)
+  st = workbench.get_state()
+  local selected_before = st.files[st.selected_index].path
+  assert_eq(selected_before, "c_selected.txt", "the selection must sit on the later row")
+
+  assert_true(workbench.commit_staged("commit the earlier staged entry"),
+    "committing the staged entry must succeed")
+  st = workbench.get_state()
+
+  -- The committed row vanished, but the still-changed selected path must
+  -- keep the selection and the comparison panes on the same file.
+  assert_eq(#st.files, 2, "the committed entry must leave the changes list")
+  local selected_after = st.files[st.selected_index] and st.files[st.selected_index].path or nil
+  assert_eq(selected_after, selected_before,
+    "the selected change path must survive the commit refresh")
+  local left_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_left, 0, -1, false), "\n")
+  local marker_line = nil
+  for _, l in ipairs(vim.split(left_text, "\n", { plain = true })) do
+    if l:find("▶", 1, true) then marker_line = l end
+  end
+  assert_true(marker_line ~= nil and marker_line:find("c_selected.txt", 1, true) ~= nil,
+    "the rendered selected row must remain c_selected.txt")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_right, 0, -1, false), "\n")
+    :find("changed c_selected.txt", 1, true) ~= nil,
+    "the comparison pane must follow the preserved selection")
+
+  -- Repository state: only the staged entry was committed
+  assert_true(head_hash(fixture) ~= before_head, "the commit must advance HEAD")
+  local log_first = vim.split(git_bytes(fixture, { "log", "--format=%s" }), "\n", { plain = true })[1]
+  assert_eq(log_first, "commit the earlier staged entry", "the commit subject must match")
+  assert_eq(status_map(fixture)["a_first.txt"], nil, "the committed path must be clean")
+  assert_eq(status_map(fixture)["c_selected.txt"], " M", "the selected path must remain changed")
+  assert_eq(status_map(fixture)["d_last.txt"], " M", "the other path must remain changed")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+-- =========================================================================
 -- Run all tests
 -- =========================================================================
 

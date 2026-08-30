@@ -1,118 +1,115 @@
 # Latest Review
 
 Updated: 2026-08-30
-Task ID: `TASK-012`
+Task ID: `TASK-013`
 Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
-Baseline: `8b76dad` (`origin/main`)
-Candidate: `0462823c9bea035c66bf6fbc0dc49436356deb8c`
-Task branch: `task/TASK-012-source-control-graph`
-Pull request: `https://github.com/medonmez/novim-custom/pull/21`
+Baseline: `9006898cee62a7e39f08619528be927e2768a965` (`origin/main`)
+Candidate: `4fef7ef6dc65259b12327718c7c5beaa9693a393`
+Task branch: `task/TASK-013-local-git-writes`
+Pull request: `NOT_OPEN` at review time
 Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `MERGED`
-Target branch contains change: `YES` (`origin/main`)
-Merge commit: `915624c815cc10ab696530069f3ce8b1d00c228b`
+Merge status: `NOT_ATTEMPTED` at review time
+Target branch contains change: `NO` at review time
 
 ## Review result
 
-The candidate was inspected against its immediate planning parent `4c5b922`
-and the recorded `origin/main` baseline `8b76dad`. The implementation is
-limited to the read-only Source Control graph/comparison surface, canonical
-help mappings, focused integration and smoke coverage, and the current-task
-handoff.
+The candidate was independently inspected against its recorded baseline and
+the prior review parent. The actual product diff remains scoped to the
+TASK-013 local stage/unstage/commit surface; the three findings from the
+previous `CHANGES_REQUESTED` review are corrected on the same task branch.
+The accepted write boundary is unchanged: structured `vim.system` argument
+vectors for `git add -- <path>`, `git reset -- <path>` (rename-aware),
+`git rm --cached --force -- <path>` before the first commit, and
+`git commit -m <message>`. No remote, checkout, history-rewriting, discard,
+bulk/partial-line, or unrelated mutation path was found.
 
-`git.lua` keeps the Git boundary read-only: history, branch metadata, revision
-resolution, revision content, status, and comparisons use local subprocess or
-filesystem reads only. No staging, index write, commit, checkout, branch
-mutation, remote operation, plugin dependency, installed-release write, or
-normal-Neovim-configuration write was introduced.
+The restored history-pane endpoint mapping, clean-state write notices, and
+selected-path preservation after commit refresh are each covered by a focused
+regression. The complete local validation suite passes, including the prior
+TASK-012 behavior. No unresolved correctness, scope, security, data-integrity,
+or public-contract issue remains in the reviewed candidate.
 
-`workbench.lua` extends the existing Diff view into the accepted Source
-Control layout: current changes/status remain above a horizontal history pane,
-while the existing old/new panes remain beside it. Git's full `--graph`
-output is preserved, including merge edges and local decorations. History
-selection is visible and can be driven by keyboard, cursor, or mouse without
-checkout. Explicit old/new endpoint assignment, default reset, refresh
-preservation, fresh-entry reset, identical-endpoint rejection, and bounded
-empty/error rendering are all implemented at the application boundary.
+## Previous findings reverified
 
-The four-area smoke assertion is an intentional contract update required by
-the accepted Source Control layout; the old/new comparison semantics and
-existing Files/Diff geometry, settings, dot-folder, launcher-isolation, and
-installed-release boundaries remain covered by the regression suites.
+### High — history-pane `N` mapping restored
 
-No correctness, regression, security, privacy, data-integrity, public-contract,
-or scope issue remains for this local review.
+`config/nvim/lua/novim/workbench.lua:1323` maps history-pane `N` to
+`assign_compare_endpoint("new", "history")` beside `O`; `D` remains the
+comparison reset. The regression
+`test_history_pane_new_endpoint_mapping_restored` checks the buffer-local map,
+invokes it for a selected history commit, verifies the new endpoint and
+rendered marker, and verifies that the old endpoint remains `HEAD`.
 
-## Findings
+### High — write notices render after the changes list empties
 
-None blocking.
+`config/nvim/lua/novim/workbench.lua:358-372` renders the bounded write notice
+inside the clean-working-tree branch as well as the populated-changes branch.
+The regression `test_write_notice_renders_when_changes_list_empties` verifies
+the final local commit's visible success notice and an empty-index commit's
+visible bounded failure notice, while checking that the failed attempt leaves
+`HEAD` unchanged.
 
-Non-blocking observations retained from the handoff:
+### Medium — selected path survives commit refresh
 
-- The changes/history split uses a fixed session-only height; logical Files and
-  Diff geometry persistence remains independent and history selection is not
-  persisted, as required by the guardrails.
-- Long compare labels and errors can clip in very narrow terminals, while the
-  endpoint state remains correct and the panes retain their minimum widths.
-- The candidate's reported PTY check is not treated as hosted or production
-  evidence. This review independently relies on the deterministic local suite
-  and source-level inspection; the direct new-button PTY click was not needed
-  as an additional gate because the application-owned hit-testing and mapping
-  contracts are covered in the candidate tests.
+`config/nvim/lua/novim/workbench.lua:1243-1286` retains the selected path
+around the staged commit and restores it with `file_index_for_path` after
+`M.refresh()` when the path remains changed. The regression
+`test_commit_refresh_preserves_selected_change_path` stages an earlier row,
+selects a later changed row, commits only the staged row, and verifies the
+selected path, `▶` render, comparison content, `HEAD`, and remaining status.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Changes/status above history with old/new panes usable | PASS | `workbench.lua:1015-1087,1276-1318`; `tests/test_workbench.lua:2747-2767` verifies the horizontal split, shared left column, usable heights, adjacent middle pane, and current changes. |
-| Full reachable ancestry with merge nodes and decorations | PASS | `git.lua:457-510` uses full `git log --graph` without first-parent reduction; `tests/test_workbench.lua:2769-2787` verifies five reachable commits, a two-parent merge, graph edges, `HEAD -> main`, `(feature)`, and the merge subject. |
-| History selection is visible and read-only | PASS | `workbench.lua:741-878,951-1012,1489-1545`; `tests/test_workbench.lua:2790-2845` verifies keyboard/cursor/mouse row selection, one marker, selected identification, and byte-for-byte repository invariance. |
-| Two distinct endpoint selection populates old/new in order | PASS | `workbench.lua:880-948`; `git.lua:280-425`; `tests/test_workbench.lua:2900-2938` verifies C1 old content, C3 new content, direction status, and bounded identical-endpoint rejection. |
-| Fresh entry defaults to working tree versus HEAD | PASS | `workbench.lua:2121-2130`; `tests/test_workbench.lua:2864-2898,2956-2973` verifies the default pair, untracked placeholder, preserved view-switch selection, and fresh-entry reset. |
-| Refresh preserves endpoint selection while updating content | PASS | `workbench.lua:1266-1318`; `tests/test_workbench.lua:2940-2954` edits the worktree, refreshes, keeps both endpoint refs, and verifies explicit default reset renders the new content. |
-| Empty, no-history, unavailable-ref, and binary/error states bounded | PASS | `workbench.lua:788-829`; `git.lua:289-310,323-410`; `tests/test_workbench.lua:2980-3067` covers empty and non-Git repositories, unavailable revisions, no-selection/identical-endpoint errors, and binary placeholders. |
-| Existing Files/Diff/settings/geometry/isolation boundaries intact | PASS | Candidate product diff touches only `git.lua`, `workbench.lua`, and `keymaps.lua`; `settings.lua`, `settings_ui.lua`, `themes.lua`, launcher, and normal config write paths are untouched. All prior integration/package/smoke tests pass. |
-| Focused and full local validation | PASS | Independent `./tests/run_tests.sh`: 45/45 integration, offline package suite, and 8/8 smoke; Lua/shell syntax, JSON, version checks, ancestry, mutation scan, and `git diff --check` also pass. |
+| File-level stage/unstage with visible staged state | PASS | Existing focused stage/unstage test passes with raw porcelain, index, worktree-byte, staged-tag/count, and selection assertions. |
+| Tracked, untracked, deleted, renamed, and special paths | PASS | Special-path round-trips cover spaces, quotes, tabs, Unicode, leading dashes, arrows, deletion, and rename handling. |
+| Non-empty commit message, visible rejection, and cancel | PASS | Commit-input test covers blank/whitespace rejection, transient cleanup, Esc cancellation, and no-mutation assertions. |
+| Local staged commit and refresh | PASS | Local commit, unstaged-file exclusion, history refresh, endpoint preservation, clean-state notice, and selected-path regression all pass. |
+| Failed writes remain consistent with bounded errors | PASS | Failure tests verify bounded notices, repository/index/HEAD invariance, staged-state retention, and clean-state error visibility. |
+| TASK-012 history/comparison and existing boundaries | PASS | All 45 prior integration tests pass unchanged; restored history `N` mapping is explicitly covered. |
+| No excluded Git mutation or unsafe path handling | PASS | Product diff inspection found only the four authorized local Git write forms, all through structured argv; no shell interpolation of paths/messages. |
+| Focused and full local validation | PASS | `./tests/run_tests.sh` passes 52/52 integration tests, offline package tests, and 8/8 smoke tests; syntax, JSON, version, and diff checks pass. |
 
 ## Validation performed
 
-- Confirmed the checked-out branch is
-  `task/TASK-012-source-control-graph`, clean, and exactly one commit ahead
-  of the remote task branch at `4c5b922`.
-- Confirmed candidate ancestry from both `4c5b922` and `origin/main`.
-- Inspected `AGENTS.md`, `docs/repository.md`, `project-state.md`, the
-  current task, backlog, latest review, product/architecture records, ADRs,
-  and the complete candidate diff.
-- Ran `./tests/run_tests.sh` independently: 45/45 integration tests passed,
-  offline package tests passed with source/installed invariance, and all 8
-  smoke tests passed with zero fixture residue.
-- Ran `luajit -bl` on changed Lua files, `bash -n` on launcher/package/test
-  scripts, `python3 -m json.tool docs/project.json`, and `git diff --check`.
+- Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
+  task, backlog, prior review, architecture, and ADR-004 before review.
+- Confirmed the checkout is `task/TASK-013-local-git-writes`, clean, and based
+  on `9006898` through the candidate; the candidate's direct parent is
+  `0b58051` and its product predecessor is `c90f863`.
+- Inspected the complete product diff from `origin/main` and the correction
+  diff from `0b58051` to `4fef7ef`. The correction commit changes only
+  `workbench.lua`, `tests/test_workbench.lua`, and this task handoff's
+  `current-task.md`.
+- Ran `./tests/run_tests.sh` independently: 52/52 integration tests passed,
+  offline package tests passed with installed/source invariance, and 8/8
+  smoke tests passed with zero fixture residue and a clean source tree.
+- Ran Lua parse checks on the changed Lua files, `bash -n` on the test and
+  launcher scripts, `python3 -m json.tool docs/project.json`, and
+  `git diff --check`; all passed.
 - Confirmed `./bin/novim-dev --version` reports
   `novim-dev 0.1.7-dev (custom checkout)` and the installed
-  `/Users/mert/.local/bin/novim --version` reports `novim 0.1.7`.
-- Confirmed the product diff has no Git mutation commands, network/plugin
-  additions, protected release/config writes, or unrelated files.
-- Confirmed PR #21 targets `main` from the reviewed task branch, was
-  mergeable/clean with no explicit failing required check, and is now present
-  on `origin/main` at merge commit `915624c`.
+  `/Users/mert/.local/bin/novim --version` remains `novim 0.1.7`.
+- Confirmed at review time that `origin/main` remained `9006898` and the
+  remote task branch remained `f6b1135`; no PR existed and no remote mutation
+  had been attempted.
 
-Evidence is local review evidence only; no hosted, production, recovery, or
-customer-acceptance claim is made.
+All evidence above is local review evidence. It is not hosted, production,
+recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`ACCEPTED` after lightweight PR #21 merge. The reviewed implementation and
-review record are contained in `origin/main` at merge commit `915624c`; the
-reviewed head `7f24a71` and implementation candidate `0462823` are verified
-as ancestors. Remote checks were optional and none were reported. Review and
-validation evidence are local, with remote branch containment verified after
-merge.
+The candidate is locally `APPROVED`. LIGHTWEIGHT delivery is authorized:
+push this task branch, open one PR targeting `main`, and merge promptly if it
+is mergeable and no explicit repository/provider rule blocks the merge. Do
+not wait for optional checks or invent a second approval gate.
 
-## Next action
+## Post-merge requirement
 
-TASK-012 is complete. Durable records are reconciled and TASK-013 is now the
-single actionable planned successor on `task/TASK-013-local-git-writes` from
-`origin/main` `915624c`. The implementation branch and PR remain traceable as
-PR #21. TASK-013 must remain the file-level local stage/unstage/commit slice.
+Only after the remote default branch contains the merged result, update
+`project-state.md`, `docs/tasks/backlog.md`, `docs/tasks/current-task.md`,
+`docs/project.json`, and this review record to the accepted merged state. Do
+not issue a successor task until the merge is verified; no later task is
+currently defined in the backlog.

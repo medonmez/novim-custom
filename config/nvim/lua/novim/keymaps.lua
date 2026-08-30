@@ -14,7 +14,7 @@ local M = {}
 M.workbench = {
   { display = "j / k or ↑ / ↓", keys = { "j", "k", "<Up>", "<Down>" }, desc = "Move selection" },
   { display = "Left Click", keys = { "<LeftMouse>" }, desc = "Select item / switch tabs" },
-  { display = "Double-Click", keys = { "<2-LeftMouse>" }, desc = "Expand folder / open file" },
+  { display = "Double-Click", keys = { "<2-LeftMouse>" }, desc = "Expand folder / open file / toggle stage" },
   { display = "Enter / e / o", keys = { "<CR>", "e", "o" }, desc = "Open regular file / select" },
   { display = "Space", keys = { "<Space>" }, desc = "Preview selected item" },
   { display = "1 / b / f", keys = { "1", "b", "f" }, desc = "Project Files view" },
@@ -22,6 +22,9 @@ M.workbench = {
   { display = "H", keys = { "H" }, desc = "Focus history list (Git Diff)" },
   { display = "O / N", keys = { "O", "N" }, desc = "Set compare endpoint (old / new)" },
   { display = "D", keys = { "D" }, desc = "Reset compare (HEAD vs Worktree)" },
+  { display = "a", keys = { "a" }, desc = "Stage selected change (file level)" },
+  { display = "u", keys = { "u" }, desc = "Unstage selected change (file level)" },
+  { display = "c", keys = { "c" }, desc = "Commit staged changes (Enter / Esc input)" },
   { display = "Tab / Shift-Tab", keys = { "<Tab>", "<S-Tab>" }, desc = "Switch left/right pane" },
   { display = "Drag Boundary", keys = { "<LeftDrag>", "<LeftRelease>" }, desc = "Resize panes (drag divider)" },
   { display = "r or Ctrl-R", keys = { "r", "<C-r>" }, desc = "Refresh files and Git status" },
