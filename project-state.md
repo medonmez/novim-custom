@@ -105,6 +105,6 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/15`
 
 Implement `TASK-010` on its isolated task branch, then return a local handoff
 for review. After acceptance, advance to `TASK-011`; resolve the recorded Git
-decisions before issuing either Git successor. Local distribution and upstream
-sync remain documented in `docs/LOCAL_DISTRIBUTION.md` and
+direction's dependency order before issuing either Git successor. Local
+distribution and upstream sync remain documented in `docs/LOCAL_DISTRIBUTION.md` and
 `docs/UPSTREAM_SYNC.md`.
