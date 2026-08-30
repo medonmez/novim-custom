@@ -4,7 +4,7 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-013` (`PLANNED`)
+Current task: `TASK-013` (`CHANGES_REQUESTED`)
 Base branch: `main`
 Task branch: `task/TASK-013-local-git-writes`
 Pull request: `NOT_OPEN`
@@ -110,13 +110,17 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/21`
 
 ## Active blockers
 
-- TASK-013 has no active product or dependency blocker.
+- TASK-013 has no product or dependency blocker, but local review of candidate
+  `c90f863` requested three corrections: restore the history-pane `N` endpoint
+  mapping, render write notices after the changes list becomes empty, and
+  preserve selected change paths across commit refresh.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Implement `TASK-013` on its isolated task branch, then return a local handoff
-for review. Keep the write surface file-level and local; preserve the full
-Source Control graph, two-endpoint comparison, and dependency boundaries.
+Return `TASK-013` to `$stateless-implementer` on its existing isolated branch
+for the recorded review corrections. Keep the write surface file-level and
+local; preserve the full Source Control graph, two-endpoint comparison, and
+dependency boundaries. No PR or remote delivery was attempted.
 Local distribution and upstream sync remain documented in
 `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.

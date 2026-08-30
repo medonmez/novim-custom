@@ -2,7 +2,7 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-013`
-Status: `IN_PROGRESS`
+Status: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-013-local-git-writes`
@@ -136,12 +136,14 @@ local staged commit with an explicitly entered message.
 
 ## Implementation handoff
 
-Status: `READY_FOR_REVIEW` (local handoff on `task/TASK-013-local-git-writes`)
+Status: `CHANGES_REQUESTED` after local review on
+`task/TASK-013-local-git-writes`.
 
-Commit: `HEAD (handoff commit)` on `task/TASK-013-local-git-writes`
-(single local commit on top of planning commit `f6b1135`, baseline
-`9006898` = `origin/main`). Not pushed; no pull request opened; main
-untouched.
+Implementation candidate: `c90f863b77aebbb5f07e69e8d86e3ffff0d5e998` on
+`task/TASK-013-local-git-writes` (single product handoff commit on top of
+planning commit `f6b1135`, baseline `9006898` = `origin/main`). A separate
+local review-record commit is now on this branch; nothing is pushed, no pull
+request is open, and main is untouched.
 
 ## Change summary
 
@@ -291,3 +293,22 @@ confirm/cancel/workbench close, and the write notice is session-only.
   `git failed with exit code N` fallback.
 - All validation above is local evidence only; no hosted, production,
   recovery, or customer-acceptance claim is made.
+
+## Review follow-up
+
+Local review of `c90f863b77aebbb5f07e69e8d86e3ffff0d5e998` is
+`CHANGES_REQUESTED`. The same task remains active; no PR or remote delivery
+was attempted.
+
+Required corrections:
+
+- Restore the existing `N` new-endpoint mapping in the history pane and add a
+  focused mapping/behavior regression.
+- Render the bounded write notice when a commit leaves the changes list empty,
+  including the failed empty-index commit path, with buffer-level assertions.
+- Preserve the selected change path across successful commit refresh when the
+  selected entry still exists, with a regression where an earlier staged entry
+  disappears.
+
+The full local suite passed, but it did not cover these three gaps. Return the
+same branch to review after the corrections and the required validation rerun.
