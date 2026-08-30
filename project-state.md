@@ -4,13 +4,13 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-012` (`PLANNED`)
+Current task: `TASK-013` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-012-source-control-graph`
+Task branch: `task/TASK-013-local-git-writes`
 Pull request: `NOT_OPEN`
-Last accepted task: `TASK-011`
-Last accepted commit: `ca1edaf` (`origin/main` merge of PR #19)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/19`
+Last accepted task: `TASK-012`
+Last accepted commit: `915624c` (`origin/main` merge of PR #21)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/21`
 
 ## Current truth
 
@@ -95,10 +95,11 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/19`
   immediate Esc close, and a top-right mouse close affordance. Existing
   settings persistence, pane geometry, and local-only boundaries remain
   intact.
-- `TASK-012` is now the only actionable successor, planned on
-  `task/TASK-012-source-control-graph` from `origin/main` `8b76dad`. It will
-  add the accepted Source Control layout, full current-branch graph, and
-  explicit two-endpoint read-only comparison.
+- `TASK-012` was locally reviewed `APPROVED` at candidate `0462823` with
+  review record `f909d4d`, delivered through GitHub PR #21, and verified in
+  merge commit `915624c` on `origin/main`. The Diff view now provides the
+  accepted Source Control layout, full current-branch graph, and explicit
+  two-endpoint read-only comparison.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -109,15 +110,13 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/19`
 
 ## Active blockers
 
-- TASK-012 has no active product or dependency blocker.
-- TASK-013 has no remaining product-decision blocker, but waits for TASK-012
-  to be accepted.
+- TASK-013 has no active product or dependency blocker.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Implement `TASK-012` on its isolated task branch, then return a local handoff
-for review. Keep the full Source Control graph and two-endpoint comparison
-read-only; resolve the recorded dependency order before issuing TASK-013.
+Implement `TASK-013` on its isolated task branch, then return a local handoff
+for review. Keep the write surface file-level and local; preserve the full
+Source Control graph, two-endpoint comparison, and dependency boundaries.
 Local distribution and upstream sync remain documented in
 `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.
