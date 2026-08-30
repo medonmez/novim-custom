@@ -92,10 +92,11 @@ not part of this milestone.
 
 ## Successor brief (accepted 2026-08-30)
 
-The next usability milestone requested by the user is to make the workbench
-remember independent Files and Git Diff pane geometry, then make Settings act
-like a focused option menu rather than a freely navigable text buffer. The
-Settings interaction should use a visible selected-control arrow; Up/Down
+The 2026-08-30 usability milestone was split into ordered slices. TASK-010
+delivered independent Files and Git Diff pane geometry persistence. TASK-011
+now makes Settings act like a focused option menu rather than a freely
+navigable text buffer. The Settings interaction should use a visible
+selected-control arrow; Up/Down
 should move only between controls; Left/Right should change the theme only
 when the theme control is selected; Space should activate the selected
 control; `Esc` should close immediately and be documented; and a top-right

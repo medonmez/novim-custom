@@ -16,15 +16,14 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 7 | TASK-007 | Start quickly with a root-only lazy project browser and session-only folder expansion | ACCEPTED | TASK-006 (accepted) |
 | 8 | TASK-008 | Add six built-in themes, settings key help, immediate settings close, and reliable mouse pane resizing | ACCEPTED | TASK-007 (accepted) |
 | 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | ACCEPTED | TASK-008 (accepted) |
-| 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | PLANNED | TASK-009 (accepted) |
-| 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | PROPOSED | TASK-010 (accepted) |
+| 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | ACCEPTED | TASK-009 (accepted) |
+| 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | PLANNED | TASK-010 (accepted) |
 | 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | PROPOSED | TASK-011 (accepted) |
 | 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | PROPOSED | TASK-012 (accepted) |
 
-TASK-010 is the only actionable current task. TASK-011 is the next bounded
-successor. TASK-012 and TASK-013 now have accepted product direction but remain
-successor slices until their dependencies are accepted; no later task may
-absorb those features incidentally.
+TASK-011 is the only actionable current task. TASK-012 and TASK-013 have
+accepted product direction but remain successor slices until their dependencies
+are accepted; no later task may absorb those features incidentally.
 
 ## Accepted task notes
 
@@ -40,9 +39,9 @@ absorb those features incidentally.
 
 ## New task notes
 
-- `TASK-010` stores logical per-view geometry, not transient Neovim window or
-  buffer IDs. It must survive view switching and a later local launch while
-  clamping safely to the current terminal width.
+- `TASK-010` is accepted. It stores logical per-view geometry, not transient
+  Neovim window or buffer IDs, survives view switching and a later local
+  launch, and clamps safely to the current terminal width.
 - `TASK-011` must ensure Up/Down changes only the selected Settings control,
   Left/Right changes theme only while the theme row is selected, and Space
   activates the selected control. The Settings panel must visibly document

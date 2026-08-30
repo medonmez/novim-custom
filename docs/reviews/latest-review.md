@@ -7,9 +7,11 @@ Delivery policy: `LIGHTWEIGHT`
 Baseline: `94a8d0b` (`origin/main`)
 Candidate: `52df2e5`
 Task branch: `task/TASK-010-pane-layout-persistence`
-Pull request: `NOT_OPEN`
+Pull request: `https://github.com/medonmez/novim-custom/pull/17`
 Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `NOT_STARTED`
+Merge status: `MERGED`
+Target branch contains change: `YES` (`origin/main`)
+Merge commit: `a039f29f00d603712f6c537d3b816f0582d9ca2e`
 
 ## Review result
 
@@ -85,12 +87,14 @@ customer-acceptance claim is made.
 
 ## Delivery decision
 
-`APPROVED` for lightweight PR delivery. Push the reviewed task branch, open or
-reuse its single PR targeting `main`, and merge promptly if it is mergeable and
-no explicit required check blocks it.
+`ACCEPTED` after lightweight PR #17 merge. The reviewed implementation and
+review record are contained in `origin/main` at merge commit `a039f29`; remote
+checks were not required or reported. Review and validation evidence are
+local, with remote branch containment verified after merge. No hosted,
+production, recovery, or customer-acceptance claim is made.
 
 ## Next action
 
-Deliver `TASK-010` through its task-branch PR, verify the merged result is
-contained in `origin/main`, then reconcile the durable records and issue the
-next single actionable successor task.
+TASK-010 is complete. Durable records are reconciled and TASK-011 is now the
+single actionable planned successor on `task/TASK-011-settings-focus-close`
+from `origin/main` `a039f29`.
