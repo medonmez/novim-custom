@@ -142,6 +142,25 @@ The accepted next target is a read-only multi-pane diff workbench:
 Selected branch or historical-commit comparisons are future scope and are not
 required for the first workbench slice.
 
+## Accepted successor slices (not yet implemented)
+
+- `TASK-010` will persist logical, per-view pane geometry in the isolated
+  settings file. Files stores its left/right split; Diff stores its two visible
+  boundaries. Window and buffer IDs remain runtime-only, and values are
+  clamped against the current terminal width and pane minimums.
+- `TASK-011` will add a focus model for Settings controls so navigation does
+  not move through the rendered help text. Its interaction contract is
+  recorded as a proposal in `docs/product/product.md` and is separate from
+  the existing theme/dot-folder persistence.
+- `TASK-012` will add a horizontally split left Git area with current changes
+  above and the full current-branch ancestry graph below, including merge
+  nodes. The user will choose two revision/location endpoints for a read-only
+  comparison; selecting history will not check out a branch.
+- `TASK-013` will add file-level staging, unstaging, and local staged commits
+  with a commit-message input. Push, pull, fetch, merge, rebase, checkout,
+  discard, amend, remote synchronization, credentials, and partial-line
+  staging remain outside this accepted successor direction.
+
 ## Preserved contracts
 
 - Public/user command: installed `novim` remains unchanged.

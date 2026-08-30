@@ -4,9 +4,9 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `NONE` (backlog exhausted; awaiting product direction)
+Current task: `TASK-010` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-009-three-area-diff` (merged)
+Task branch: `task/TASK-010-pane-layout-persistence`
 Pull request: `https://github.com/medonmez/novim-custom/pull/15` (`MERGED`)
 Last accepted task: `TASK-009`
 Last accepted commit: `b5cae85` (`origin/main` merge of PR #15)
@@ -82,15 +82,29 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/15`
   list, old/HEAD pane, new/working-tree pane — with refresh on entry,
   readable special-file handling, and two independently clamped boundary
   drags.
+- The next user brief is split into ordered successor slices. `TASK-010` is
+  planned on `task/TASK-010-pane-layout-persistence` from `origin/main`
+  `94a8d0b` and will persist independent Files/Diff pane geometry across view
+  switches and local workbench launches.
+- `TASK-011` covers focus-driven Settings navigation and a mouse close
+  affordance. `TASK-012` covers the accepted Source Control layout and
+  selectable history. `TASK-013` covers the accepted local stage/commit
+  surface. The Git direction is now accepted in ADR-004: full current-branch
+  graph, two user-selected comparison endpoints, and file-level local
+  stage/unstage/commit only. These are still successor slices, not current
+  implementation work.
 
 ## Active blockers
 
-- No active blocker. TASK-001 through TASK-009 are accepted on `origin/main`
-  and the planned ADR-003 backlog is exhausted. No hosted, production,
-  recovery, or customer-acceptance claim is made.
+- TASK-010 has no active product blocker.
+- TASK-012 and TASK-013 have no remaining product-decision blocker, but wait
+  for their ordered dependencies (`TASK-011` and `TASK-012`) to be accepted.
+- No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-No actionable task is issued. Planning the next slice (TASK-010) requires new
-product direction from the user; local distribution and upstream sync remain
-documented in `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.
+Implement `TASK-010` on its isolated task branch, then return a local handoff
+for review. After acceptance, advance to `TASK-011`; resolve the recorded Git
+direction's dependency order before issuing either Git successor. Local
+distribution and upstream sync remain documented in `docs/LOCAL_DISTRIBUTION.md` and
+`docs/UPSTREAM_SYNC.md`.

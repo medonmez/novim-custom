@@ -174,6 +174,15 @@ local function cleanup_dir(dir)
   vim.fn.delete(dir, "rf")
 end
 
+--- Clear persisted pane geometry so a test starts from the built-in layout.
+--- TASK-010 restore-on-open must not inherit widths saved by earlier tests
+--- or earlier suite runs sharing the isolated development settings file.
+local function reset_saved_layout()
+  local settings = require("novim.settings")
+  settings.reset_cache()
+  settings.set_layout({ files = {}, diff = {} })
+end
+
 local tests = {}
 
 -- =========================================================================
@@ -302,6 +311,7 @@ end
 function tests.test_mouse_divider_drag_and_status_invariance()
   local workbench = require("novim.workbench")
   workbench.close()
+  reset_saved_layout()
 
   local fixture = create_fixture_repo()
   local old_cwd = vim.fn.getcwd()
@@ -1783,6 +1793,7 @@ end
 function tests.test_pane_drag_both_directions_with_minimum_clamp()
   local workbench = require("novim.workbench")
   workbench.close()
+  reset_saved_layout()
 
   local fixture = create_project_browser_fixture()
   local old_cwd = vim.fn.getcwd()
@@ -1861,6 +1872,7 @@ function tests.test_three_area_diff_refresh_versions_special_files_and_drag()
   local workbench = require("novim.workbench")
   local git = require("novim.git")
   workbench.close()
+  reset_saved_layout()
 
   local fixture = create_fixture_repo()
   local old_cwd = vim.fn.getcwd()
@@ -1982,6 +1994,364 @@ function tests.test_three_area_diff_refresh_versions_special_files_and_drag()
   workbench.close()
   vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
   cleanup_dir(fixture)
+end
+
+-- =========================================================================
+-- TASK-010 New Feature Tests (Pane Layout Persistence)
+-- =========================================================================
+
+--- Run body with the settings file redirected to a run-specific path so
+--- layout persistence stays deterministic regardless of test order and so
+--- cleanup never touches the real isolated development settings file.
+local function with_isolated_settings_path(test_settings_file, body)
+  local settings = require("novim.settings")
+  local workbench = require("novim.workbench")
+  local orig_get_path = settings.get_settings_file_path
+  settings.get_settings_file_path = function()
+    return test_settings_file
+  end
+  settings.reset_cache()
+  local ok, err = pcall(body)
+  if not ok then
+    pcall(workbench.close)
+  end
+  settings.get_settings_file_path = orig_get_path
+  settings.reset_cache()
+  if not ok then
+    error(err)
+  end
+end
+
+function tests.test_pane_layout_persists_across_view_switches_independently()
+  local workbench = require("novim.workbench")
+  local settings = require("novim.settings")
+  workbench.close()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  local test_settings_file = vim.fn.tempname() .. "_layout_switch_settings.json"
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local ok, err = pcall(function()
+    with_isolated_settings_path(test_settings_file, function()
+      workbench.open({ view = "files" })
+      local st = workbench.get_state()
+
+      -- A completed Files drag persists only the Files geometry.
+      local sep = vim.fn.win_screenpos(st.win_right)[2] - 1
+      workbench.pane_drag_start(sep)
+      workbench.pane_drag_move(sep - 6)
+      workbench.pane_drag_end()
+      local files_width = vim.api.nvim_win_get_width(st.win_left)
+      assert_true(files_width >= 15, "dragged Files width must respect the minimum")
+
+      local saved = settings.get("layout")
+      assert_eq(saved.files.left, files_width, "completed Files drag must persist the effective left width")
+      assert_true(saved.diff.left == nil and saved.diff.middle == nil,
+        "a Files drag must not touch Diff geometry")
+
+      -- Independent Diff boundary drags persist only the Diff geometry.
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      local sep1 = vim.fn.win_screenpos(st.win_middle)[2] - 1
+      workbench.pane_drag_start(sep1)
+      workbench.pane_drag_move(sep1 + 4)
+      workbench.pane_drag_end()
+      local diff_left = vim.api.nvim_win_get_width(st.win_left)
+
+      local sep2 = vim.fn.win_screenpos(st.win_right)[2] - 1
+      workbench.pane_drag_start(sep2)
+      workbench.pane_drag_move(sep2 + 7)
+      workbench.pane_drag_end()
+      local diff_middle = vim.api.nvim_win_get_width(st.win_middle)
+      assert_true(vim.api.nvim_win_get_width(st.win_right) >= 20,
+        "Diff drag must keep the right pane minimum")
+
+      saved = settings.get("layout")
+      assert_eq(saved.diff.left, diff_left, "boundary 1 drag must persist the effective left width")
+      assert_eq(saved.diff.middle, diff_middle, "boundary 2 drag must persist the effective middle width")
+      assert_eq(saved.files.left, files_width, "Diff drags must not alter the saved Files geometry")
+
+      -- Files round-trip restores the saved divider.
+      workbench.set_view("files")
+      st = workbench.get_state()
+      assert_eq(vim.api.nvim_win_get_width(st.win_left), files_width,
+        "Files divider must restore its saved width after a Diff round-trip")
+
+      -- Diff round-trip restores both saved boundaries.
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      assert_eq(vim.api.nvim_win_get_width(st.win_left), diff_left,
+        "Diff left boundary must restore its saved width")
+      assert_eq(vim.api.nvim_win_get_width(st.win_middle), diff_middle,
+        "Diff middle boundary must restore its saved width")
+
+      workbench.close()
+    end)
+  end)
+
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+  vim.fn.delete(test_settings_file, "rf")
+  if not ok then
+    error(err)
+  end
+end
+
+function tests.test_pane_layout_persists_across_workbench_reopen()
+  local workbench = require("novim.workbench")
+  local settings = require("novim.settings")
+  workbench.close()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  local test_settings_file = vim.fn.tempname() .. "_layout_reopen_settings.json"
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local ok, err = pcall(function()
+    with_isolated_settings_path(test_settings_file, function()
+      -- First session: drag both views, then close (capture at teardown).
+      workbench.open({ view = "files" })
+      local st = workbench.get_state()
+      local sep = vim.fn.win_screenpos(st.win_right)[2] - 1
+      workbench.pane_drag_start(sep)
+      workbench.pane_drag_move(sep + 8)
+      workbench.pane_drag_end()
+      local files_width = vim.api.nvim_win_get_width(st.win_left)
+
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      local sep1 = vim.fn.win_screenpos(st.win_middle)[2] - 1
+      workbench.pane_drag_start(sep1)
+      workbench.pane_drag_move(sep1 - 3)
+      workbench.pane_drag_end()
+      local diff_left = vim.api.nvim_win_get_width(st.win_left)
+      local sep2 = vim.fn.win_screenpos(st.win_right)[2] - 1
+      workbench.pane_drag_start(sep2)
+      workbench.pane_drag_move(sep2 + 6)
+      workbench.pane_drag_end()
+      local diff_middle = vim.api.nvim_win_get_width(st.win_middle)
+
+      workbench.close()
+
+      -- The settings file on disk must hold both views' geometry.
+      local parsed = vim.json.decode(table.concat(vim.fn.readfile(test_settings_file), "\n"))
+      assert_eq(parsed.layout.files.left, files_width, "settings file must record the Files width")
+      assert_eq(parsed.layout.diff.left, diff_left, "settings file must record the Diff left width")
+      assert_eq(parsed.layout.diff.middle, diff_middle, "settings file must record the Diff middle width")
+
+      -- A later launch with a cold settings cache restores both layouts.
+      settings.reset_cache()
+      workbench.open({ view = "files" })
+      st = workbench.get_state()
+      assert_eq(vim.api.nvim_win_get_width(st.win_left), files_width,
+        "reopened workbench must restore the saved Files width")
+
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      assert_eq(vim.api.nvim_win_get_width(st.win_left), diff_left,
+        "reopened workbench must restore the Diff left boundary")
+      assert_eq(vim.api.nvim_win_get_width(st.win_middle), diff_middle,
+        "reopened workbench must restore the Diff middle boundary")
+
+      workbench.close()
+    end)
+  end)
+
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+  vim.fn.delete(test_settings_file, "rf")
+  if not ok then
+    error(err)
+  end
+end
+
+function tests.test_pane_layout_malformed_values_fall_back_safely()
+  local workbench = require("novim.workbench")
+  local settings = require("novim.settings")
+  local themes = require("novim.themes")
+  workbench.close()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  local test_settings_file = vim.fn.tempname() .. "_layout_malformed_settings.json"
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local ok, err = pcall(function()
+    with_isolated_settings_path(test_settings_file, function()
+      -- Non-numeric, impossible, and unknown layout values degrade to the
+      -- safe defaults while theme and dot-folder settings survive.
+      local f = io.open(test_settings_file, "w")
+      f:write(vim.json.encode({
+        show_dotfiles = true,
+        theme = "tokyo_night",
+        layout = {
+          files = { left = "wide", middle = 30 },
+          diff = { left = -3, middle = true, right = 42 },
+        },
+      }) .. "\n")
+      f:close()
+
+      settings.reset_cache()
+      local loaded = settings.load(true)
+      assert_eq(loaded.show_dotfiles, true, "show_dotfiles must survive a malformed layout")
+      assert_true(themes.is_valid(loaded.theme), "theme must survive a malformed layout")
+      assert_true(loaded.layout.files.left == nil and loaded.layout.files.middle == nil,
+        "non-numeric Files geometry must fall back to the default")
+      assert_true(loaded.layout.diff.left == nil and loaded.layout.diff.middle == nil,
+        "impossible Diff geometry must fall back to the default")
+
+      -- The workbench stays usable on the built-in starting layout.
+      workbench.open({ view = "files" })
+      local st = workbench.get_state()
+      assert_true(vim.api.nvim_win_is_valid(st.win_left) and vim.api.nvim_win_is_valid(st.win_right),
+        "workbench must open with malformed persisted geometry")
+      assert_true(vim.api.nvim_win_get_width(st.win_left) >= 15
+        and vim.api.nvim_win_get_width(st.win_right) >= 20,
+        "default start must respect the pane minimums")
+
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      assert_true(vim.api.nvim_win_is_valid(st.win_left)
+        and vim.api.nvim_win_is_valid(st.win_middle)
+        and vim.api.nvim_win_is_valid(st.win_right),
+        "Diff must open with malformed persisted geometry")
+      assert_true(vim.api.nvim_win_get_width(st.win_left) >= 15
+        and vim.api.nvim_win_get_width(st.win_middle) >= 20
+        and vim.api.nvim_win_get_width(st.win_right) >= 20,
+        "Diff default start must respect the pane minimums")
+
+      -- Saving new geometry keeps theme and dot-folder settings intact.
+      workbench.set_view("files")
+      local save_ok = settings.set_layout({ files = { left = 40 } })
+      assert_true(save_ok, "set_layout must succeed on a writable settings file")
+      settings.reset_cache()
+      local reloaded = settings.load(true)
+      assert_eq(reloaded.layout.files.left, 40, "valid geometry must persist")
+      assert_eq(reloaded.show_dotfiles, true, "show_dotfiles must remain intact after a geometry save")
+      assert_true(themes.is_valid(reloaded.theme), "theme must remain intact after a geometry save")
+
+      -- A settings-write failure must not crash or corrupt the live layout.
+      workbench.close()
+      vim.fn.delete(test_settings_file)
+      vim.fn.mkdir(test_settings_file, "p")
+      settings.reset_cache()
+      workbench.open({ view = "files" })
+      local st2 = workbench.get_state()
+      local before = vim.api.nvim_win_get_width(st2.win_left)
+      local sep = vim.fn.win_screenpos(st2.win_right)[2] - 1
+      workbench.pane_drag_start(sep)
+      workbench.pane_drag_move(sep + 5)
+      workbench.pane_drag_end()
+      assert_true(workbench.get_state().is_open, "workbench must survive a failed settings write")
+      assert_true(vim.api.nvim_win_is_valid(st2.win_left) and vim.api.nvim_win_is_valid(st2.win_right),
+        "panes must stay valid when the settings write fails")
+      assert_eq(vim.api.nvim_win_get_width(st2.win_left), before + 5,
+        "a failed settings write must not disturb the live drag result")
+      workbench.close()
+      vim.fn.delete(test_settings_file, "rf")
+      settings.reset_cache()
+    end)
+  end)
+
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+  vim.fn.delete(test_settings_file, "rf")
+  if not ok then
+    error(err)
+  end
+end
+
+function tests.test_pane_layout_clamps_to_narrow_terminal()
+  local workbench = require("novim.workbench")
+  local settings = require("novim.settings")
+  workbench.close()
+
+  local fixture = create_fixture_repo()
+  local old_cwd = vim.fn.getcwd()
+  local old_columns = vim.o.columns
+  local test_settings_file = vim.fn.tempname() .. "_layout_clamp_settings.json"
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local ok, err = pcall(function()
+    with_isolated_settings_path(test_settings_file, function()
+      -- Save deliberately wide geometry at a wide terminal.
+      vim.o.columns = 120
+      workbench.open({ view = "files" })
+      local st = workbench.get_state()
+      local sep = vim.fn.win_screenpos(st.win_right)[2] - 1
+      workbench.pane_drag_start(sep)
+      workbench.pane_drag_move(sep + 40)
+      workbench.pane_drag_end()
+      local saved_files_width = vim.api.nvim_win_get_width(st.win_left)
+
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      local sep1 = vim.fn.win_screenpos(st.win_middle)[2] - 1
+      workbench.pane_drag_start(sep1)
+      workbench.pane_drag_move(sep1 + 30)
+      workbench.pane_drag_end()
+      local saved_diff_left = vim.api.nvim_win_get_width(st.win_left)
+      local sep2 = vim.fn.win_screenpos(st.win_right)[2] - 1
+      workbench.pane_drag_start(sep2)
+      workbench.pane_drag_move(sep2 + 30)
+      workbench.pane_drag_end()
+      local saved_diff_middle = vim.api.nvim_win_get_width(st.win_middle)
+      workbench.close()
+
+      -- Reopen at a much narrower terminal: widths clamp to the current
+      -- width and every pane stays valid at its minimum.
+      vim.o.columns = 70
+      settings.reset_cache()
+      workbench.open({ view = "files" })
+      st = workbench.get_state()
+      local left = vim.api.nvim_win_get_width(st.win_left)
+      local right = vim.api.nvim_win_get_width(st.win_right)
+      assert_true(left < saved_files_width, "Files width must clamp to the narrower terminal")
+      assert_true(left >= 15 and right >= 20, "clamped Files layout must keep the minimums")
+      assert_eq(left + right, 69, "Files panes must fill the terminal exactly")
+
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      left = vim.api.nvim_win_get_width(st.win_left)
+      local middle = vim.api.nvim_win_get_width(st.win_middle)
+      right = vim.api.nvim_win_get_width(st.win_right)
+      assert_true(left < saved_diff_left and middle < saved_diff_middle,
+        "Diff geometry must clamp to the narrower terminal")
+      assert_true(left >= 15 and middle >= 20 and right >= 20,
+        "clamped Diff layout must keep the minimums")
+      assert_eq(left + middle + right, 68, "Diff panes must fill the terminal exactly")
+      assert_true(vim.api.nvim_win_is_valid(st.win_left)
+        and vim.api.nvim_win_is_valid(st.win_middle)
+        and vim.api.nvim_win_is_valid(st.win_right),
+        "all panes must stay valid after clamping")
+      workbench.close()
+
+      -- An extremely narrow terminal cannot fit three usable panes; restore
+      -- degrades to the built-in start instead of creating invalid state.
+      vim.o.columns = 50
+      settings.reset_cache()
+      workbench.open({ view = "files" })
+      st = workbench.get_state()
+      assert_true(vim.api.nvim_win_is_valid(st.win_left) and vim.api.nvim_win_is_valid(st.win_right),
+        "extremely narrow terminal must keep both Files panes valid")
+      workbench.set_view("diff")
+      st = workbench.get_state()
+      assert_true(vim.api.nvim_win_is_valid(st.win_left)
+        and vim.api.nvim_win_is_valid(st.win_middle)
+        and vim.api.nvim_win_is_valid(st.win_right),
+        "extremely narrow terminal must keep all Diff panes valid")
+      workbench.close()
+    end)
+  end)
+
+  vim.o.columns = old_columns
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+  vim.fn.delete(test_settings_file, "rf")
+  if not ok then
+    error(err)
+  end
 end
 
 -- =========================================================================

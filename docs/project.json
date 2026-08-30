@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-009-three-area-diff",
+    "taskBranch": "task/TASK-010-pane-layout-persistence",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -26,9 +26,9 @@
     "developmentCommandTask": "TASK-001"
   },
   "workflow": {
-    "currentTask": "TASK-009",
-    "currentTaskStatus": "ACCEPTED",
-    "pullRequest": "https://github.com/medonmez/novim-custom/pull/15",
+    "currentTask": "TASK-010",
+    "currentTaskStatus": "PLANNED",
+    "pullRequest": null,
     "remoteChecks": "OPTIONAL / NOT_RUN",
     "lastAcceptedTask": "TASK-009",
     "lastAcceptedCommit": "b5cae85",
@@ -74,6 +74,13 @@
     "themes": {
       "default": "Tokyo Night",
       "builtIn": ["Tokyo Night", "Nord", "Gruvbox Dark", "Catppuccin Mocha", "One Dark", "Solarized Light"]
+    },
+    "successorBrief": {
+      "status": "ACCEPTED",
+      "paneGeometry": "Persist independent Files and Git Diff layouts across view switches and local workbench launches.",
+      "settingsInteraction": "Use a visible selected-control cursor; Up/Down changes controls, Left/Right changes theme only on the theme control, Space activates the selected control, Esc closes, and a top-right mouse close control is visible.",
+      "sourceControl": "Split the left Git area horizontally with current changes/status above and the full current-branch commit graph below, including merges; let the user choose two revision/location endpoints for a read-only comparison without checkout.",
+      "localGitWrites": "File-level stage/unstage and local staged commit with a user-entered commit-message input; exclude push, pull, fetch, merge, rebase, checkout, discard, amend, remote synchronization, credentials, and partial-line staging."
     }
   }
 }
