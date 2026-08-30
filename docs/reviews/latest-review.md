@@ -1,42 +1,37 @@
 # Latest Review
 
 Updated: 2026-08-30
-Task ID: `TASK-014`
+Task ID: `TASK-015`
 Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
-Baseline: `2f72937134a3965a8c5294641c1589dd38a6a04c` (`origin/main`)
-Candidate: `f4413b7` (`task/TASK-014-auto-copy-preview-exit`)
-Pull request: `https://github.com/medonmez/novim-custom/pull/25` (`MERGED`)
+Baseline: `99056a51c3e25bfbd05758371eb47ec7085917bb` (`origin/main`)
+Candidate: `75dc882bc37ce772104a250dde5e0c2292aaeac7` (`task/TASK-015-oh-my-code-identity`)
+Pull request: not opened
 Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `MERGED`
-Target branch contains change: `YES` (`origin/main`)
-Merge commit: `79724608028685b95d780af113f5e64caae5622a` (`origin/main`)
+Merge status: `NOT_STARTED`
 
 ## Review result
 
-The candidate was independently inspected against the recorded `origin/main`
-baseline and its immediate planning parent `779749a`. The implementation
-diff is limited to the TASK-014 editor interaction surface, focused tests,
-and the current-task handoff. The Source Control, launcher, package,
-settings/geometry, and installed-release areas remain untouched by the
-implementation commit.
+The candidate was inspected against the recorded `origin/main` baseline and
+the implementation parent `b5efa71` (`docs(TASK-015): plan oh-my-code public
+identity`). The implementation is limited to the new public `bin/ohc`
+launcher, compatibility identity/help labeling in `bin/novim-dev`, focused
+smoke coverage, and the corresponding architecture/distribution/current-task
+handoff documentation. The plan commit's ADR, product, repository, project,
+backlog, and task records are consistent with the accepted public identity
+boundary.
 
-`workbench.lua` scopes the new mappings to the editable regular-file buffer.
-`<LeftRelease>` performs one local `+` clipboard yank only while a Visual
-selection is active, then reselects it; plain clicks, keyboard-only
-selections, Preview, and Diff buffers do not invoke the new side effect. The
-provider-unavailable path records a bounded failure notice. `Esc` returns
-directly to the selected file's read-only Preview from Normal, Insert, and
-Visual editor modes. Modified buffers open a bounded confirmation; Enter/y
-returns without saving or discarding, while Esc/n/q restores editor focus
-without changing content or the modified flag. The hidden file buffer stays
-loaded for later recovery.
+`bin/ohc` is executable and self-contained. It resolves the real repository
+root through direct and symlinked invocation, works from an external working
+directory, forwards Neovim arguments, and shares the existing isolated
+`config`, `.dev-data`, `.dev-state`, and `.dev-cache` boundary with
+`novim-dev`. The public and compatibility CLI identities are explicit while
+the pre-release `0.1.7-dev` semantics remain intact. No product config,
+workbench, installed-release launcher, or normal Neovim configuration code was
+changed.
 
-The statusline guidance is conditional on the editable file buffer, and the
-canonical editor help entries are pinned to real buffer-local mappings.
-Cleanup removes the transient confirmation and copy notice at workbench
-close. No unresolved correctness, regression, security, privacy,
-data-integrity, public-contract, or scope issue remains for this local review.
+No unresolved correctness, regression, security, privacy, data-integrity,
+public-contract, or scope issue remains for this local review.
 
 ## Findings
 
@@ -44,69 +39,60 @@ None blocking.
 
 Non-blocking observations retained from the handoff:
 
-- A single editor `Esc` waits for the existing `timeoutlen` because the
-  global `<Esc><Esc>` quit mapping shares the prefix. This is an accepted,
-  PTY-verified interaction tradeoff and does not change navigation/settings
-  quit behavior.
-- Auto-copy intentionally writes the configured local system clipboard. No
-  clipboard contents, selection text, prompt state, or mode state is
-  persisted or transferred remotely.
-- The confirmation float takes focus in Normal mode, so cancelling from a
-  modified Insert-mode buffer returns to the editor in Normal mode; content,
-  cursor position, and modified state remain intact.
+- `bin/ohc` and `bin/novim-dev` intentionally duplicate the bounded launcher
+  mechanics because the pre-release package allowlist stages only
+  `bin/novim-dev`; consolidation belongs to the TASK-017 package migration.
+- The `0.1.7-dev` version semantics remain unchanged by design; the public
+  `v1.0.0` bump is TASK-019 scope.
+- Runtime and installed-command invariance evidence is local-machine evidence,
+  not hosted, production, recovery, or customer-acceptance evidence.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Regular file opens editable while Preview remains read-only | PASS | `workbench.lua:645-690`; existing open-file and TASK-014 focused/smoke tests pass; PTY observed the editable file buffer. |
-| Completed mouse selection copies exactly and remains usable | PASS | `workbench.lua:782-798,970-976`; focused test verifies exact `+` text, Visual reselect, plain-click no-op, and explicit `+` yank; PTY verifies the SGR selection. |
-| No auto-copy in read-only or keyboard-only paths | PASS | `workbench.lua:732-747,782-790`; focused test covers Preview, Diff, keyboard selection, and plain click. |
-| Direct Esc Preview return from Normal/Insert/Visual | PASS | `workbench.lua:948-989`; focused mapping/handler test and native PTY checks cover all three modes and same-file Preview restoration. |
-| Modified-buffer confirmation and reversible cancel | PASS | `workbench.lua:830-960`; focused test and PTY cover confirmation, Esc/n cancellation, Enter/y confirmation, intact content/modified state, and no disk write. |
-| In-memory buffer recovery after confirmed return | PASS | `workbench.lua:800-827`; focused and smoke tests verify the loaded modified buffer is restored on reopen. |
-| Conditional statusline/help guidance | PASS | `config/nvim/init.lua:356-374`, `keymaps.lua:41-44`; focused test verifies normal/modified/visual rendered hints, no navigation leak, and documentation-to-mapping correspondence; PTY displays both hints. |
-| Existing boundaries and safe quit remain intact | PASS | Candidate implementation touches only `workbench.lua`, `init.lua`, and `keymaps.lua`; full integration, package, smoke, version, and installed-release checks pass. No Source Control/launcher/release mutation was found. |
-| Focused and full local validation | PASS | Independent `./tests/run_tests.sh`: 59/59 integration, offline package suite, and 9/9 smoke; Lua/bash syntax, JSON, both version checks, PTY 17/17, and `git diff --check` pass. |
+| `bin/ohc` is executable; external-cwd and symlink launch resolve bundled config | PASS | `stat` confirms mode `755`; smoke Step 3.1/3.2 performs real headless launches from an external directory and through symlinked `ohc`, asserting the checkout config and isolated runtime roots. |
+| Public and compatibility version/help identities are correct and non-interactive | PASS | Direct `ohc --version`/`--help` and `novim-dev --version`/`--help` checks passed. Outputs identify `oh-my-code`/`ohc`, `novim-dev` compatibility status, `0.1.7-dev`, usage, and the Neovim engine; flags exit before editor startup. |
+| `ohc --headless` forwards flags and keeps writable runtime paths isolated without normal network activity | PASS | Smoke Step 3.1 asserts config, data, state, and cache under the checkout boundary. Static launcher inspection found no network/update path; the full validation ran locally/offline. |
+| File arguments and Neovim flags pass through both command names without workbench regression | PASS | Smoke Step 4 asserts one fixture file reaches Neovim with the expected real path through both launchers; headless config flags run through both, and the integration suite passes unchanged workbench behavior. |
+| Focused smoke and existing package coverage are green | PASS | `./tests/run_tests.sh`: 59/59 integration tests, offline package suite, and 9/9 smoke tests under the public `ohc` launcher; smoke covers public command, alias, external cwd, symlink, isolation, passthrough, cleanup, and installed `novim` independence. |
+| `bin/novim`, installed `novim`, and normal Neovim config remain invariant | PASS | Independent before/after snapshots kept `bin/novim` at SHA-256 `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`, installed `novim` at `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, installed output at `novim 0.1.7`/`powered by NVIM v0.12.5`, and the normal config tree absent before and after. |
 
 ## Validation performed
 
-- Confirmed before delivery that the checkout was
-  `task/TASK-014-auto-copy-preview-exit`, clean, and exactly one implementation
-  commit plus one review-record commit ahead of
-  `origin/task/TASK-014-auto-copy-preview-exit` at `779749a`; `origin/main`
-  was `2f72937` and was an ancestor of the candidate.
-- Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
-  task, backlog, prior review, product/architecture records, ADR-005, and the
-  complete candidate diff.
-- Inspected the actual six-file implementation handoff commit and confirmed
-  the product changes do not touch Source Control, launcher, package, or
-  installed-release files.
-- Ran `./tests/run_tests.sh` independently: 59/59 integration tests passed,
-  offline package tests passed with source/installed invariance, 9/9 smoke
-  tests passed, and no fixture residue remained.
-- Ran `luajit -bl` on all changed Lua/test files, `bash -n` on launcher,
-  package, and test scripts, `python3 -m json.tool docs/project.json`, both
-  development/installed version checks, `git diff --check`, and the local
-  native PTY validation (`/tmp/pty_task014.py`): all passed.
-- Pushed the reviewed branch, opened PR #25, confirmed it was
-  `MERGEABLE`/`CLEAN` with no reported checks, merged it, and fetched
-  `origin/main`; the remote default branch now contains the reviewed
-  implementation and review record at `7972460`.
+- Read `AGENTS.md`, `docs/repository.md`, `project-state.md`,
+  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, the prior
+  `docs/reviews/latest-review.md`, ADR-006, product, architecture, and local
+  distribution records.
+- Confirmed the task branch is `task/TASK-015-oh-my-code-identity`, the
+  expected baseline is an ancestor of the candidate, the working tree is
+  clean, and the candidate branch is not present on `origin`.
+- Inspected the complete implementation diff `b5efa71..75dc882` and the full
+  task delta from `origin/main`; no changes were found under `config/nvim/`,
+  `bin/novim`, `bin/novim-dev-package`, `tests/run_package_tests.sh`, or
+  `tests/run_tests.sh`.
+- Ran `bash -n bin/ohc bin/novim-dev tests/run_smoke_tests.sh
+  tests/run_tests.sh tests/run_package_tests.sh`, `luajit -bl
+  tests/test_smoke.lua`, `git diff --check`, direct CLI checks, and
+  `./tests/run_tests.sh`; all passed.
+- Rechecked before/after hashes and outputs around the complete validation;
+  `~/.local/bin/novim` remained independent and no normal Neovim config was
+  created or modified.
 
 All evidence above is local review evidence. It is not hosted, production,
 recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`ACCEPTED` after lightweight PR #25 merge. The reviewed candidate and review
-record are contained in `origin/main` at merge commit `7972460`; the complete
-local validation evidence is recorded above. Remote checks were optional and
-none were reported. No hosted, production, recovery, or customer-acceptance
-claim is made.
+`APPROVED` for lightweight delivery. The reviewed implementation is still
+local on `task/TASK-015-oh-my-code-identity`; no PR, merge, repository rename,
+tag, release, or hosted installer action has occurred. Acceptance must wait
+until the reviewed head is delivered through the repository's configured PR
+flow and the remote default branch contains it.
 
 ## Next action
 
-TASK-014 is complete and the planned backlog through TASK-014 is exhausted.
-No successor task is issued; new work requires product direction from the
-user before another task is planned.
+Commit this review record, push the task branch, open one PR targeting
+`origin/main`, and merge promptly if it is mergeable and no explicit required
+check blocks it. Then verify the remote default branch before reconciling
+TASK-015 as `ACCEPTED` and issuing TASK-016.
