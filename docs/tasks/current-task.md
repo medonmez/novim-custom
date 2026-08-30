@@ -6,7 +6,7 @@ Status: `PLANNED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-013-local-git-writes`
-Expected baseline: `915624c` (`origin/main`)
+Expected baseline: `9006898` (`origin/main`)
 Pull request: `NOT_OPEN`
 
 ## Outcome
@@ -137,7 +137,7 @@ local staged commit with an explicitly entered message.
 ## Implementation handoff
 
 Implement TASK-013 only on `task/TASK-013-local-git-writes`, created from
-verified `origin/main` baseline `915624c`. Return a local
+verified `origin/main` baseline `9006898`. Return a local
 `READY_FOR_REVIEW` handoff with the implementation commit and validation
 evidence. Do not push, open a PR, merge, reconcile acceptance records, or mark
 the task accepted as the implementer.

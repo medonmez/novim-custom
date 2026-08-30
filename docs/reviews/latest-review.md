@@ -114,5 +114,5 @@ merge.
 
 TASK-012 is complete. Durable records are reconciled and TASK-013 is now the
 single actionable planned successor on `task/TASK-013-local-git-writes` from
-`origin/main` `915624c`. The implementation branch and PR remain traceable as
+`origin/main` `9006898`. The implementation branch and PR remain traceable as
 PR #21. TASK-013 must remain the file-level local stage/unstage/commit slice.
