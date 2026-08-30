@@ -89,3 +89,23 @@ The next workbench milestone is split into three implementation slices:
 
 Comparing selected branches or historical commits remains future scope and is
 not part of this milestone.
+
+## Successor brief (proposed, not yet accepted)
+
+The next usability milestone requested by the user is to make the workbench
+remember independent Files and Git Diff pane geometry, then make Settings act
+like a focused option menu rather than a freely navigable text buffer. The
+Settings interaction should use a visible selected-control arrow; Up/Down
+should move only between controls; Left/Right should change the theme only
+when the theme control is selected; Space should activate the selected
+control; `Esc` should close immediately and be documented; and a top-right
+mouse close affordance should be available.
+
+The requested Git direction is a terminal version of the VS Code Source
+Control workflow: current changes/status above, current-branch commit and
+merge history below, and selectable history entries. The current accepted
+product contract remains read-only until the history comparison and mutation
+boundary decisions are resolved. The proposed first write-capable slice is
+local stage/unstage plus a user-entered local staged commit; push, pull, merge,
+rebase, branch checkout, discard, amend, and remote synchronization remain
+excluded unless separately authorized.

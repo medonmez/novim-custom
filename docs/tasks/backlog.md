@@ -16,23 +16,51 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 7 | TASK-007 | Start quickly with a root-only lazy project browser and session-only folder expansion | ACCEPTED | TASK-006 (accepted) |
 | 8 | TASK-008 | Add six built-in themes, settings key help, immediate settings close, and reliable mouse pane resizing | ACCEPTED | TASK-007 (accepted) |
 | 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | ACCEPTED | TASK-008 (accepted) |
+| 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | PLANNED | TASK-009 (accepted) |
+| 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | PROPOSED | TASK-010 (accepted) |
+| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable current-branch history | BLOCKED | TASK-011 (accepted); history decisions pending |
+| 13 | TASK-013 | Add local staging, unstage actions, commit-message input, and local staged commit | BLOCKED | TASK-012 (accepted); Git mutation boundary pending |
 
-TASK-001 through TASK-009 are accepted. The planned backlog is exhausted; the
-next slice requires new product direction before a successor task is planned.
+TASK-010 is the only actionable current task. TASK-011 is the next bounded
+successor. TASK-012 and TASK-013 are recorded for the requested Git direction
+but cannot be implemented until the open history and mutation decisions are
+resolved; no later task may absorb those features incidentally.
 
-## Task notes
+## Accepted task notes
 
-- `TASK-002` is intentionally read-only: it must not add stage, commit, push,
-  discard, or other Git mutations.
-- `TASK-003` must make the settings and dot-folder behavior observable without
-  requiring a plugin manager.
-- The workbench should remain usable with the existing local Neovim/runtime
-  dependencies; new dependencies need a separate justification.
-- `TASK-007` must remove recursive project scanning from startup while
-  retaining safe dot-folder filtering and read-only source preview behavior.
-- `TASK-008` must use application-owned palettes and actual mappings; it must
-  not introduce a plugin manager or hide a slow synchronous refresh behind the
-  settings modal.
-- `TASK-009` must keep the changed-file list visible beside old/new panes and
-  preserve readable handling for binary, deleted, renamed, and untracked
-  files.
+- `TASK-002` through `TASK-009` preserve the initial local, read-only Git
+  contract: no stage, commit, push, merge, rebase, discard, or plugin manager
+  was introduced.
+- The existing workbench has one Files boundary and two Diff boundaries, all
+  with application-owned minimum-width clamps. TASK-010 must preserve those
+  interaction guarantees while adding logical persistence.
+- Settings currently persist theme and dot-folder visibility in isolated state;
+  TASK-011 must preserve both values and make focus state visible and
+  testable.
+
+## New task notes
+
+- `TASK-010` stores logical per-view geometry, not transient Neovim window or
+  buffer IDs. It must survive view switching and a later local launch while
+  clamping safely to the current terminal width.
+- `TASK-011` must ensure Up/Down changes only the selected Settings control,
+  Left/Right changes theme only while the theme row is selected, and Space
+  activates the selected control. The Settings panel must visibly document
+  `Esc` close and expose a top-right mouse close control.
+- `TASK-012` should use a horizontal split inside the left Git area: current
+  changes/status above and current-branch history below. It must not silently
+  check out or mutate a branch. The exact history graph and commit-selection
+  baseline are open decisions.
+- `TASK-013` is intentionally blocked pending explicit confirmation that the
+  first write-capable Git surface is limited to local stage/unstage/commit.
+  Push, pull, merge, rebase, branch checkout, discard, amend, and remote
+  synchronization remain excluded unless separately authorized.
+
+## Preserved boundaries
+
+- No plugin dependency is required for these slices.
+- No source, credentials, or Git metadata leave the machine by default.
+- The installed `novim`, normal Neovim configuration, and upstream-facing
+  command remain unchanged.
+- Local tests and local branches are not hosted, production, recovery, or
+  customer-acceptance evidence.
