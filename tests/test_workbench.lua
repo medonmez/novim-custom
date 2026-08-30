@@ -1489,6 +1489,16 @@ local function lhs_spellings(key)
   return { key }
 end
 
+--- Fetch the Normal-mode buffer-local callback registered for a mapping lhs.
+local function buffer_map_callback(buf, lhs)
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, "n")) do
+    if map.lhs == lhs then
+      return map.callback
+    end
+  end
+  return nil
+end
+
 function tests.test_theme_catalog_defaults_and_application()
   local settings = require("novim.settings")
   local themes = require("novim.themes")
@@ -1786,6 +1796,294 @@ function tests.test_settings_single_esc_close_restores_workbench_focus()
   assert_eq(vim.api.nvim_get_current_win(), st.win_left, "q must restore workbench focus")
 
   workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_settings_focus_indicator_rendering_and_movement()
+  local workbench = require("novim.workbench")
+  local settings_ui = require("novim.settings_ui")
+  workbench.close()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  workbench.open_settings()
+  assert_true(settings_ui.is_open(), "settings panel must be open")
+  local buf = settings_ui.get_buf()
+  assert_true(buf ~= nil, "settings buffer must be available")
+
+  local function indicator_rows()
+    local rows = {}
+    for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      if line:find("▶", 1, true) then
+        table.insert(rows, i)
+      end
+    end
+    return rows
+  end
+
+  local function control_rows()
+    local dot_row, theme_row, help_row
+    for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+      if line:find("Show Dot-Folders", 1, true) then dot_row = i end
+      if line:find("Theme:", 1, true) then theme_row = i end
+      if line:find("Key Bindings (Workbench)", 1, true) then help_row = i end
+    end
+    return dot_row, theme_row, help_row
+  end
+
+  -- Opens with exactly one visible indicator, on the first control
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "settings must open with the first control selected")
+  local dot_row, theme_row, help_row = control_rows()
+  assert_true(dot_row ~= nil and theme_row ~= nil and help_row ~= nil,
+    "both controls and the help section must render")
+  local marked = indicator_rows()
+  assert_eq(#marked, 1, "exactly one selected-control indicator must be visible")
+  assert_eq(marked[1], dot_row, "the initial indicator must mark the dot-folder control")
+
+  -- Focus movement keeps exactly one indicator and never leaves the controls
+  local cursor_before = vim.api.nvim_win_get_cursor(settings_ui.get_win())
+  settings_ui.move_focus(1)
+  assert_eq(settings_ui.get_selected_control(), "theme",
+    "Down must move focus to the theme control")
+  marked = indicator_rows()
+  assert_eq(#marked, 1, "exactly one indicator must remain visible after movement")
+  assert_eq(marked[1], theme_row, "the indicator must move to the theme control row")
+
+  settings_ui.move_focus(1)
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "Down from the last control must wrap to the first")
+  settings_ui.move_focus(-1)
+  assert_eq(settings_ui.get_selected_control(), "theme",
+    "Up from the first control must wrap to the last")
+
+  -- Movement never moves the cursor through the rendered help section
+  local cursor_after = vim.api.nvim_win_get_cursor(settings_ui.get_win())
+  assert_true(cursor_before[1] == cursor_after[1] and cursor_before[2] == cursor_after[2],
+    "focus movement must not move the buffer cursor")
+  marked = indicator_rows()
+  assert_true(marked[1] < help_row,
+    "the indicator must never rest on a help or informational line")
+
+  -- The real Up/Down mappings drive the same focus model
+  local down_cb = buffer_map_callback(buf, "<Down>")
+  local up_cb = buffer_map_callback(buf, "<Up>")
+  assert_true(down_cb ~= nil and up_cb ~= nil, "Up/Down must be mapped in the settings buffer")
+  down_cb()
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "the Down mapping must move focus to the next control")
+  up_cb()
+  assert_eq(settings_ui.get_selected_control(), "theme",
+    "the Up mapping must move focus to the previous control")
+
+  settings_ui.close()
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_settings_arrow_theme_only_and_space_activation()
+  local workbench = require("novim.workbench")
+  local settings_ui = require("novim.settings_ui")
+  local settings = require("novim.settings")
+  workbench.close()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  settings.set("show_dotfiles", false)
+  settings.set("theme", "tokyo_night")
+
+  workbench.open({ view = "files" })
+  workbench.open_settings()
+  assert_true(settings_ui.is_open(), "settings panel must be open")
+  local buf = settings_ui.get_buf()
+  local right_cb = buffer_map_callback(buf, "<Right>")
+  local left_cb = buffer_map_callback(buf, "<Left>")
+  local space_cb = buffer_map_callback(buf, " ")
+  assert_true(right_cb ~= nil and left_cb ~= nil and space_cb ~= nil,
+    "Left/Right/Space must be mapped in the settings buffer")
+
+  -- Left/Right must not change the theme while a non-theme control is selected
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "the panel opens with the dot-folder control selected")
+  right_cb()
+  assert_eq(settings.get("theme"), "tokyo_night",
+    "Right must not change the theme while the dot-folder control is selected")
+  left_cb()
+  assert_eq(settings.get("theme"), "tokyo_night",
+    "Left must not change the theme while the dot-folder control is selected")
+
+  -- While the theme control is selected, Left/Right cycle the persisted theme
+  settings_ui.move_focus(1)
+  assert_eq(settings_ui.get_selected_control(), "theme", "focus must reach the theme control")
+  right_cb()
+  assert_eq(settings.get("theme"), "nord",
+    "Right with the theme control selected must persist the next theme")
+  left_cb()
+  assert_eq(settings.get("theme"), "tokyo_night",
+    "Left with the theme control selected must persist the previous theme")
+
+  -- Space activates the selected control in both directions
+  space_cb()
+  assert_eq(settings.get("theme"), "nord",
+    "Space on the theme control must activate it (next theme)")
+  settings_ui.move_focus(-1)
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "focus must return to the dot-folder control")
+  space_cb()
+  assert_eq(settings.get("show_dotfiles"), true,
+    "Space on the dot-folder control must toggle visibility on")
+  space_cb()
+  assert_eq(settings.get("show_dotfiles"), false,
+    "Space on the dot-folder control must toggle visibility off")
+
+  settings_ui.close()
+  workbench.close()
+  settings.set("show_dotfiles", false)
+  settings.set("theme", "tokyo_night")
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_settings_focus_survives_failed_settings_writes()
+  local workbench = require("novim.workbench")
+  local settings_ui = require("novim.settings_ui")
+  local settings = require("novim.settings")
+  workbench.close()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  settings.set("show_dotfiles", false)
+  settings.set("theme", "tokyo_night")
+
+  local path = settings.get_settings_file_path()
+  os.remove(path)
+  -- Create a directory at settings file path to force a write error
+  vim.fn.mkdir(path, "p")
+
+  settings.reset_cache()
+  workbench.open({ view = "files" })
+  workbench.open_settings()
+  assert_true(settings_ui.is_open(), "settings panel must open even when writes fail")
+  local buf = settings_ui.get_buf()
+
+  local function panel_text()
+    return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  end
+
+  -- Space on the dot-folder control fails the synchronous save, renders the
+  -- error, and leaves the effective value and the focus state coherent
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "a fresh panel must select the dot-folder control")
+  local space_cb = buffer_map_callback(buf, " ")
+  assert_true(space_cb ~= nil, "Space must be mapped in the settings buffer")
+  space_cb()
+  assert_eq(settings.get("show_dotfiles"), false,
+    "a failed write must not change the effective value")
+  assert_eq(settings_ui.get_selected_control(), "dotfiles",
+    "a failed write must leave the selected control unchanged")
+  assert_true(panel_text():find("Changes could not be persisted", 1, true) ~= nil,
+    "a failed dot-folder write must render the persistent error line")
+
+  -- Theme activation through the same boundary: error rendered, theme kept,
+  -- focus still on the theme control
+  settings_ui.move_focus(1)
+  assert_eq(settings_ui.get_selected_control(), "theme", "focus must reach the theme control")
+  local right_cb = buffer_map_callback(buf, "<Right>")
+  assert_true(right_cb ~= nil, "Right must be mapped in the settings buffer")
+  right_cb()
+  assert_eq(settings.get("theme"), "tokyo_night",
+    "a failed theme write must keep the effective theme")
+  assert_eq(settings_ui.get_selected_control(), "theme",
+    "a failed theme write must keep the theme control selected")
+  assert_true(panel_text():find("Failed to save theme", 1, true) ~= nil,
+    "a failed theme write must render its error line")
+
+  -- The error stays visible while focus moves between controls
+  settings_ui.move_focus(-1)
+  assert_true(panel_text():find("Failed to save theme", 1, true) ~= nil,
+    "the last write error must remain rendered across focus movement")
+
+  settings_ui.close()
+  workbench.close()
+  vim.fn.delete(path, "rf")
+  settings.reset_cache()
+  settings.set("show_dotfiles", false)
+  settings.set("theme", "tokyo_night")
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_settings_mouse_close_affordance()
+  local workbench = require("novim.workbench")
+  local settings_ui = require("novim.settings_ui")
+  local settings = require("novim.settings")
+  local themes = require("novim.themes")
+  workbench.close()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  settings.set("show_dotfiles", false)
+  settings.set("theme", "tokyo_night")
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+  workbench.open_settings()
+  assert_true(settings_ui.is_open(), "settings panel must be open")
+
+  local lines = vim.api.nvim_buf_get_lines(settings_ui.get_buf(), 0, -1, false)
+  -- The affordance renders visibly in the top-right of the title row
+  assert_true(lines[1]:find("Close [x]", 1, true) ~= nil,
+    "the title row must render the mouse close affordance")
+  assert_eq(#lines[1], vim.api.nvim_win_get_width(settings_ui.get_win()),
+    "the close affordance must sit flush with the right edge of the panel")
+
+  -- Clicking the affordance closes through the safe path without changing
+  -- any setting and restores workbench focus
+  local theme_before = settings.get("theme")
+  local dots_before = settings.get("show_dotfiles")
+  settings_ui.handle_click(1, #lines[1], settings_ui.get_win())
+  assert_true(not settings_ui.is_open(), "clicking the close affordance must close settings")
+  assert_eq(vim.api.nvim_get_current_win(), st.win_left,
+    "the close affordance must restore workbench focus")
+  assert_eq(settings.get("theme"), theme_before,
+    "closing via the affordance must not change the theme")
+  assert_eq(settings.get("show_dotfiles"), dots_before,
+    "closing via the affordance must not change dot-folder visibility")
+
+  -- Reopen: clicks off the controls never close the panel; clicking a
+  -- control row focuses it
+  workbench.open_settings()
+  assert_true(settings_ui.is_open(), "settings panel must reopen")
+  local buf = settings_ui.get_buf()
+  lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  local theme_row
+  for i, line in ipairs(lines) do
+    if line:find("Theme:", 1, true) then theme_row = i end
+  end
+  assert_true(theme_row ~= nil, "the theme control must render")
+  settings_ui.handle_click(3, 1, settings_ui.get_win())
+  assert_true(settings_ui.is_open(), "clicking a non-control row must not close settings")
+  settings_ui.handle_click(theme_row, 6, settings_ui.get_win())
+  assert_eq(settings_ui.get_selected_control(), "theme",
+    "clicking the theme row must focus the theme control")
+  assert_true(settings_ui.is_open(), "clicking a control row must not close settings")
+
+  settings_ui.close()
+  workbench.close()
+  settings.set("show_dotfiles", false)
+  settings.set("theme", "tokyo_night")
+  themes.apply("tokyo_night")
   vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
   cleanup_dir(fixture)
 end
