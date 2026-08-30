@@ -422,6 +422,114 @@ function smoke_tests.test_smoke_source_navigation_editing_and_buffer_preservatio
 end
 
 -- =========================================================================
+-- 3b. TASK-014 Editor Auto-Copy & Direct Preview Exit Regression
+-- =========================================================================
+
+function smoke_tests.test_smoke_editor_autocopy_esc_preview_and_unsaved_confirmation()
+  local fixture = create_smoke_project_fixture()
+  local workbench = require("novim.workbench")
+  workbench.close()
+
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  local saved_clipboard = vim.fn.getreg("+")
+
+  workbench.open({ view = "files" })
+  vim.api.nvim_feedkeys("", "x", false)
+  local state = workbench.get_state()
+  local target_entry, target_idx
+  for idx, entry in ipairs(state.project_files) do
+    if not entry.is_dir and entry.name == "main.lua" then
+      target_entry = entry
+      target_idx = idx
+      break
+    end
+  end
+  assert_true(target_entry ~= nil, "fixture must contain main.lua")
+
+  -- Regular files still open as real editable buffers.
+  workbench.select_file(target_idx)
+  assert_true(workbench.open_file(target_entry), "opening a regular file must succeed")
+  local edit_buf = vim.api.nvim_win_get_buf(state.win_right)
+  assert_eq(vim.bo[edit_buf].buftype, "", "the editor buffer must be a real file buffer")
+  assert_true(workbench.editing_file_buffer(), "the editor pane must be recognized")
+
+  -- A keyboard-only selection must not auto-copy; the mouse release must.
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("gg0ve", true, false, true), "nx", false)
+  assert_eq(vim.fn.getreg("+"), saved_clipboard,
+    "a keyboard-only selection must not auto-copy")
+  local release_cb
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(edit_buf, "v")) do
+    if map.lhs == "<LeftRelease>" then release_cb = map.callback end
+  end
+  assert_true(release_cb ~= nil, "<LeftRelease> must be mapped for the auto-copy")
+  assert_true(release_cb(), "the completed mouse selection must auto-copy")
+  assert_eq(vim.fn.getreg("+"), "local",
+    "the clipboard must hold exactly the selected text")
+  assert_eq(vim.fn.mode(), "v", "the selection must stay usable after the copy")
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+
+  -- The editor statusline documents the new guidance.
+  local hints = _G.get_editor_hints()
+  assert_true(hints:find("Mouse Copy", 1, true) ~= nil,
+    "the editor statusline must document the mouse auto-copy")
+  assert_true(hints:find("Esc Preview", 1, true) ~= nil,
+    "the editor statusline must document the Esc Preview exit")
+
+  -- Modified buffer: Esc asks, Esc cancels, Enter returns without saving.
+  vim.api.nvim_buf_set_lines(edit_buf, 0, 0, false, { "-- SMOKE UNSAVED EDIT" })
+  local esc_cb
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(edit_buf, "n")) do
+    if map.lhs == "<Esc>" then esc_cb = map.callback end
+  end
+  assert_true(esc_cb ~= nil, "Esc must be mapped in the editor buffer")
+  assert_true(esc_cb(), "the modified-buffer Esc must open the confirmation")
+  state = workbench.get_state()
+  assert_true(state.preview_return.open, "the confirmation must open for unsaved changes")
+  local cancel_cb
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(state.preview_return.buf, "n")) do
+    if map.lhs == "<Esc>" then cancel_cb = map.callback end
+  end
+  assert_true(cancel_cb ~= nil and cancel_cb(), "Esc must cancel and keep editing")
+  assert_eq(vim.api.nvim_win_get_buf(state.win_right), edit_buf,
+    "cancelling must keep the editor buffer in the right pane")
+  assert_true(vim.bo[edit_buf].modified, "cancelling must keep the modified flag")
+  assert_true(esc_cb(), "the modified-buffer Esc must open the confirmation again")
+  state = workbench.get_state()
+  local confirm_cb
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(state.preview_return.buf, "n")) do
+    if map.lhs == "<CR>" then confirm_cb = map.callback end
+  end
+  assert_true(confirm_cb ~= nil and confirm_cb(), "Enter must confirm the return")
+  state = workbench.get_state()
+  assert_eq(vim.api.nvim_win_get_buf(state.win_right), state.buf_right,
+    "the confirmed return must restore the Preview")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(state.buf_right, 0, -1, false), "\n")
+    :find("# File: main.lua", 1, true) ~= nil, "the Preview must show the same file")
+  assert_true(vim.api.nvim_buf_is_loaded(edit_buf) and vim.bo[edit_buf].modified,
+    "the edited buffer must stay loaded, unsaved, for later recovery")
+
+  local f = io.open(fixture .. "/main.lua", "r")
+  local disk = f and f:read("*a") or ""
+  if f then f:close() end
+  assert_true(disk:find("SMOKE UNSAVED EDIT", 1, true) == nil,
+    "nothing may be auto-saved to disk")
+
+  -- Reopening recovers the exact in-memory buffer with its edits.
+  assert_true(workbench.open_file(target_entry), "reopening must succeed")
+  assert_eq(vim.api.nvim_win_get_buf(state.win_right), edit_buf,
+    "reopening must restore the same in-memory buffer")
+  assert_eq(vim.api.nvim_buf_get_lines(edit_buf, 0, 1, false)[1], "-- SMOKE UNSAVED EDIT",
+    "the unsaved edit must survive the preview round-trip")
+
+  workbench.close()
+  vim.api.nvim_buf_delete(edit_buf, { force = true })
+  vim.fn.setreg("+", saved_clipboard)
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+-- =========================================================================
 -- 4. Git Diff Rendering & Byte-for-Byte Git Invariance
 -- =========================================================================
 
@@ -915,6 +1023,7 @@ local test_order = {
   "test_smoke_launcher_startup_and_isolated_paths",
   "test_smoke_workbench_two_pane_layout_and_views",
   "test_smoke_source_navigation_editing_and_buffer_preservation",
+  "test_smoke_editor_autocopy_esc_preview_and_unsaved_confirmation",
   "test_smoke_git_diff_rendering_and_read_only_invariance",
   "test_smoke_settings_persistence_dotfile_toggle_and_error_recovery",
   "test_smoke_pane_layout_persistence_and_clamping",

@@ -34,6 +34,15 @@ M.workbench = {
   { display = "q or Esc Esc", keys = { "q", "<Esc><Esc>" }, desc = "Quit the workbench" },
 }
 
+--- Editable file buffer shortcuts (TASK-014). These mappings live on the
+--- regular file buffer opened in the right editor pane, not on the
+--- workbench navigation/preview scratch buffers. Each entry lists the
+--- mapped keys and the editor modes that carry them.
+M.editor = {
+  { display = "Mouse Selection", keys = { "<LeftRelease>" }, modes = { "n", "v" }, desc = "Auto-copy selection to system clipboard" },
+  { display = "Esc", keys = { "<Esc>" }, modes = { "n", "i", "v" }, desc = "Return to Preview (unsaved changes ask first)" },
+}
+
 --- Settings panel shortcuts.
 M.settings = {
   { display = "j / k or ↑ / ↓", keys = { "j", "k", "<Up>", "<Down>" }, desc = "Move control selection" },

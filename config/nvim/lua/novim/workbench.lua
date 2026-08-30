@@ -14,6 +14,7 @@ local on_left_click
 local on_left_drag
 local on_left_release
 local install_diff_middle_maps
+local install_editor_maps
 
 -- State
 local state = {
@@ -61,6 +62,12 @@ local state = {
   -- across launches; the notice survives refreshes until the next attempt.
   write_notice = nil, -- { level = "ok" | "error", text = string }
   commit_input = nil, -- { buf, win, prev_win, error }
+
+  -- Editor interaction state (TASK-014): a transient notice about the last
+  -- mouse auto-copy attempt and the bounded unsaved-changes confirmation.
+  -- Both are session-only and never persisted.
+  copy_notice = nil,    -- { level = "ok" | "error", text = string }
+  preview_return = nil, -- { buf, win, prev_win }
 
   header_line_count = 4,
   buf_left = nil,
@@ -673,6 +680,13 @@ function M.open_file(entry)
     vim.wo[state.win_right].foldenable = false
   end
 
+  -- TASK-014 editor interaction on the editable file buffer: a completed
+  -- mouse selection auto-copies to the local system clipboard and Esc
+  -- returns directly to the same file's Preview from every editor mode.
+  if vim.api.nvim_win_is_valid(state.win_right) then
+    install_editor_maps(vim.api.nvim_win_get_buf(state.win_right))
+  end
+
   return true
 end
 
@@ -705,6 +719,275 @@ local function set_preview_window_options(win, role)
     vim.wo[win].statusline = " %f %=[Tab] Explorer  [?] Help  [Esc Esc] Quit "
   end
 end
+
+-- =========================================================================
+-- Editor interaction (TASK-014): mouse auto-copy and direct Preview exit
+-- =========================================================================
+
+--- The editable regular-file buffer currently shown in the right pane, or
+--- nil. The application-owned Preview scratch buffer, nofile/scratch
+--- buffers, and unnamed buffers never qualify, so auto-copy and the direct
+--- Preview exit stay bound to the editable file buffer only.
+---@return integer|nil buf
+local function editable_editor_buffer()
+  if not state.is_open or not state.win_right
+    or not vim.api.nvim_win_is_valid(state.win_right) then
+    return nil
+  end
+  local buf = vim.api.nvim_win_get_buf(state.win_right)
+  if buf == state.buf_right then
+    return nil
+  end
+  if vim.bo[buf].buftype ~= "" then
+    return nil
+  end
+  if vim.api.nvim_buf_get_name(buf) == "" then
+    return nil
+  end
+  return buf
+end
+
+--- Whether the current buffer is the workbench editable file buffer. Used by
+--- the bottom editor statusline hints to keep the new guidance scoped to the
+--- surface where the behavior exists.
+---@return boolean
+function M.editing_file_buffer()
+  local buf = editable_editor_buffer()
+  return buf ~= nil and buf == vim.api.nvim_get_current_buf()
+end
+
+--- Local clipboard provider seam. Checked before every auto-copy so an
+--- unavailable local system clipboard produces a bounded failure notice
+--- instead of a silent one. A function field so tests can simulate an
+--- unavailable provider without touching the real machine clipboard.
+function M._clipboard_provider_available()
+  local ok, exec = pcall(vim.fn["provider#clipboard#Executable"])
+  return ok and type(exec) == "string" and exec ~= ""
+end
+
+--- Record and echo one bounded, session-only copy notice.
+local function show_copy_notice(notice)
+  state.copy_notice = notice
+  local hl = (notice.level == "error") and "WarningMsg" or "String"
+  vim.api.nvim_echo({ { notice.text, hl } }, false, {})
+end
+
+--- Copy the completed mouse selection of the editable file buffer to the
+--- configured local system clipboard ("+). The mapping runs once at
+--- <LeftRelease>, so dragging never copies per event, a plain click (no
+--- selection) does nothing, and keyboard-only selections gain no automatic
+--- side effect. The yank mirrors the explicit Ctrl/Cmd copy and then
+--- reselects, so the selection stays active and usable afterwards.
+---@return boolean copied
+function M.copy_selection_to_clipboard()
+  local buf = editable_editor_buffer()
+  if not buf or vim.api.nvim_get_current_buf() ~= buf then
+    return false
+  end
+  local mode = vim.fn.mode()
+  if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
+    return false
+  end
+  if not M._clipboard_provider_available() then
+    show_copy_notice({ level = "error", text = "Mouse Copy: system clipboard unavailable" })
+    return false
+  end
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('"+ygv', true, false, true), "nx", false)
+  show_copy_notice({ level = "ok", text = "Mouse Copy: selection copied to system clipboard" })
+  return true
+end
+
+--- Restore the read-only Preview of the edited file in the right pane. The
+--- edited buffer is only hidden: it stays loaded in memory with its content
+--- and modified flag intact for later recovery/reopening. Nothing is saved
+--- or discarded here.
+local function restore_preview_buffer()
+  local buf = editable_editor_buffer()
+  if not buf or state.view_mode ~= "files" then
+    return false
+  end
+  local path = vim.api.nvim_buf_get_name(buf)
+  -- Keep the Preview on the same file the user was editing.
+  local selected = state.project_files[state.selected_project_index]
+  local selected_path = selected
+    and (selected.full_path or (state.root_dir .. "/" .. selected.path)) or nil
+  if selected_path ~= path then
+    for idx, entry in ipairs(state.project_files) do
+      local entry_path = entry.full_path or (state.root_dir .. "/" .. entry.path)
+      if entry_path == path then
+        state.selected_project_index = idx
+        break
+      end
+    end
+  end
+  M.render_right_pane()
+  if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
+    set_preview_window_options(state.win_right, "preview")
+  end
+  return true
+end
+
+local PREVIEW_RETURN_TITLE = " Unsaved changes "
+local PREVIEW_RETURN_LINE1 = " Enter / y: Return to Preview (without saving) "
+local PREVIEW_RETURN_LINE2 = " Esc / n: Keep editing "
+
+--- Whether the bounded unsaved-changes confirmation is currently open.
+---@return boolean
+function M.preview_return_confirm_open()
+  return state.preview_return ~= nil and state.preview_return.win ~= nil
+    and vim.api.nvim_win_is_valid(state.preview_return.win)
+end
+
+--- Close the unsaved-changes confirmation without saving or discarding
+--- anything and restore focus to the editor buffer.
+local function close_preview_return_confirm()
+  local pr = state.preview_return
+  if not pr then
+    return
+  end
+  state.preview_return = nil
+  if pr.win and vim.api.nvim_win_is_valid(pr.win) then
+    pcall(vim.api.nvim_win_hide, pr.win)
+  end
+  if pr.buf and vim.api.nvim_buf_is_valid(pr.buf) then
+    pcall(vim.api.nvim_buf_delete, pr.buf, { force = true })
+  end
+  if pr.prev_win and vim.api.nvim_win_is_valid(pr.prev_win) then
+    pcall(vim.api.nvim_set_current_win, pr.prev_win)
+  end
+end
+
+--- Confirm the bounded unsaved-changes confirmation: return to the same
+--- file's Preview without saving or discarding the in-memory buffer.
+local function confirm_preview_return()
+  if not M.preview_return_confirm_open() then
+    return false
+  end
+  close_preview_return_confirm()
+  return restore_preview_buffer()
+end
+
+--- Open the bounded unsaved-changes confirmation. The float takes focus;
+--- Enter/y confirms the return, Esc/n/q cancels and keeps editing with
+--- content, cursor context, and modified flag intact. The buffer is
+--- transient scratch state and is never persisted.
+local function open_preview_return_confirm()
+  if M.preview_return_confirm_open() then
+    vim.api.nvim_set_current_win(state.preview_return.win)
+    return true
+  end
+
+  local prev_win = vim.api.nvim_get_current_win()
+  local width = math.max(#PREVIEW_RETURN_LINE1, #PREVIEW_RETURN_LINE2) + 2
+  local height = 2
+  local row = math.max(1, math.floor((vim.o.lines - 8) / 2))
+  local col = math.max(1, math.floor((vim.o.columns - width) / 2))
+
+  local buf = fresh_buffer("[Workbench - Unsaved Changes]")
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buflisted = false
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { PREVIEW_RETURN_LINE1, PREVIEW_RETURN_LINE2 })
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+
+  local config = {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = PREVIEW_RETURN_TITLE,
+    title_pos = "center",
+  }
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, config)
+  if not ok or not win then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    return false
+  end
+
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].spell = false
+  state.preview_return = { buf = buf, win = win, prev_win = prev_win }
+  -- The confirmation is a key-choice float, not a text input: whatever mode
+  -- the editor was in, its Enter/y/Esc/n/q choices must be decisive, so the
+  -- float always takes focus in Normal mode and never inherits Insert.
+  vim.cmd("stopinsert")
+
+  local opts = { buffer = buf, silent = true, noremap = true }
+  vim.keymap.set("n", "<CR>", function() return confirm_preview_return() end, opts)
+  vim.keymap.set("n", "y", function() return confirm_preview_return() end, opts)
+  vim.keymap.set("n", "<Esc>", function()
+    close_preview_return_confirm()
+    return true
+  end, opts)
+  vim.keymap.set("n", "n", function()
+    close_preview_return_confirm()
+    return true
+  end, opts)
+  vim.keymap.set("n", "q", function()
+    close_preview_return_confirm()
+    return true
+  end, opts)
+  return true
+end
+
+--- Return from the editable file buffer directly to the same file's
+--- read-only Preview. A modified buffer first opens the bounded
+--- unsaved-changes confirmation; confirming returns without saving or
+--- discarding, cancelling keeps editing. Returns false when there is no
+--- editable file buffer to leave, in which case the caller keeps the
+--- default key behavior.
+---@return boolean handled
+function M.return_to_preview()
+  local buf = editable_editor_buffer()
+  if not buf then
+    return false
+  end
+  if M.preview_return_confirm_open() then
+    vim.api.nvim_set_current_win(state.preview_return.win)
+    return true
+  end
+  if vim.bo[buf].modified then
+    return open_preview_return_confirm()
+  end
+  return restore_preview_buffer()
+end
+
+--- Install the TASK-014 editor interaction maps on the editable regular
+--- file buffer: a completed mouse selection auto-copies once at release,
+--- and Esc returns directly to the same file's Preview from Insert, Normal,
+--- and Visual modes. All maps stay buffer-local; each handler falls back to
+--- the default key behavior when the workbench context is gone (for
+--- example after the workbench was closed without quitting), so Esc is
+--- never hijacked outside the workbench or in workbench navigation panes.
+install_editor_maps = function(buf)
+  local opts = { buffer = buf, silent = true, noremap = true }
+
+  -- Auto-copy once at the completed mouse selection.
+  vim.keymap.set({ "n", "v" }, "<LeftRelease>", function()
+    return M.copy_selection_to_clipboard()
+  end, opts)
+
+  -- Direct return to the same file's Preview from every editor mode.
+  local function esc_return()
+    if M.return_to_preview() then
+      return true
+    end
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+    return false
+  end
+  vim.keymap.set("n", "<Esc>", esc_return, opts)
+  vim.keymap.set("i", "<Esc>", esc_return, opts)
+  vim.keymap.set("v", "<Esc>", esc_return, opts)
+end
+
 
 -- =========================================================================
 -- Source Control (TASK-012): history graph pane and two-endpoint comparison
@@ -1951,6 +2234,8 @@ function M.show_help()
     "   Enter / Double-Click  Open regular file in editor",
     "   Space            Preview selected item",
     "   Left Click       Select item / switch tabs",
+    "   Mouse Select     Auto-copy selection (editable file buffer)",
+    "   Esc              Return to Preview (editable file buffer)",
     "   Tab / S-Tab      Switch between visible panes",
     "   Drag Divider     Resize adjacent panes with mouse",
     "   r                Refresh files and Git status",
@@ -2033,7 +2318,9 @@ function M.close(opts)
   -- workbench discards any open input and the last write notice without a
   -- Git mutation. Layout persistence is unaffected.
   close_commit_input()
+  close_preview_return_confirm()
   state.write_notice = nil
+  state.copy_notice = nil
   -- Persist the effective layout before any teardown path runs.
   save_current_view_geometry()
   local is_tab_mode = state.is_tab
@@ -2501,6 +2788,10 @@ function M.open(opts)
   -- Source Control entry starts with no transient notice.
   state.write_notice = nil
 
+  -- A fresh workbench launch starts with no transient copy notice; any
+  -- leftover unsaved-changes confirmation was already discarded by close.
+  state.copy_notice = nil
+
   -- Populate data
   M.refresh()
 end
@@ -2539,6 +2830,15 @@ function M.get_state()
       level = state.write_notice.level,
       text = state.write_notice.text,
     } or nil,
+    copy_notice = state.copy_notice and {
+      level = state.copy_notice.level,
+      text = state.copy_notice.text,
+    } or nil,
+    preview_return = {
+      open = M.preview_return_confirm_open(),
+      buf = state.preview_return and state.preview_return.buf or nil,
+      win = state.preview_return and state.preview_return.win or nil,
+    },
     commit_input = {
       open = M.commit_input_open(),
       buf = state.commit_input and state.commit_input.buf or nil,

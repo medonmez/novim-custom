@@ -4,10 +4,11 @@ Updated: 2026-08-30
 Repository: `novim-custom`
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `NONE` (backlog exhausted; awaiting product direction)
+Current task: `TASK-014` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-013-local-git-writes` (merged)
-Pull request: `https://github.com/medonmez/novim-custom/pull/23` (`MERGED`)
+Task branch: `task/TASK-014-auto-copy-preview-exit`
+Expected baseline: `2f72937134a3965a8c5294641c1589dd38a6a04c` (`origin/main`)
+Pull request: `NOT_OPEN`
 Last accepted task: `TASK-013`
 Last accepted commit: `f19e529c` (`origin/main` merge of PR #23)
 Last merged pull request: `https://github.com/medonmez/novim-custom/pull/23`
@@ -107,6 +108,12 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/23`
   transient user-entered message, bounded notices, and the three review
   corrections for history-pane `N`, clean-state notices, and selected-path
   preservation.
+- `TASK-014` is planned on `task/TASK-014-auto-copy-preview-exit` from
+  `origin/main` `2f72937`. It will make mouse-completed selections in editable
+  file buffers auto-copy to the local system clipboard, return directly to the
+  same file's Preview from every editor mode with `Esc`, ask for confirmation
+  when unsaved changes exist, and document the behavior in the bottom editor
+  statusline.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -117,15 +124,16 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/23`
 
 ## Active blockers
 
-- The planned backlog is exhausted. No product or dependency blocker exists;
-  a successor task requires new product direction from the user.
+- TASK-014 has no product or dependency blocker after the focused grill. Its
+  unsaved-buffer confirmation rule is explicit: confirming returns to Preview
+  without saving or discarding; cancelling stays in the editable buffer.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-No successor task is issued. Keep the accepted local Git write surface
-file-level and local, and preserve the full Source Control graph,
-two-endpoint comparison, and dependency boundaries when a new product slice
-is planned.
+Implement `TASK-014` on its isolated task branch, then return a local handoff
+for review. Preserve the existing preview/edit separation, standard explicit
+copy/save shortcuts, unsaved-buffer safety, Source Control behavior, and
+launcher/release boundaries.
 Local distribution and upstream sync remain documented in
 `docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.

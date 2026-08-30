@@ -3861,6 +3861,438 @@ function tests.test_commit_refresh_preserves_selected_change_path()
   cleanup_dir(fixture)
 end
 
+
+-- =========================================================================
+-- TASK-014 Tests: mouse auto-copy and direct Preview exit
+-- =========================================================================
+
+--- Collect the lhs strings of all buffer-local mappings of a buffer in one mode.
+local function editor_map_lhs(buf, mode)
+  local lhs_set = {}
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+    lhs_set[map.lhs] = true
+  end
+  return lhs_set
+end
+
+--- Fetch the buffer-local callback registered for a mapping lhs in one mode.
+local function editor_map_callback(buf, mode, lhs)
+  for _, map in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+    if map.lhs == lhs then
+      return map.callback
+    end
+  end
+  return nil
+end
+
+--- Stage a Visual selection with raw (noremap) keys, robust against any
+--- mode or pending-input state left by earlier tests: normalize to Normal
+--- with a raw Esc, drain, feed, and verify the Visual mode, retrying a
+--- bounded number of times before giving up.
+---@return boolean staged
+local function stage_visual_selection(keys)
+  for _ = 1, 3 do
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+    vim.api.nvim_feedkeys("", "x", false)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "nx", false)
+    local mode = vim.fn.mode()
+    if mode == "v" or mode == "V" or mode == "\22" then
+      return true
+    end
+  end
+  return false
+end
+
+--- Find the project entry of a regular file by name in the Files view.
+local function find_project_entry(st, name)
+  for idx, entry in ipairs(st.project_files) do
+    if not entry.is_dir and entry.name == name then
+      return idx, entry
+    end
+  end
+  return nil, nil
+end
+
+--- Open the Files workbench on a fresh fixture and open main.lua for editing.
+--- Returns the workbench state, the editor buffer, and the entry.
+local function open_editor_for_main_lua()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  workbench.open({ view = "files" })
+  -- Drain any stale async typeahead left by earlier tests so the mode-sensitive
+  -- feedkeys probes below execute against a clean input state.
+  vim.api.nvim_feedkeys("", "x", false)
+  local st = workbench.get_state()
+  local idx, entry = find_project_entry(st, "main.lua")
+  assert_true(idx ~= nil, "fixture must contain main.lua")
+  workbench.select_file(idx)
+  assert_true(workbench.open_file(entry), "opening a regular file must succeed")
+  local edit_buf = vim.api.nvim_win_get_buf(st.win_right)
+  assert_true(vim.bo[edit_buf].buftype == "", "the editor buffer must be a real file buffer")
+  assert_true(vim.bo[edit_buf].modifiable, "the editor buffer must be editable")
+  return workbench, fixture, old_cwd, st, edit_buf, entry
+end
+
+--- Tear one TASK-014 test down without touching the real clipboard contents.
+local function task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+  workbench.close()
+  if edit_buf and vim.api.nvim_buf_is_valid(edit_buf) then
+    vim.api.nvim_buf_delete(edit_buf, { force = true })
+  end
+  vim.fn.setreg("+", saved_clipboard)
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task014_mouse_selection_autocopies_exact_clipboard_text()
+  local workbench, fixture, old_cwd, st, edit_buf, entry = open_editor_for_main_lua()
+  local saved_clipboard = vim.fn.getreg("+")
+
+  assert_true(workbench.editing_file_buffer(), "the right pane must hold the editable file buffer")
+
+  -- A completed mouse selection ends in Visual mode at <LeftRelease>; the
+  -- keyboard path below only stages that Visual state without touching any
+  -- mapping (noremap feedkeys), so nothing auto-copies yet.
+  assert_true(stage_visual_selection("gg0ve"),
+    "the visual selection must stage before the release")
+  assert_eq(vim.fn.getreg("+"), saved_clipboard, "the active selection alone must not copy")
+
+  -- The <LeftRelease> release completes the selection: copy exactly once.
+  local release_cb = editor_map_callback(edit_buf, "v", "<LeftRelease>")
+  assert_true(release_cb ~= nil, "<LeftRelease> must be mapped in the editor buffer (visual)")
+  assert_true(release_cb(), "the completed mouse selection must auto-copy")
+
+  assert_eq(vim.fn.getreg("+"), "print", "the clipboard must hold exactly the selected text")
+  assert_eq(vim.fn.mode(), "v", "the selection must stay active and usable after the copy")
+  st = workbench.get_state()
+  assert_true(st.copy_notice ~= nil and st.copy_notice.level == "ok",
+    "a bounded success notice must be recorded for the auto-copy")
+
+  -- A plain click (release without a completed selection) stays side-effect free.
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+  assert_eq(vim.fn.mode(), "n", "the release probe must be back in Normal mode")
+  local after_selection = vim.fn.getreg("+")
+  local n_release_cb = editor_map_callback(edit_buf, "n", "<LeftRelease>")
+  assert_true(n_release_cb ~= nil, "<LeftRelease> must be mapped in the editor buffer (normal)")
+  assert_true(not n_release_cb(), "a release without a completed selection must not copy")
+  assert_eq(vim.fn.getreg("+"), after_selection, "the clipboard must be untouched by a plain click")
+  assert_true(workbench.get_state().copy_notice ~= nil
+    and workbench.get_state().copy_notice.text:find("copied", 1, true) ~= nil,
+    "a plain click must not record a new copy notice")
+
+  -- The explicit Ctrl/Cmd copy keeps working beside the automatic copy.
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("gg0v$", true, false, true), "nx", false)
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('"+ygv', true, false, true), "nx", false)
+  assert_true(vim.fn.getreg("+"):find("hello world", 1, true) ~= nil,
+    "the explicit copy must still yank the selection")
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+
+  task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+end
+
+function tests.test_task014_unavailable_clipboard_provider_shows_bounded_failure()
+  local workbench, fixture, old_cwd, st, edit_buf, entry = open_editor_for_main_lua()
+  local saved_clipboard = vim.fn.getreg("+")
+
+  -- Simulate an unavailable local system clipboard provider.
+  local original_check = workbench._clipboard_provider_available
+  workbench._clipboard_provider_available = function() return false end
+
+  assert_true(stage_visual_selection("gg0vww"),
+    "the visual selection must stage before the failed release")
+  local release_cb = editor_map_callback(edit_buf, "v", "<LeftRelease>")
+  assert_true(release_cb ~= nil, "<LeftRelease> must be mapped in the editor buffer (visual)")
+  assert_true(not release_cb(), "the auto-copy must fail visibly when the provider is unavailable")
+
+  st = workbench.get_state()
+  assert_true(st.copy_notice ~= nil and st.copy_notice.level == "error",
+    "a bounded failure notice must be recorded when the provider is unavailable")
+  assert_true(st.copy_notice.text:find("unavailable", 1, true) ~= nil,
+    "the failure notice must be explicit about the unavailable clipboard")
+  assert_eq(vim.fn.getreg("+"), saved_clipboard, "the clipboard must stay untouched on failure")
+  assert_eq(vim.fn.mode(), "v", "the selection must survive the failed copy")
+
+  workbench._clipboard_provider_available = original_check
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+  task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+end
+
+function tests.test_task014_no_autocopy_in_readonly_panes_or_keyboard_selections()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  local saved_clipboard = vim.fn.getreg("+")
+
+  workbench.open({ view = "files" })
+  vim.api.nvim_feedkeys("", "x", false)
+  local st = workbench.get_state()
+
+  -- (a) Read-only Preview pane: no auto-copy side effect exists there.
+  vim.api.nvim_set_current_win(st.win_right)
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), st.buf_right,
+    "the right pane must show the read-only preview scratch")
+  assert_true(stage_visual_selection("ggvww"), "the preview selection must be staged")
+  assert_true(not workbench.copy_selection_to_clipboard(),
+    "the auto-copy must refuse to run for the read-only preview")
+  assert_eq(vim.fn.getreg("+"), saved_clipboard, "the preview selection must never copy")
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+
+  -- (b) Keyboard-only selection in the editor buffer gains no auto-copy.
+  local idx, entry = find_project_entry(st, "main.lua")
+  assert_true(idx ~= nil, "fixture must contain main.lua")
+  workbench.select_file(idx)
+  assert_true(workbench.open_file(entry), "opening a regular file must succeed")
+  local edit_buf = vim.api.nvim_win_get_buf(st.win_right)
+  assert_true(stage_visual_selection("gg0vww"), "the keyboard selection must be staged")
+  assert_eq(vim.fn.getreg("+"), saved_clipboard,
+    "a keyboard-only selection must not auto-copy")
+  assert_true(workbench.get_state().copy_notice == nil,
+    "a keyboard-only selection must not record a copy notice")
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+
+  -- (c) Read-only Diff panes: no auto-copy side effect exists there either.
+  workbench.set_view("diff")
+  st = workbench.get_state()
+  assert_eq(st.view_mode, "diff", "the diff view must be active")
+  if #st.files > 0 then
+    workbench.select_file(1)
+    vim.api.nvim_set_current_win(st.win_right)
+    assert_true(stage_visual_selection("ggvww"), "the diff-pane selection must be staged")
+    assert_true(not workbench.copy_selection_to_clipboard(),
+      "the auto-copy must refuse to run for the read-only diff pane")
+    assert_eq(vim.fn.getreg("+"), saved_clipboard, "the diff-pane selection must never copy")
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+  end
+
+  workbench.close()
+  if edit_buf and vim.api.nvim_buf_is_valid(edit_buf) then
+    vim.api.nvim_buf_delete(edit_buf, { force = true })
+  end
+  vim.fn.setreg("+", saved_clipboard)
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task014_direct_esc_from_all_editor_modes_returns_to_preview()
+  local workbench, fixture, old_cwd, st, edit_buf, entry = open_editor_for_main_lua()
+  local saved_clipboard = vim.fn.getreg("+")
+
+  -- Binding structure: Esc is bound for the editable file buffer in every
+  -- editor mode, and the mouse release for the auto-copy.
+  for _, mode in ipairs({ "n", "i", "v" }) do
+    assert_true(editor_map_lhs(edit_buf, mode)["<Esc>"],
+      "Esc must be mapped in the editor buffer (" .. mode .. " mode)")
+  end
+
+  -- Normal mode: a single Esc returns directly to the same file's Preview.
+  local esc_cb_n = editor_map_callback(edit_buf, "n", "<Esc>")
+  assert_true(esc_cb_n(), "the unmodified Esc must return to Preview")
+  st = workbench.get_state()
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), st.buf_right,
+    "the right pane must show the Preview again")
+  assert_true(not st.preview_return.open, "an unmodified buffer must not open a confirmation")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_right, 0, -1, false), "\n")
+    :find("# File: main.lua", 1, true) ~= nil,
+    "the restored Preview must show the same file")
+
+  -- Visual mode: Esc returns directly, without stopping in Normal mode.
+  assert_true(workbench.open_file(entry), "reopening must restore the editor")
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), edit_buf, "the editor buffer must be back")
+  assert_true(stage_visual_selection("gg0vww"), "the visual selection must be staged")
+  local esc_cb_v = editor_map_callback(edit_buf, "v", "<Esc>")
+  assert_true(esc_cb_v(), "the visual-mode Esc must return to Preview")
+  st = workbench.get_state()
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), st.buf_right,
+    "the right pane must show the Preview after the visual-mode Esc")
+  assert_true(not st.preview_return.open, "the visual-mode return needs no confirmation")
+
+  -- Insert mode: Esc returns directly, without a Normal-mode stop. The
+  -- handler is the same mode-agnostic return; the i-mode binding itself is
+  -- asserted above, and real Insert-mode Esc is exercised in the PTY run.
+  assert_true(workbench.open_file(entry), "reopening must restore the editor again")
+  local esc_cb_i = editor_map_callback(edit_buf, "i", "<Esc>")
+  assert_true(esc_cb_i(), "the insert-mode Esc must return to Preview directly")
+  st = workbench.get_state()
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), st.buf_right,
+    "the right pane must show the Preview after the insert-mode Esc")
+  assert_true(not st.preview_return.open, "the insert-mode return needs no confirmation")
+  assert_true(not workbench.editing_file_buffer(), "the editor buffer must be hidden after the return")
+
+  -- Outside the workbench context the handler falls back to the default Esc
+  -- behavior instead of being hijacked (the buffer-local map survives).
+  workbench.close()
+  local esc_after_close = editor_map_callback(edit_buf, "n", "<Esc>")
+  assert_true(esc_after_close ~= nil, "the buffer-local map persists on the file buffer")
+  assert_true(not esc_after_close(), "outside the workbench the handler must report unhandled")
+
+  task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+end
+function tests.test_task014_modified_buffer_esc_confirms_and_preserves_content()
+  local workbench, fixture, old_cwd, st, edit_buf, entry = open_editor_for_main_lua()
+  local saved_clipboard = vim.fn.getreg("+")
+
+  vim.api.nvim_buf_set_lines(edit_buf, 0, 0, false, { "-- UNSAVED EDIT" })
+  assert_true(vim.bo[edit_buf].modified, "the buffer must be modified")
+
+  local esc_cb_n = editor_map_callback(edit_buf, "n", "<Esc>")
+  assert_true(esc_cb_n(), "the modified-buffer Esc must open the confirmation")
+  st = workbench.get_state()
+  assert_true(st.preview_return.open, "the confirmation must be open")
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), edit_buf,
+    "the editor buffer must stay in the right pane while confirming")
+
+  -- Esc cancels: keep editing with content and modified flag intact.
+  local cancel_cb = editor_map_callback(st.preview_return.buf, "n", "<Esc>")
+  assert_true(cancel_cb ~= nil, "the confirmation must map Esc")
+  assert_true(cancel_cb(), "Esc must cancel the confirmation")
+  st = workbench.get_state()
+  assert_true(not st.preview_return.open, "the confirmation must be closed after Esc")
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), edit_buf, "Esc must keep the user editing")
+  assert_eq(vim.api.nvim_buf_get_lines(edit_buf, 0, 1, false)[1], "-- UNSAVED EDIT",
+    "the content must survive the cancellation")
+  assert_true(vim.bo[edit_buf].modified, "the modified flag must survive the cancellation")
+
+  -- 'n' also cancels.
+  assert_true(esc_cb_n(), "the modified-buffer Esc must open the confirmation again")
+  st = workbench.get_state()
+  local n_cancel_cb = editor_map_callback(st.preview_return.buf, "n", "n")
+  assert_true(n_cancel_cb ~= nil, "the confirmation must map 'n'")
+  assert_true(n_cancel_cb(), "'n' must cancel the confirmation")
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), edit_buf, "'n' must keep the user editing")
+
+  -- Enter confirms: return to the same file's Preview without saving or
+  -- discarding the in-memory buffer.
+  assert_true(esc_cb_n(), "the modified-buffer Esc must open the confirmation once more")
+  st = workbench.get_state()
+  local confirm_cb = editor_map_callback(st.preview_return.buf, "n", "<CR>")
+  assert_true(confirm_cb ~= nil, "the confirmation must map Enter")
+  assert_true(confirm_cb(), "Enter must confirm the return")
+  st = workbench.get_state()
+  assert_true(not st.preview_return.open, "the confirmation must be closed after confirming")
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), st.buf_right,
+    "the right pane must show the Preview after confirming")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_right, 0, -1, false), "\n")
+    :find("# File: main.lua", 1, true) ~= nil,
+    "the restored Preview must show the same file")
+
+  -- The edited buffer is preserved in memory, unsaved and undiscarded.
+  assert_true(vim.api.nvim_buf_is_valid(edit_buf) and vim.api.nvim_buf_is_loaded(edit_buf),
+    "the edited buffer must stay loaded for later recovery")
+  assert_true(vim.bo[edit_buf].modified, "the edited buffer must remain modified")
+  assert_eq(vim.api.nvim_buf_get_lines(edit_buf, 0, 1, false)[1], "-- UNSAVED EDIT",
+    "the edited content must survive the confirmed return")
+  local f = io.open(fixture .. "/main.lua", "r")
+  local disk = f and f:read("*a") or ""
+  if f then f:close() end
+  assert_true(disk:find("UNSAVED EDIT", 1, true) == nil,
+    "nothing may be auto-saved to disk")
+
+  -- Reopening recovers the exact in-memory buffer.
+  assert_true(workbench.open_file(entry), "reopening must succeed after the confirmed return")
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), edit_buf,
+    "reopening must restore the same in-memory buffer")
+
+  -- 'y' confirms as well.
+  assert_true(esc_cb_n(), "the modified-buffer Esc must open the confirmation for 'y'")
+  st = workbench.get_state()
+  local y_confirm_cb = editor_map_callback(st.preview_return.buf, "n", "y")
+  assert_true(y_confirm_cb ~= nil, "the confirmation must map 'y'")
+  assert_true(y_confirm_cb(), "'y' must confirm the return")
+  st = workbench.get_state()
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), st.buf_right,
+    "the right pane must show the Preview after 'y'")
+
+  task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+end
+
+function tests.test_task014_statusline_documents_autocopy_and_esc_preview()
+  local workbench, fixture, old_cwd, st, edit_buf, entry = open_editor_for_main_lua()
+  local saved_clipboard = vim.fn.getreg("+")
+
+  -- Normal-mode hints keep the established guidance and add the new one.
+  local hints = _G.get_editor_hints()
+  assert_true(hints:find("^V Paste", 1, true) ~= nil, "the existing paste hint must remain")
+  assert_true(hints:find("Mouse Copy", 1, true) ~= nil,
+    "the statusline must document the mouse auto-copy")
+  assert_true(hints:find("Esc Preview", 1, true) ~= nil,
+    "the statusline must document the direct Esc Preview exit")
+
+  -- Modified-state hints keep Save/Undo and add the new guidance.
+  vim.api.nvim_buf_set_lines(edit_buf, 0, 0, false, { "-- HINT EDIT" })
+  hints = _G.get_editor_hints()
+  assert_true(hints:find("^S Save", 1, true) ~= nil, "the existing save hint must remain")
+  assert_true(hints:find("^Z Undo", 1, true) ~= nil, "the existing undo hint must remain")
+  assert_true(hints:find("Mouse Copy", 1, true) ~= nil,
+    "the modified-state statusline must document the mouse auto-copy")
+  assert_true(hints:find("Esc Preview", 1, true) ~= nil,
+    "the modified-state statusline must document the Esc Preview exit")
+
+  -- Visual-mode hints keep Copy/Cut and add the new guidance.
+  assert_true(stage_visual_selection("gg0vww"), "the visual selection must stage for hints")
+  hints = _G.get_editor_hints()
+  assert_true(hints:find("^C Copy", 1, true) ~= nil, "the existing copy hint must remain")
+  assert_true(hints:find("^X Cut", 1, true) ~= nil, "the existing cut hint must remain")
+  assert_true(hints:find("Mouse Copy", 1, true) ~= nil,
+    "the visual-mode statusline must document the mouse auto-copy")
+  assert_true(hints:find("Esc Preview", 1, true) ~= nil,
+    "the visual-mode statusline must document the Esc Preview exit")
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "nx", false)
+
+  -- The editor statusline template actually renders the guidance.
+  assert_true(vim.wo[st.win_right].statusline:find("get_editor_hints", 1, true) ~= nil,
+    "the editor window must use the dynamic editor hints statusline")
+  local rendered = vim.api.nvim_eval_statusline(
+    " %f%m%=%{v:lua.get_editor_hints()} ", { winid = st.win_right }).str
+  assert_true(rendered:find("Mouse Copy", 1, true) ~= nil,
+    "the rendered editor statusline must document the mouse auto-copy")
+  assert_true(rendered:find("Esc Preview", 1, true) ~= nil,
+    "the rendered editor statusline must document the Esc Preview exit")
+
+  -- Non-editor surfaces keep the established hints without the new guidance.
+  vim.api.nvim_set_current_win(st.win_left)
+  hints = _G.get_editor_hints()
+  assert_true(hints:find("Esc Preview", 1, true) == nil,
+    "the new guidance must not leak into workbench navigation panes")
+  assert_true(hints:find("Mouse Copy", 1, true) == nil,
+    "the new guidance must not leak into workbench navigation panes")
+
+  task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+end
+
+function tests.test_task014_editor_keymap_docs_match_real_mappings()
+  local keymaps = require("novim.keymaps")
+  local workbench, fixture, old_cwd, st, edit_buf, entry = open_editor_for_main_lua()
+  local saved_clipboard = vim.fn.getreg("+")
+
+  for _, doc_entry in ipairs(keymaps.editor) do
+    for _, key in ipairs(doc_entry.keys) do
+      for _, mode in ipairs(doc_entry.modes) do
+        assert_true(editor_map_lhs(edit_buf, mode)[key],
+          string.format("the documented editor shortcut %s (%s mode) must be an actual mapping",
+            key, mode))
+      end
+    end
+  end
+
+  -- The editor binding never leaks into the workbench scratch panes.
+  st = workbench.get_state()
+  assert_true(editor_map_lhs(st.buf_left, "n")["<Esc>"] == nil,
+    "the navigation pane must keep its Esc Esc quit semantics")
+  assert_true(editor_map_lhs(st.buf_left, "n")["<LeftRelease>"] ~= nil,
+    "the navigation pane keeps its divider-drag release mapping")
+  assert_true(editor_map_lhs(st.buf_right, "n")["<Esc>"] == nil,
+    "the preview pane must not gain the editor Esc return")
+
+  task014_teardown(workbench, fixture, old_cwd, edit_buf, saved_clipboard)
+end
+
 -- =========================================================================
 -- Run all tests
 -- =========================================================================

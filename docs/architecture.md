@@ -150,21 +150,25 @@ required for the first workbench slice.
   clamped against the current terminal width and pane minimums. Missing,
   malformed, or impossible values fall back safely without replacing the live
   layout on a settings-write failure.
+- `TASK-011` gives Settings a session-only focused-control model, immediate
+  Esc close, context-aware theme navigation, and a visible mouse close
+  affordance while preserving persisted settings and geometry.
+- `TASK-012` provides the four-area Source Control layout with current
+  changes above a full current-branch history graph and read-only two-endpoint
+  comparison.
+- `TASK-013` provides file-level local stage/unstage and local staged commit
+  with a transient message input, bounded notices, and no remote or
+  history-rewriting Git actions.
 
 ## Accepted successor slices (not yet implemented)
 
-- `TASK-011` will add a focus model for Settings controls so navigation does
-  not move through the rendered help text. Its interaction contract is
-  recorded as a proposal in `docs/product/product.md` and is separate from
-  the existing theme/dot-folder persistence.
-- `TASK-012` will add a horizontally split left Git area with current changes
-  above and the full current-branch ancestry graph below, including merge
-  nodes. The user will choose two revision/location endpoints for a read-only
-  comparison; selecting history will not check out a branch.
-- `TASK-013` will add file-level staging, unstaging, and local staged commits
-  with a commit-message input. Push, pull, fetch, merge, rebase, checkout,
-  discard, amend, remote synchronization, credentials, and partial-line
-  staging remain outside this accepted successor direction.
+- `TASK-014` will make the Files-view preview/edit handoff more direct:
+  mouse-completed selections in editable file buffers auto-copy to the local
+  system clipboard, `Esc` returns directly from every editor mode to the same
+  file's Preview, and modified buffers require explicit confirmation before
+  returning without saving. The bottom editor statusline will explain these
+  controls. Preview/Diff read-only panes, keyboard-only auto-copy, auto-save,
+  and remote clipboard synchronization remain outside this slice.
 
 ## Preserved contracts
 

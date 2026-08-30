@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-013-local-git-writes",
+    "taskBranch": "task/TASK-014-auto-copy-preview-exit",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -27,8 +27,10 @@
   },
   "workflow": {
     "currentTask": "TASK-013",
-    "currentTaskStatus": "ACCEPTED",
-    "pullRequest": "https://github.com/medonmez/novim-custom/pull/23",
+    "currentTask": "TASK-014",
+    "currentTaskStatus": "PLANNED",
+    "currentTaskBaseline": "2f72937134a3965a8c5294641c1589dd38a6a04c",
+    "pullRequest": null,
     "remoteChecks": "OPTIONAL / NOT_RUN",
     "lastAcceptedTask": "TASK-013",
     "lastAcceptedCommit": "f19e529c",
@@ -59,6 +61,12 @@
     },
     "gitMutation": true,
     "gitMutationBoundary": "File-level local stage/unstage and local staged commit only; no remote, checkout, history-rewrite, discard, amend, or partial-line operation",
+    "editorInteraction": {
+      "previewEntry": "Files view Space shows a read-only preview; opening a regular file loads its editable buffer in the right pane",
+      "mouseSelection": "Completed mouse selections in editable file buffers copy to the local system clipboard; preview and read-only Diff panes do not auto-copy",
+      "escape": "Esc returns directly from Insert, Normal, or Visual to the same file Preview; modified buffers require confirmation and are never silently saved or discarded",
+      "statusline": "Bottom editor hints explain mouse auto-copy and Esc Preview alongside copy, cut, paste, save, and undo"
+    },
     "pluginDependency": false,
     "settings": ["dot-folder visibility", "six built-in themes", "settings key help"],
     "projectBrowser": {
