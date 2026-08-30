@@ -7,9 +7,9 @@ Delivery policy: `LIGHTWEIGHT`
 Baseline: `8b76dad` (`origin/main`)
 Candidate: `0462823c9bea035c66bf6fbc0dc49436356deb8c`
 Task branch: `task/TASK-012-source-control-graph`
-Pull request: `NOT_OPEN`
+Pull request: `https://github.com/medonmez/novim-custom/pull/21`
 Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `NOT_STARTED`
+Merge status: `OPEN / MERGEABLE`
 
 ## Review result
 
@@ -92,17 +92,17 @@ Non-blocking observations retained from the handoff:
   `/Users/mert/.local/bin/novim --version` reports `novim 0.1.7`.
 - Confirmed the product diff has no Git mutation commands, network/plugin
   additions, protected release/config writes, or unrelated files.
-- Confirmed the remote default branch remains `8b76dad`; no PR exists yet for
-  the candidate branch, so delivery is still pending this review record.
+- Confirmed the remote default branch remains `8b76dad`; PR #21 targets
+  `main` from the reviewed task branch and is mergeable with no explicit
+  failing required check reported.
 
 Evidence is local review evidence only; no hosted, production, recovery, or
 customer-acceptance claim is made.
 
 ## Delivery decision
 
-`APPROVED` for lightweight delivery. Push the reviewed task branch, open one
-traceability PR targeting `main`, merge once it is mergeable and has no
-explicit failing required check, then verify the merged result on
+`APPROVED`; lightweight PR #21 is open and mergeable. Merge once it remains
+free of an explicit failing required check, then verify the merged result on
 `origin/main` before marking TASK-012 accepted.
 
 ## Next action
