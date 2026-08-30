@@ -116,3 +116,29 @@ remain excluded unless separately authorized.
 This accepted successor direction is recorded in ADR-004. It expands the
 future workbench scope without changing the already accepted behavior of
 TASK-001 through TASK-009.
+
+## Editor interaction brief (TASK-014, accepted 2026-08-30)
+
+TASK-014 makes the existing Files-view preview/edit handoff feel more direct
+for terminal-first users. `Space` continues to show the selected file in the
+read-only Preview; opening a regular file continues to load its real editable
+buffer in the right pane.
+
+- A mouse-completed text selection in an editable file buffer is copied
+  automatically to the local system clipboard. Preview and read-only Diff
+  panes do not auto-copy, and keyboard-only selection does not gain a new
+  automatic side effect. Existing explicit Ctrl/Cmd copy, cut, paste, save,
+  and undo behavior remains available.
+- `Esc` returns directly from Insert, Normal, or Visual mode to the same
+  file's Preview. It does not pause in Normal mode first.
+- If the editable buffer has unsaved changes, `Esc` first asks whether to
+  return to Preview without saving. Confirming returns to Preview without
+  saving or discarding the in-memory buffer; `No` or `Esc` cancels the prompt
+  and keeps the editable buffer active.
+- The existing bottom editor statusline hint area also explains the mouse
+  auto-copy behavior and `Esc: Preview`, alongside the existing copy, cut,
+  paste, save, and undo hints.
+
+This decision is recorded in ADR-005. It changes only the local editor
+interaction contract; no hosted clipboard, background synchronization,
+credential handling, or unrelated workbench behavior is implied.
