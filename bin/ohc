@@ -1,6 +1,7 @@
 #!/bin/bash
-# novim-dev - One-release compatibility alias for the oh-my-code ohc launcher
-# https://github.com/link2004/novim (custom derivative checkout)
+# ohc - Public launcher for oh-my-code, a terminal-first code workbench
+# Derived from the novim checkout launcher; novim-dev remains a one-release
+# compatibility alias for this same checkout and runtime boundary.
 
 set -euo pipefail
 
@@ -41,51 +42,50 @@ resolve_target() {
 
 SCRIPT_PATH="$(resolve_target "$0")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
-NOVIM_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
-NOVIM_CONFIG="$NOVIM_ROOT/config"
+OHC_ROOT="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+OHC_CONFIG="$OHC_ROOT/config"
 
 # Read version from VERSION file if present
 BASE_VERSION="0.1.0"
-if [[ -f "$NOVIM_ROOT/VERSION" ]]; then
-  BASE_VERSION="$(tr -d '[:space:]' < "$NOVIM_ROOT/VERSION")"
+if [[ -f "$OHC_ROOT/VERSION" ]]; then
+  BASE_VERSION="$(tr -d '[:space:]' < "$OHC_ROOT/VERSION")"
 fi
 DEV_VERSION="${BASE_VERSION}-dev"
 
 # 3. Handle flags
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
-  echo "novim-dev $DEV_VERSION (custom checkout)"
-  echo "Note: novim-dev is a one-release compatibility alias for oh-my-code's public ohc command."
+  echo "oh-my-code (ohc) $DEV_VERSION"
   echo "powered by $(nvim --version | head -1)"
   exit 0
 fi
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
-  echo "novim-dev - Compatibility alias for the oh-my-code ohc launcher"
+  echo "oh-my-code - terminal-first code workbench (public ohc command)"
   echo ""
-  echo "Usage: novim-dev [options] [file...]"
+  echo "Usage: ohc [options] [file...]"
   echo ""
   echo "Options:"
-  echo "  -v, --version    Show development version and Neovim engine"
+  echo "  -v, --version    Show the oh-my-code version and Neovim engine"
   echo "  -h, --help       Show this help"
   echo ""
   echo "All other options and arguments are passed directly to Neovim."
   echo ""
-  echo "Note: novim-dev is a one-release compatibility alias; the public"
-  echo "command is ohc. Both commands share the same isolated configuration"
-  echo "and runtime paths in this checkout."
+  echo "Note: the historical novim-dev command remains available as a"
+  echo "one-release compatibility alias; both commands share the same"
+  echo "isolated configuration and runtime paths in this checkout."
   echo ""
-  echo "Configuration root: $NOVIM_CONFIG"
-  echo "Runtime state:      $NOVIM_ROOT/.dev-state"
-  echo "Runtime data:       $NOVIM_ROOT/.dev-data"
-  echo "Runtime cache:      $NOVIM_ROOT/.dev-cache"
+  echo "Configuration root: $OHC_CONFIG"
+  echo "Runtime state:      $OHC_ROOT/.dev-state"
+  echo "Runtime data:       $OHC_ROOT/.dev-data"
+  echo "Runtime cache:      $OHC_ROOT/.dev-cache"
   exit 0
 fi
 
 # 4. Export isolated runtime paths
-export XDG_CONFIG_HOME="$NOVIM_CONFIG"
-export XDG_DATA_HOME="$NOVIM_ROOT/.dev-data"
-export XDG_STATE_HOME="$NOVIM_ROOT/.dev-state"
-export XDG_CACHE_HOME="$NOVIM_ROOT/.dev-cache"
+export XDG_CONFIG_HOME="$OHC_CONFIG"
+export XDG_DATA_HOME="$OHC_ROOT/.dev-data"
+export XDG_STATE_HOME="$OHC_ROOT/.dev-state"
+export XDG_CACHE_HOME="$OHC_ROOT/.dev-cache"
 
 # Ensure isolated directories exist
 mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"

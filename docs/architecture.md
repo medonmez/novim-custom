@@ -9,11 +9,13 @@ The repository is a direct clone of upstream novim at tag `v0.1.7`.
 
 ### Public oh-my-code boundary
 
-The public product identity is `oh-my-code` and its primary command is `ohc`.
-The repository is transitioning from `medonmez/novim-custom` to the public
-GitHub target `medonmez/oh-my-code`; the hosted rename is a release-delivery
-action, not a local assumption. `novim-dev` remains a one-release compatibility
-alias. The internal Lua modules under `config/nvim/lua/novim/` remain stable
+The public product identity is `oh-my-code` and its primary command is `ohc`,
+launched in this checkout through the executable `bin/ohc`. The repository is
+transitioning from `medonmez/novim-custom` to the public GitHub target
+`medonmez/oh-my-code`; the hosted rename is a release-delivery action, not a
+local assumption. `bin/novim-dev` remains a self-contained one-release
+compatibility alias that explicitly labels its compatibility status. The
+internal Lua modules under `config/nvim/lua/novim/` remain stable
 implementation namespaces for this release.
 
 The public installation root is `~/.local/share/oh-my-code` and the primary
@@ -80,12 +82,27 @@ link is `~/.local/bin/ohc`. The existing `~/.local/share/novim` and
 ## Development boundary and launcher
 
 `TASK-001` added a dedicated repository-local launcher via `bin/novim-dev`.
-The public successor uses `bin/ohc` with the same isolation guarantees:
+`TASK-015` promoted the public identity: `bin/ohc` is now the primary public
+launcher of this checkout, and `bin/novim-dev` remains a self-contained
+one-release compatibility alias. Both launchers provide the same isolation
+guarantees:
 - Resolves its repository root dynamically through symlinks and from any working directory.
 - Sets `XDG_CONFIG_HOME` to this checkout's `config` directory (`config/nvim/init.lua`).
 - Sets separate runtime paths `XDG_DATA_HOME` (`.dev-data/`), `XDG_STATE_HOME` (`.dev-state/`), and `XDG_CACHE_HOME` (`.dev-cache/`) inside the checkout root, keeping runtime state strictly isolated from installed `novim` and standard Neovim configurations.
 - Excludes networking, update, and uninstallation routines.
 - Forwards arbitrary Neovim flags (e.g. `--headless`, buffers, files) to `nvim`.
+
+Identity boundary:
+
+- `ohc --version` reports `oh-my-code (ohc) <VERSION>-dev` with the Neovim
+  engine line, and `ohc --help` names `oh-my-code` as the public command.
+- `novim-dev --version` keeps the `novim-dev <VERSION>-dev (custom checkout)`
+  identity and explicitly labels itself as a one-release compatibility alias
+  for `ohc`; `novim-dev --help` repeats the alias status.
+- Both commands resolve the same isolated runtime boundary below the checkout,
+  so settings persisted through either command name remain valid.
+- `bin/novim` remains the preserved upstream reference and is not modified by
+  either launcher.
 
 ### Local installation / linking
 
@@ -98,14 +115,16 @@ ln -sf /Users/mert/novim-custom/bin/ohc ~/.local/bin/ohc
 
 Verification:
 - `ohc --version` reports the public launcher without network activity.
-- `novim-dev --version` remains available as the one-release compatibility alias.
-- `novim --version` continues to invoke the upstream release at `~/.local/bin/novim`.
+- `novim-dev --version` remains available and explicitly labels the one-release compatibility alias.
 
 ### Local derivative packaging
 
 `bin/novim-dev-package` is the pre-release offline, allowlist-based
 distribution helper. The public package/installer migration is planned
-separately:
+separately. The pre-release package continues to stage `bin/novim-dev` and its
+`<VERSION>-dev (custom checkout)` identity; migrating the packaged launcher and
+installer to the public `ohc` identity is part of the separate package-migration
+task (`TASK-017`):
 
 - `package ARCHIVE` stages `bin/novim-dev`, the complete `config/nvim` tree,
   `VERSION`, `LICENSE`, and `THIRD_PARTY_LICENSES.md` into a deterministic
@@ -127,11 +146,13 @@ Deterministic local validation is provided through standalone scripts without ex
 
 - `./tests/run_tests.sh`: runs all test suites, including the unit/integration suite (`tests/test_workbench.lua`) and the regression smoke runner. Supports `--smoke` / `-s` to run only smoke checks, or `--all` / `-a` to run both.
 - `./tests/run_smoke_tests.sh`: dedicated end-to-end regression smoke runner. It exercises:
-  1. CLI flags (`--version`, `-v`, `--help`) and output validation.
-  2. Working directory independence (invoking from `/tmp`) and symlink path resolution.
-  3. Isolation from installed `novim` (`~/.local/share/novim` remains untouched).
-  4. Headless Neovim execution of `tests/test_smoke.lua` against isolated temporary Git/project fixtures, verifying two-pane layout, divider constraints, independent Files/Diff geometry persistence and clamping, view switching, source preview/editing handoff, unsaved buffer preservation, settings persistence/malformed fallback, and byte-for-byte Git read-only invariance.
-  5. Post-run artifact cleanup verification ensuring zero fixture residue.
+  1. Public CLI identity (`ohc --version`, `-v`, `--help`), including checkout version semantics and the compatibility note.
+  2. Compatibility alias CLI identity (`novim-dev --version`, `-v`, `--help`), including the explicit one-release alias labeling.
+  3. Working directory independence (invoking from `/tmp`) and symlink path resolution for both commands, with exact isolated config/data/state/cache paths.
+  4. Isolation from installed `novim` (`~/.local/share/novim` remains untouched).
+  5. File-argument passthrough for both commands.
+  6. Headless Neovim execution of `tests/test_smoke.lua` under the public `ohc` launcher against isolated temporary Git/project fixtures, verifying two-pane layout, divider constraints, independent Files/Diff geometry persistence and clamping, view switching, source preview/editing handoff, unsaved buffer preservation, settings persistence/malformed fallback, and byte-for-byte Git read-only invariance.
+  7. Post-run artifact cleanup verification ensuring zero fixture residue and an unchanged tracked product source tree.
 
 ## Accepted target direction
 
