@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 2026-08-30
+Updated: 2026-08-31
 Status: `OBSERVED_BASELINE_WITH_ACCEPTED_EXTENSION`
 
 ## Current system
@@ -91,6 +91,12 @@ guarantees:
 - Sets separate runtime paths `XDG_DATA_HOME` (`.dev-data/`), `XDG_STATE_HOME` (`.dev-state/`), and `XDG_CACHE_HOME` (`.dev-cache/`) inside the checkout root, keeping runtime state strictly isolated from installed `novim` and standard Neovim configurations.
 - Excludes networking, update, and uninstallation routines.
 - Forwards arbitrary Neovim flags (e.g. `--headless`, buffers, files) to `nvim`.
+- On an interactive TTY launch, both commands render the bounded (approximately
+  one second) oh-my-code ANSI startup splash before starting Neovim. The
+  launcher consumes `--no-animation` (never forwarded to Neovim) and honors
+  `OHC_NO_ANIMATION=1`; help, version, `--headless`, piped (non-TTY), and test
+  launches skip the splash and start immediately. The splash performs no
+  network call, credential flow, plugin load, or background process.
 
 Identity boundary:
 
@@ -151,8 +157,13 @@ Deterministic local validation is provided through standalone scripts without ex
   3. Working directory independence (invoking from `/tmp`) and symlink path resolution for both commands, with exact isolated config/data/state/cache paths.
   4. Isolation from installed `novim` (`~/.local/share/novim` remains untouched).
   5. File-argument passthrough for both commands.
-  6. Headless Neovim execution of `tests/test_smoke.lua` under the public `ohc` launcher against isolated temporary Git/project fixtures, verifying two-pane layout, divider constraints, independent Files/Diff geometry persistence and clamping, view switching, source preview/editing handoff, unsaved buffer preservation, settings persistence/malformed fallback, and byte-for-byte Git read-only invariance.
-  7. Post-run artifact cleanup verification ensuring zero fixture residue and an unchanged tracked product source tree.
+  6. Interactive splash coverage: a PTY matrix renders the bounded splash,
+     measures its duration against the one-second bound, and verifies the
+     `--no-animation` and `OHC_NO_ANIMATION=1` bypasses plus the help, version,
+     `--headless` (even with a TTY stdout), and piped non-TTY bypasses for both
+     commands.
+  7. Headless Neovim execution of `tests/test_smoke.lua` under the public `ohc` launcher against isolated temporary Git/project fixtures, verifying two-pane layout, divider constraints, independent Files/Diff geometry persistence and clamping, view switching, source preview/editing handoff, unsaved buffer preservation, settings persistence/malformed fallback, and byte-for-byte Git read-only invariance.
+  8. Post-run artifact cleanup verification ensuring zero fixture residue and an unchanged tracked product source tree.
 
 ## Accepted target direction
 
@@ -224,9 +235,13 @@ required for the first workbench slice.
 
 ## Accepted public release direction
 
-- `ohc` shows a one-second ANSI startup animation only on interactive TTY
-  launches. `--no-animation` and `OHC_NO_ANIMATION=1` disable it, and
-  non-interactive/test/help/version paths skip it.
+- Implemented in `TASK-016`: `ohc` and `novim-dev` render a bounded
+  approximately-one-second ANSI splash on interactive TTY launches only.
+  `--no-animation` and `OHC_NO_ANIMATION=1` disable it, the flag is consumed by
+  the launcher and never forwarded to Neovim, and help, version, headless,
+  piped, and test launches skip it. A local PTY smoke matrix verifies the
+  rendering, the duration bound, and every bypass; hosted demo capture remains
+  `TASK-018` scope.
 - The first public release is `v1.0.0`, delivered through a GitHub Release
   and a dedicated installer. Release assets use the `oh-my-code` identity and
   never target the installed upstream `novim` paths.

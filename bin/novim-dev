@@ -52,14 +52,36 @@ fi
 DEV_VERSION="${BASE_VERSION}-dev"
 
 # 3. Handle flags
-if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
+# Consume launcher-only controls before anything is forwarded to Neovim.
+# --no-animation suppresses the startup splash below and is never forwarded.
+NOVIM_ARGS=()
+SPLASH_DISABLED=0
+SPLASH_HEADLESS=0
+FIRST_ARG=""
+if [[ $# -gt 0 ]]; then
+  for arg in "$@"; do
+    if [[ "$arg" == "--no-animation" ]]; then
+      SPLASH_DISABLED=1
+    elif [[ "$arg" == "--headless" ]]; then
+      SPLASH_HEADLESS=1
+      NOVIM_ARGS+=("$arg")
+    else
+      if [[ -z "$FIRST_ARG" ]]; then
+        FIRST_ARG="$arg"
+      fi
+      NOVIM_ARGS+=("$arg")
+    fi
+  done
+fi
+
+if [[ "$FIRST_ARG" == "--version" || "$FIRST_ARG" == "-v" ]]; then
   echo "novim-dev $DEV_VERSION (custom checkout)"
   echo "Note: novim-dev is a one-release compatibility alias for oh-my-code's public ohc command."
   echo "powered by $(nvim --version | head -1)"
   exit 0
 fi
 
-if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+if [[ "$FIRST_ARG" == "--help" || "$FIRST_ARG" == "-h" ]]; then
   echo "novim-dev - Compatibility alias for the oh-my-code ohc launcher"
   echo ""
   echo "Usage: novim-dev [options] [file...]"
@@ -90,5 +112,53 @@ export XDG_CACHE_HOME="$NOVIM_ROOT/.dev-cache"
 # Ensure isolated directories exist
 mkdir -p "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
 
-# 5. Launch Neovim
-exec nvim "$@"
+# 5. Interactive startup splash (ADR-006: bounded to approximately one second)
+# Same eligibility and disable behavior as the public ohc launcher: interactive
+# TTY launch only. Help and version already exited above; --headless,
+# --no-animation, OHC_NO_ANIMATION=1, and piped (non-TTY) output skip the
+# splash entirely and start immediately.
+render_splash() {
+  local -a art=(
+    "  ___   _      ____ "
+    " / _ \ | |__  / ___|"
+    "| | | || '_ \ | |    "
+    "| |_| || | | || |___ "
+    " \___/ |_| |_| \____|"
+  )
+  local -a colors=(24 30 37 44 51)
+  local row i printed=0 total=${#art[@]}
+  printf '\033[?25l'
+  for ((row = 0; row < total; row++)); do
+    if (( printed > 0 )); then
+      printf '\033[%dA\r' "$printed"
+    fi
+    for ((i = 0; i <= row; i++)); do
+      printf '\033[1;38;5;%dm%s\033[0m\n' "${colors[$i]}" "${art[$i]}"
+    done
+    printed=$((row + 1))
+    sleep 0.12
+  done
+  printf '\033[%dA\r' "$printed"
+  for ((i = 0; i < total; i++)); do
+    printf '\033[1;38;5;%dm%s\033[0m\n' "${colors[$i]}" "${art[$i]}"
+  done
+  printf '\033[1;38;5;75moh-my-code | terminal-first code workbench\033[0m\n'
+  printed=$((total + 1))
+  sleep 0.20
+  printf '\033[%dA\r' "$printed"
+  for ((i = 0; i < total; i++)); do
+    printf '\033[1;38;5;%dm%s\033[0m\n' "${colors[$i]}" "${art[$i]}"
+  done
+  printf '\033[1;38;5;75moh-my-code | terminal-first code workbench\033[0m\n'
+  printf '\033[38;5;245mv%s\033[0m\n' "$DEV_VERSION"
+  sleep 0.20
+  printf '\033[?25h'
+}
+
+if [[ "$SPLASH_DISABLED" -eq 0 && "$SPLASH_HEADLESS" -eq 0 && "${OHC_NO_ANIMATION:-}" != "1" ]] && [[ -t 1 ]]; then
+  render_splash
+fi
+
+
+# 6. Launch Neovim
+exec nvim ${NOVIM_ARGS[@]+"${NOVIM_ARGS[@]}"}
