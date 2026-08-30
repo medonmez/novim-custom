@@ -45,26 +45,7 @@
     "decisions": "docs/adr/",
     "taskSchema": "docs/tasks/task.schema.json"
   },
-  "openDecisions": [
-    {
-      "id": "GIT-MUTATION-BOUNDARY",
-      "question": "Should the first write-capable Git surface be limited to local stage, unstage, and commit with a user-entered message?",
-      "recommended": "Yes. Keep push, pull, merge, rebase, branch checkout, discard, amend, and remote synchronization out of scope until separately authorized.",
-      "blocks": "TASK-013"
-    },
-    {
-      "id": "GIT-HISTORY-SELECTION",
-      "question": "When a history commit is selected, which comparison should the Diff panes show?",
-      "recommended": "Show the selected commit versus its first parent; keep a separate Working Tree entry for the current working-tree-versus-HEAD diff, without checking out anything.",
-      "blocks": "TASK-012"
-    },
-    {
-      "id": "GIT-HISTORY-SCOPE",
-      "question": "Should the bottom history show the full commit ancestry graph reachable from the current branch or a first-parent merge timeline?",
-      "recommended": "Show the full reachable ancestry with merge nodes and branch/decorate labels, while keeping the view read-only.",
-      "blocks": "TASK-012"
-    }
-  ],
+  "openDecisions": [],
   "acceptedProductDirection": {
     "primaryWorkflow": "read-only local Git diff review",
     "layout": "Files view: left lazy project tree plus right source preview; Diff view: left changed-file list plus middle old-file and right new-file panes",
@@ -95,11 +76,11 @@
       "builtIn": ["Tokyo Night", "Nord", "Gruvbox Dark", "Catppuccin Mocha", "One Dark", "Solarized Light"]
     },
     "successorBrief": {
-      "status": "PROPOSED",
+      "status": "ACCEPTED",
       "paneGeometry": "Persist independent Files and Git Diff layouts across view switches and local workbench launches.",
       "settingsInteraction": "Use a visible selected-control cursor; Up/Down changes controls, Left/Right changes theme only on the theme control, Space activates the selected control, Esc closes, and a top-right mouse close control is visible.",
-      "sourceControl": "Split the left Git area horizontally with current changes/status above and current-branch commit/merge history below; selecting history remains read-only until comparison semantics are confirmed.",
-      "localGitWrites": "Proposed stage/unstage and local staged commit with a commit-message input; exact mutation boundary is pending GIT-MUTATION-BOUNDARY."
+      "sourceControl": "Split the left Git area horizontally with current changes/status above and the full current-branch commit graph below, including merges; let the user choose two revision/location endpoints for a read-only comparison without checkout.",
+      "localGitWrites": "File-level stage/unstage and local staged commit with a user-entered commit-message input; exclude push, pull, fetch, merge, rebase, checkout, discard, amend, remote synchronization, credentials, and partial-line staging."
     }
   }
 }

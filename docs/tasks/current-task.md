@@ -54,8 +54,7 @@ does not yet contain pane geometry.
   TASK-011.
 - Git history, branch/commit selection, staging, commit-message input,
   committing, merge, rebase, push, pull, discard, or any other new Git
-  operation; these belong to TASK-012/TASK-013 and remain outside the current
-  accepted read-only contract.
+  operation; these belong to TASK-012/TASK-013 and remain outside TASK-010.
 - Persisting project-tree expansion, selected files, cursor positions, or
   editor buffers.
 - Plugin installation, network access, changes to the installed `novim`, or
@@ -129,9 +128,9 @@ does not yet contain pane geometry.
 - Dependency: TASK-009 is accepted on `origin/main`; the verified planning
   baseline is `94a8d0b`.
 - No product decision blocks TASK-010.
-- TASK-011, TASK-012, and TASK-013 remain successor backlog slices; the Git
-  slices have explicit open decisions recorded in `docs/project.json` and
-  must not be implemented as part of TASK-010.
+- TASK-011, TASK-012, and TASK-013 remain successor backlog slices with
+  accepted direction recorded in ADR-004; they must not be implemented as part
+  of TASK-010.
 
 ## Implementation handoff
 

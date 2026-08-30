@@ -90,7 +90,7 @@ The next workbench milestone is split into three implementation slices:
 Comparing selected branches or historical commits remains future scope and is
 not part of this milestone.
 
-## Successor brief (proposed, not yet accepted)
+## Successor brief (accepted 2026-08-30)
 
 The next usability milestone requested by the user is to make the workbench
 remember independent Files and Git Diff pane geometry, then make Settings act
@@ -103,9 +103,15 @@ mouse close affordance should be available.
 
 The requested Git direction is a terminal version of the VS Code Source
 Control workflow: current changes/status above, current-branch commit and
-merge history below, and selectable history entries. The current accepted
-product contract remains read-only until the history comparison and mutation
-boundary decisions are resolved. The proposed first write-capable slice is
-local stage/unstage plus a user-entered local staged commit; push, pull, merge,
-rebase, branch checkout, discard, amend, and remote synchronization remain
-excluded unless separately authorized.
+merge history below, and selectable history entries. The full graph reachable
+from the current branch is shown, including merge nodes. The user chooses two
+revision/location endpoints for comparison; the default remains the current
+working tree versus `HEAD`, and selecting history must never check out a
+branch. Local stage/unstage and a user-entered local staged commit are
+authorized. Push, pull, fetch, merge, rebase, branch checkout, discard,
+amend, remote synchronization, credential handling, and partial-line staging
+remain excluded unless separately authorized.
+
+This accepted successor direction is recorded in ADR-004. It expands the
+future workbench scope without changing the already accepted behavior of
+TASK-001 through TASK-009.

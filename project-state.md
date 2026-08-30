@@ -87,19 +87,18 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/15`
   `94a8d0b` and will persist independent Files/Diff pane geometry across view
   switches and local workbench launches.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
-  affordance. `TASK-012` covers the proposed Source Control layout and
-  selectable history. `TASK-013` covers the proposed local stage/commit
-  surface. The latter Git slices are not accepted product direction yet;
-  their open history and mutation decisions are recorded in `docs/project.json`.
+  affordance. `TASK-012` covers the accepted Source Control layout and
+  selectable history. `TASK-013` covers the accepted local stage/commit
+  surface. The Git direction is now accepted in ADR-004: full current-branch
+  graph, two user-selected comparison endpoints, and file-level local
+  stage/unstage/commit only. These are still successor slices, not current
+  implementation work.
 
 ## Active blockers
 
 - TASK-010 has no active product blocker.
-- TASK-012 is blocked on the exact current-branch history graph and
-  commit-selection comparison semantics.
-- TASK-013 is blocked on confirmation of the first write-capable Git boundary
-  (recommended: local stage/unstage/commit only; no remote or destructive
-  history operations).
+- TASK-012 and TASK-013 have no remaining product-decision blocker, but wait
+  for their ordered dependencies (`TASK-011` and `TASK-012`) to be accepted.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action

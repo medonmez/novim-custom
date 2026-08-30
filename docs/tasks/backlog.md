@@ -18,13 +18,13 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 9 | TASK-009 | Render a three-area side-by-side read-only Git diff with refresh on entry | ACCEPTED | TASK-008 (accepted) |
 | 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | PLANNED | TASK-009 (accepted) |
 | 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | PROPOSED | TASK-010 (accepted) |
-| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable current-branch history | BLOCKED | TASK-011 (accepted); history decisions pending |
-| 13 | TASK-013 | Add local staging, unstage actions, commit-message input, and local staged commit | BLOCKED | TASK-012 (accepted); Git mutation boundary pending |
+| 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | PROPOSED | TASK-011 (accepted) |
+| 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | PROPOSED | TASK-012 (accepted) |
 
 TASK-010 is the only actionable current task. TASK-011 is the next bounded
-successor. TASK-012 and TASK-013 are recorded for the requested Git direction
-but cannot be implemented until the open history and mutation decisions are
-resolved; no later task may absorb those features incidentally.
+successor. TASK-012 and TASK-013 now have accepted product direction but remain
+successor slices until their dependencies are accepted; no later task may
+absorb those features incidentally.
 
 ## Accepted task notes
 
@@ -49,12 +49,17 @@ resolved; no later task may absorb those features incidentally.
   `Esc` close and expose a top-right mouse close control.
 - `TASK-012` should use a horizontal split inside the left Git area: current
   changes/status above and current-branch history below. It must not silently
-  check out or mutate a branch. The exact history graph and commit-selection
-  baseline are open decisions.
-- `TASK-013` is intentionally blocked pending explicit confirmation that the
-  first write-capable Git surface is limited to local stage/unstage/commit.
-  Push, pull, merge, rebase, branch checkout, discard, amend, and remote
-  synchronization remain excluded unless separately authorized.
+  check out or mutate a branch. The full reachable ancestry graph, merge nodes,
+  and two user-selected revision/location endpoints are accepted in ADR-004.
+- `TASK-013` is limited to file-level local stage/unstage/commit with a
+  user-entered message. Push, pull, fetch, merge, rebase, branch checkout,
+  discard, amend, remote synchronization, credentials, and partial-line
+  staging remain excluded.
+
+- `TASK-012` must show the full ancestry graph reachable from the current
+  branch, including merge nodes, and let the user choose two revision/location
+  endpoints for a read-only comparison. The default comparison remains
+  working tree versus `HEAD`; selecting history must not check out a branch.
 
 ## Preserved boundaries
 
