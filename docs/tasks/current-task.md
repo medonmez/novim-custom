@@ -2,7 +2,7 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-014`
-Status: `PLANNED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-014-auto-copy-preview-exit`
@@ -139,3 +139,114 @@ unsaved-buffer preservation are accepted behavior.
 - ADR-005 accepts the local clipboard, direct all-mode Preview exit, and
   explicit modified-buffer confirmation semantics for implementation.
 - No product or dependency blocker remains.
+
+## Implementation handoff (TASK-014)
+
+Status: `READY_FOR_REVIEW`
+Implementer: `$stateless-implementer` (fresh context)
+Implementation commit: HEAD (handoff commit)
+
+### Change summary
+
+- `workbench.lua` gained an editor-interaction section scoped to the
+  editable regular-file buffer shown in the right pane:
+  `editable_editor_buffer()` / `M.editing_file_buffer()` identify it (never
+  the Preview/Diff/history scratch buffers); `M.copy_selection_to_clipboard()`
+  copies the completed Visual mouse selection to the local system clipboard
+  (`+`) exactly once at `<LeftRelease>`, keeps the selection reselected, and
+  records a bounded session-only notice; `M.return_to_preview()` returns
+  directly to the same file's Preview and opens the bounded
+  unsaved-changes confirmation float (`M.preview_return_confirm_open()`)
+  when the buffer is modified; confirming (Enter/y) hides the buffer into
+  memory without saving or discarding, cancelling (Esc/n/q) keeps editing;
+  `install_editor_maps()` binds `<LeftRelease>` (n/v) and `<Esc>` (n/i/v)
+  buffer-locally with a default-behavior fallback when the workbench
+  context is gone. The clipboard-provider check
+  (`M._clipboard_provider_available`) produces a bounded failure notice
+  instead of a silent failure. `M.close()`/`M.open()`/`M.get_state()` handle
+  the new transient state (`copy_notice`, `preview_return`).
+- `init.lua` extends `_G.get_editor_hints()` with `Mouse Copy` and
+  `Esc Preview` guidance only while the workbench editable file buffer is
+  focused; all other buffers keep the established hints unchanged.
+- `keymaps.lua` gained the canonical `M.editor` documentation entries, and
+  the workbench help popup documents the two new editor interactions.
+- Tests: 7 focused `test_task014_*` integration tests and 1 smoke
+  regression test cover exact clipboard auto-copy, provider-failure
+  notice, no-copy in Preview/Diff/keyboard-only/plain-click paths, direct
+  Esc from all three editor modes, confirm/cancel with buffer and disk
+  preservation, same-file Preview restoration, reopening recovery,
+  statusline guidance (including the rendered template), and
+  documentation-to-mapping correspondence.
+
+### Files changed
+
+- `config/nvim/lua/novim/workbench.lua` (editor interaction section, state,
+  close/open/get_state wiring, help popup lines)
+- `config/nvim/init.lua` (editor statusline hints extension)
+- `config/nvim/lua/novim/keymaps.lua` (`M.editor` docs)
+- `tests/test_workbench.lua`, `tests/test_smoke.lua` (focused + smoke
+  coverage; smoke test registered in `test_order`)
+- `docs/tasks/current-task.md` (this handoff)
+
+### Validation commands and results (local evidence only)
+
+| Command | Result |
+|---|---|
+| `./tests/run_tests.sh` (3 consecutive final runs) | exit 0; integration 59/59, offline package tests passed, smoke 9/9, zero fixture residue, product source tree clean |
+| `./bin/novim-dev --headless -c "luafile tests/test_workbench.lua"` (5 consecutive runs) | 59 total, 59 passed, 0 failed each run |
+| Lua parse checks (`loadfile`) on `init.lua`, `workbench.lua`, `keymaps.lua`, `test_workbench.lua`, `test_smoke.lua` | all OK |
+| `bash -n tests/run_tests.sh tests/run_smoke_tests.sh tests/run_package_tests.sh bin/novim-dev` | all OK |
+| `python3 -m json.tool docs/project.json` | exit 0 (valid JSON) |
+| `./bin/novim-dev --version` | `novim-dev 0.1.7-dev (custom checkout)` |
+| `/Users/mert/.local/bin/novim --version` | `novim 0.1.7` (installed release untouched) |
+| `git diff --check` | clean (no whitespace errors) |
+| `python3 /tmp/pty_task014.py` (real PTY, SGR mouse, TERM=xterm-256color) | 17/17 checks passed |
+
+### Acceptance-criterion evidence
+
+- Regular file still opens as a real editable buffer; Preview stays
+  read-only: `test_open_regular_file_in_editor`,
+  `test_directory_selection_preserves_inspection_no_file_open`,
+  `test_smoke_source_navigation_editing_and_buffer_preservation`, plus the
+  PTY editor-open check.
+- Mouse selection auto-copies exactly; selection and explicit copy stay
+  usable: `test_task014_mouse_selection_autocopies_exact_clipboard_text`
+  (clipboard equals the exact selected text; Visual mode stays active;
+  explicit `"+ygv` still yanks; plain click records no notice), and the PTY
+  SGR drag check (`clipboard` contained exactly the selected A-run).
+- No auto-copy in read-only Preview/Diff panes or for keyboard-only
+  selections: `test_task014_no_autocopy_in_readonly_panes_or_keyboard_selections`.
+- Direct Esc from Insert/Normal/Visual returns to the same file's Preview:
+  `test_task014_direct_esc_from_all_editor_modes_returns_to_preview`
+  (i-mode binding structure asserted; handler invoked for all three modes),
+  plus PTY checks for all three modes with no intermediate Normal stop.
+- Modified-buffer confirmation: `test_task014_modified_buffer_esc_confirms_and_preserves_content`
+  (Esc/N cancel with content and modified flag intact; Enter/y return;
+  on-disk file unchanged; reopening restores the exact in-memory buffer),
+  plus PTY confirmation, cancel, confirm, and recovery checks.
+- In-memory buffer preserved for recovery: same tests as above
+  (`nvim_buf_is_loaded` + `modified` after the confirmed return).
+- Statusline guidance: `test_task014_statusline_documents_autocopy_and_esc_preview`
+  (all three mode branches keep existing hints and add the new guidance;
+  rendered via `nvim_eval_statusline`; no leak into navigation panes), plus
+  the PTY statusline check.
+- Existing boundaries intact: full 59-test integration suite, 9-test smoke
+  suite (launcher isolation, installed-release independence, geometry,
+  settings, Source Control), version checks, and the additive-only product
+  diff inspection (no auto-save/discard, no clipboard persistence or remote
+  transfer, no installed-release writes, no Source Control changes).
+
+### Residual risks and notes
+
+- Single-Esc return waits out `timeoutlen` (1000 ms) because the global
+  `<Esc><Esc>` quit mapping shares the prefix; this matches the accepted
+  Settings immediate-Esc-close behavior and was verified as working in the
+  PTY run. `<Esc><Esc>` quit from the editor buffer is unchanged.
+- The confirmation float always takes focus in Normal mode
+  (`stopinsert`) and is non-modifiable, so its keys are decisive even when
+  opened from Insert mode (found and fixed during PTY validation).
+- The auto-copy writes to the local system clipboard by design; tests save
+  and restore the previous clipboard content around clipboard-touching
+  assertions, and the provider check is a stub seam for the failure path.
+- All evidence above is local; no hosted, production, recovery, or
+  customer-acceptance claim is made.

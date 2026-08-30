@@ -357,12 +357,21 @@ function _G.get_editor_hints()
   local mode = vim.fn.mode()
   local modified = vim.bo.modified
 
+  -- Inside the workbench editable file buffer the statusline also documents
+  -- the automatic mouse copy and the direct Esc return to Preview (TASK-014).
+  -- Other buffers keep the established hints unchanged.
+  local workbench_guidance = ""
+  local ok_wb, workbench = pcall(require, "novim.workbench")
+  if ok_wb and workbench and workbench.editing_file_buffer() then
+    workbench_guidance = "  Mouse Copy  Esc Preview"
+  end
+
   if mode == "v" or mode == "V" or mode == "\22" then
-    return "^C Copy  ^X Cut  ^A All"
+    return "^C Copy  ^X Cut  ^A All" .. workbench_guidance
   elseif modified then
-    return "^S Save  ^Z Undo"
+    return "^S Save  ^Z Undo" .. workbench_guidance
   else
-    return "^V Paste  ^A All"
+    return "^V Paste  ^A All" .. workbench_guidance
   end
 end
 
