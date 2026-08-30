@@ -1,36 +1,31 @@
 # Latest Review
 
-Updated: 2026-08-30
-Task ID: `TASK-015`
+Updated: 2026-08-31
+Task ID: `TASK-016`
 Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
-Baseline: `99056a51c3e25bfbd05758371eb47ec7085917bb` (`origin/main`)
-Candidate: `75dc882bc37ce772104a250dde5e0c2292aaeac7` (`task/TASK-015-oh-my-code-identity`)
-Pull request: `https://github.com/medonmez/novim-custom/pull/27` (`MERGED`)
-Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `MERGED`
-Target branch contains change: `YES` (`origin/main`)
-Merge commit: `8457dbf0e0274d642e09481a01fa6b9d777b9377`
+Baseline: `853b32a` (`origin/main`, reconciliation merge; recorded expected
+baseline `8457dbf` is an ancestor)
+Candidate: `6072f25` (`task/TASK-016-oh-my-code-startup-splash`)
+Pull request: not opened
+Remote task branch: not present
+Remote checks: not applicable before delivery
+Merge status: pending lightweight delivery
 
 ## Review result
 
-The candidate was inspected against the recorded `origin/main` baseline and
-the implementation parent `b5efa71` (`docs(TASK-015): plan oh-my-code public
-identity`). The implementation is limited to the new public `bin/ohc`
-launcher, compatibility identity/help labeling in `bin/novim-dev`, focused
-smoke coverage, and the corresponding architecture/distribution/current-task
-handoff documentation. The plan commit's ADR, product, repository, project,
-backlog, and task records are consistent with the accepted public identity
-boundary.
+The candidate was inspected against the actual `origin/main` baseline and the
+complete task delta. The implementation is limited to the public `ohc`
+launcher, the one-release `novim-dev` compatibility alias, focused PTY smoke
+coverage, and the corresponding local architecture/distribution and task
+handoff records.
 
-`bin/ohc` is executable and self-contained. It resolves the real repository
-root through direct and symlinked invocation, works from an external working
-directory, forwards Neovim arguments, and shares the existing isolated
-`config`, `.dev-data`, `.dev-state`, and `.dev-cache` boundary with
-`novim-dev`. The public and compatibility CLI identities are explicit while
-the pre-release `0.1.7-dev` semantics remain intact. No product config,
-workbench, installed-release launcher, or normal Neovim configuration code was
-changed.
+Both launchers consume `--no-animation`, detect `--headless` anywhere in the
+argument list, honor `OHC_NO_ANIMATION=1`, and render the ANSI splash only when
+stdout is a TTY. Help and version exit before the splash. Arguments that are
+not launcher controls are forwarded with array-safe shell expansion. The
+existing isolated config/data/state/cache paths and launcher identities remain
+intact.
 
 No unresolved correctness, regression, security, privacy, data-integrity,
 public-contract, or scope issue remains for this local review.
@@ -41,62 +36,64 @@ None blocking.
 
 Non-blocking observations retained from the handoff:
 
-- `bin/ohc` and `bin/novim-dev` intentionally duplicate the bounded launcher
-  mechanics because the pre-release package allowlist stages only
-  `bin/novim-dev`; consolidation belongs to the TASK-017 package migration.
-- The `0.1.7-dev` version semantics remain unchanged by design; the public
-  `v1.0.0` bump is TASK-019 scope.
-- Runtime and installed-command invariance evidence is local-machine evidence,
-  not hosted, production, recovery, or customer-acceptance evidence.
+- The PTY duration assertion uses a `[0.60s, 1.80s]` observation window around
+  fixed launcher sleeps; extreme machine load could make this test-only check
+  flaky without changing the fixed product delay.
+- Splash redraw relies on cursor-up terminal support and the art wraps
+  cosmetically on very narrow terminals; bypass and timing behavior are not
+  affected.
+- The PTY matrix warns and skips when `python3` is absent. It ran successfully
+  in this review environment.
+- Splash mechanics remain duplicated in both launchers because the current
+  pre-release package allowlist stages only `bin/novim-dev`; consolidation is
+  appropriately deferred to `TASK-017`.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| `bin/ohc` is executable; external-cwd and symlink launch resolve bundled config | PASS | `stat` confirms mode `755`; smoke Step 3.1/3.2 performs real headless launches from an external directory and through symlinked `ohc`, asserting the checkout config and isolated runtime roots. |
-| Public and compatibility version/help identities are correct and non-interactive | PASS | Direct `ohc --version`/`--help` and `novim-dev --version`/`--help` checks passed. Outputs identify `oh-my-code`/`ohc`, `novim-dev` compatibility status, `0.1.7-dev`, usage, and the Neovim engine; flags exit before editor startup. |
-| `ohc --headless` forwards flags and keeps writable runtime paths isolated without normal network activity | PASS | Smoke Step 3.1 asserts config, data, state, and cache under the checkout boundary. Static launcher inspection found no network/update path; the full validation ran locally/offline. |
-| File arguments and Neovim flags pass through both command names without workbench regression | PASS | Smoke Step 4 asserts one fixture file reaches Neovim with the expected real path through both launchers; headless config flags run through both, and the integration suite passes unchanged workbench behavior. |
-| Focused smoke and existing package coverage are green | PASS | `./tests/run_tests.sh`: 59/59 integration tests, offline package suite, and 9/9 smoke tests under the public `ohc` launcher; smoke covers public command, alias, external cwd, symlink, isolation, passthrough, cleanup, and installed `novim` independence. |
-| `bin/novim`, installed `novim`, and normal Neovim config remain invariant | PASS | Independent before/after snapshots kept `bin/novim` at SHA-256 `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`, installed `novim` at `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, installed output at `novim 0.1.7`/`powered by NVIM v0.12.5`, and the normal config tree absent before and after. |
+| Normal interactive `ohc` launch renders a bounded splash and then starts Neovim | PASS | The real PTY matrix rendered the `oh-my-code` splash for both launchers, observed the final version frame within `0.60s–1.80s`, and exited cleanly after `:qa!`. |
+| Disable controls suppress the splash and `--no-animation` is not forwarded | PASS | PTY flag/env runs were splash-free and prompt; the Lua `vim.v.argv` assertion passed for both launchers, including a direct reviewer probe with the flag in mid-argument position. |
+| Help, version, headless, piped, and test launches remain immediate and forwarded | PASS | Smoke Step 5 checks help/version, headless-under-TTY, piped, flag/env bypasses; direct `ohc`/`novim-dev` CLI and file passthrough checks passed; the 9-test headless smoke suite passed. |
+| `novim-dev` compatibility and one-release identity boundary are preserved | PASS | Existing CLI identity/help assertions passed unchanged, and the same splash eligibility/disable matrix passed for `novim-dev`. |
+| Focused and existing suites remain green | PASS | Reviewer rerun of `./tests/run_tests.sh` passed: 59/59 integration tests, offline package/upstream-boundary suite, and 9/9 smoke tests, including the new PTY step. |
+| `bin/novim`, installed `novim`, and normal Neovim config remain invariant | PASS | After validation, `bin/novim` remained SHA-256 `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`; `/Users/mert/.local/bin/novim` remained `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, output remained `novim 0.1.7` / `powered by NVIM v0.12.5`, and `/Users/mert/.config/nvim` remained absent. |
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`,
-  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, the prior
-  `docs/reviews/latest-review.md`, ADR-006, product, architecture, and local
-  distribution records.
-- Confirmed before delivery that the task branch was
-  `task/TASK-015-oh-my-code-identity`, the expected baseline was an ancestor
-  of the candidate, the working tree was clean, and no remote task branch or
-  PR existed.
-- Inspected the complete implementation diff `b5efa71..75dc882` and the full
-  task delta from `origin/main`; no changes were found under `config/nvim/`,
-  `bin/novim`, `bin/novim-dev-package`, `tests/run_package_tests.sh`, or
-  `tests/run_tests.sh`.
-- Ran `bash -n bin/ohc bin/novim-dev tests/run_smoke_tests.sh
-  tests/run_tests.sh tests/run_package_tests.sh`, `luajit -bl
-  tests/test_smoke.lua`, `git diff --check`, direct CLI checks, and
-  `./tests/run_tests.sh`; all passed.
-- Rechecked before/after hashes and outputs around the complete validation;
-  `~/.local/bin/novim` remained independent and no normal Neovim config was
-  created or modified.
+  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, the prior review,
+  ADR-006, and the relevant architecture/distribution records.
+- Confirmed the checkout is on
+  `task/TASK-016-oh-my-code-startup-splash`, at candidate `6072f25`, with a
+  clean working tree before review; the candidate parent is `853b32a` and the
+  recorded `8457dbf` baseline is an ancestor.
+- Inspected the complete candidate diff. Only
+  `bin/ohc`, `bin/novim-dev`, `tests/run_smoke_tests.sh`,
+  `docs/architecture.md`, `docs/LOCAL_DISTRIBUTION.md`, and the current-task
+  handoff changed. No changes were found under `bin/novim`, `config/nvim/`,
+  the package helper, or installed paths.
+- Ran `bash -n bin/ohc bin/novim-dev tests/run_smoke_tests.sh`,
+  `git diff --check 853b32a..6072f25`, direct CLI checks, mid-position flag
+  consumption and early-exit probes, and `./tests/run_tests.sh`; all passed.
+- The implementer also reported an earlier independent PTY measurement of
+  `0.863s` (`ohc`) and `0.853s` (`novim-dev`) and a second smoke-runner pass;
+  these remain local handoff evidence. This review reran the complete suite
+  once and observed the PTY matrix pass.
 
 All evidence above is local review evidence. It is not hosted, production,
 recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`ACCEPTED` after lightweight PR #27 merge. The reviewed implementation and
-review record are contained in `origin/main` at merge commit
-`8457dbf0e0274d642e09481a01fa6b9d777b9377`. No repository rename, tag,
-release, or hosted installer action occurred. All validation and runtime
-invariance evidence remains local; this merge is not hosted, production,
-recovery, or customer-acceptance evidence.
+`APPROVED` for lightweight delivery. The implementation is not yet accepted:
+the task branch has not been pushed, no PR exists, and the remote default
+branch does not yet contain the candidate. No repository rename, tag, release,
+or hosted installer action is in scope for TASK-016.
 
 ## Next action
 
-TASK-015 is complete. The next actionable slice is TASK-016: plan and
-implement the one-second interactive-TTY startup splash with explicit
-no-animation controls, without delaying help, version, headless, piped, or
-test launches.
+Push the reviewed task branch, open one PR targeting `origin/main`, merge it
+promptly if mergeable under the repository's lightweight policy, verify the
+remote default branch contains the merge, and only then reconcile TASK-016 as
+`ACCEPTED` and advance the next task.
