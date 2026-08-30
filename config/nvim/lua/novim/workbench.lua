@@ -40,6 +40,22 @@ local state = {
   selected_index = 1,
   line_to_file_index = {},
 
+  -- Source Control State (history graph + two-endpoint comparison)
+  selected_history_index = 0,
+  line_to_history_index = {},
+  history = {},
+  history_commits = {},
+  history_err = nil,
+  branch = nil,
+  compare = {
+    old = { kind = "head", ref = "HEAD", label = "HEAD" },
+    new = { kind = "worktree", ref = git.WORKTREE_REF, label = "Worktree" },
+    error = nil,
+  },
+  history_header_line_count = 0,
+  buf_history = nil,
+  win_history = nil,
+
   header_line_count = 4,
   buf_left = nil,
   buf_middle = nil,
@@ -453,7 +469,7 @@ local function render_diff_content(buf, win, file, versions, side)
   local binary = (side == "old") and versions.old_binary or versions.new_binary
   if binary then
     local path = (side == "old") and versions.old_path or versions.new_path
-    local location = (side == "old") and "HEAD" or "working tree"
+    local location = (side == "old") and (versions.old_label or "HEAD") or (versions.new_label or "working tree")
     lines = {
       "# Binary file: " .. path,
       "# Content preview suppressed (" .. location .. ").",
@@ -514,7 +530,8 @@ local function render_diff_pane(buf, win, side)
   if not file then
     return
   end
-  render_diff_content(buf, win, file, git.get_file_versions(file, state.repo_root), side)
+  render_diff_content(buf, win, file,
+    git.get_file_versions_between(file, state.compare.old, state.compare.new, state.repo_root), side)
 end
 
 --- Render the middle old-file pane in Diff view.
@@ -656,13 +673,353 @@ local function set_preview_window_options(win, role)
   end
 end
 
+-- =========================================================================
+-- Source Control (TASK-012): history graph pane and two-endpoint comparison
+-- =========================================================================
+
+--- Build the canonical default comparison endpoint pair: working tree
+--- versus HEAD. A fresh Source Control entry always returns to this pair.
+local function default_compare()
+  return {
+    old = { kind = "head", ref = "HEAD", label = "HEAD" },
+    new = { kind = "worktree", ref = git.WORKTREE_REF, label = "Worktree" },
+    error = nil,
+  }
+end
+
+local function worktree_endpoint()
+  return { kind = "worktree", ref = git.WORKTREE_REF, label = "Worktree" }
+end
+
+--- Reflect the current comparison endpoints in the old/new pane status
+--- lines so the documented direction stays visible at all times.
+local function apply_compare_statuslines()
+  if state.view_mode ~= "diff" then
+    return
+  end
+  if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+    vim.wo[state.win_middle].statusline =
+      " %f %=[Old: " .. tostring(state.compare.old.label) .. "]  [Tab] Next  [S-Tab] Files "
+  end
+  if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
+    vim.wo[state.win_right].statusline =
+      " %f %=[New: " .. tostring(state.compare.new.label) .. "]  [S-Tab] Previous "
+  end
+end
+
+local function set_history_window_options(win)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return
+  end
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].wrap = false
+  vim.wo[win].cursorline = true
+  vim.wo[win].spell = false
+  vim.wo[win].foldenable = false
+  vim.wo[win].statusline = " %f %=[History Graph]  [O]ld [N]ew [D]efault  [r] Refresh "
+end
+
+--- Handle cursor movement inside the history pane by selecting the commit
+--- row the cursor rests on, mirroring the changed-file list behavior.
+local function on_history_cursor_moved()
+  if not state.win_history or not vim.api.nvim_win_is_valid(state.win_history) then
+    return
+  end
+  local cursor = vim.api.nvim_win_get_cursor(state.win_history)
+  local h_idx = state.line_to_history_index[cursor[1]]
+  if h_idx and h_idx ~= state.selected_history_index then
+    state.selected_history_index = h_idx
+    M.render_history_pane()
+  end
+end
+
+--- Render the bottom-left Source Control pane: comparison status on top,
+--- then the full reachable current-branch graph with merge nodes and local
+--- ref decorations. Rendering is read-only and never checks out anything.
+function M.render_history_pane()
+  if not state.buf_history or not vim.api.nvim_buf_is_valid(state.buf_history) then
+    return
+  end
+
+  vim.bo[state.buf_history].readonly = false
+  vim.bo[state.buf_history].modifiable = true
+
+  local lines = {}
+  local highlights = {}
+  state.line_to_history_index = {}
+
+  -- Title with the inspected branch
+  if state.is_git then
+    table.insert(lines, " SOURCE CONTROL (branch: " .. tostring(state.branch or "HEAD") .. ")")
+  else
+    table.insert(lines, " SOURCE CONTROL")
+  end
+  table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchHeader" })
+
+  -- Comparison endpoint status (documented direction: old -> new)
+  local compare_base = " Compare: [Old] " .. tostring(state.compare.old.label)
+    .. " -> [New] " .. tostring(state.compare.new.label)
+  local compare_line = compare_base
+  if state.compare.error then
+    compare_line = compare_base .. "  ! " .. tostring(state.compare.error)
+  end
+  table.insert(lines, compare_line)
+  table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchSummary" })
+  if state.compare.error then
+    table.insert(highlights, { #lines - 1, #compare_base + 2, -1, "WorkbenchError" })
+  end
+
+  -- Visible identification of the selected history entry
+  local selected = state.history_commits[state.selected_history_index]
+  if selected then
+    table.insert(lines, " Selected: " .. selected.hash:sub(1, 7) .. " " .. selected.subject)
+  else
+    table.insert(lines, " Selected: (none)")
+  end
+  table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchSummary" })
+
+  table.insert(lines, " " .. string.rep("─", 44))
+  table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchDivider" })
+
+  state.history_header_line_count = #lines
+
+  -- Bounded history states
+  if not state.is_git then
+    table.insert(lines, " (Not a Git repository)")
+    table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchSubHeader" })
+    table.insert(lines, " History requires a Git repository.")
+    table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSummary" })
+  elseif not state.has_head then
+    table.insert(lines, " (No commits yet)")
+    table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchSubHeader" })
+    table.insert(lines, " The current branch has no commit history.")
+    table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSummary" })
+  elseif state.history_err then
+    table.insert(lines, " [History Error]")
+    table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchError" })
+    table.insert(lines, " " .. tostring(state.history_err))
+    table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSubHeader" })
+  elseif #state.history == 0 then
+    table.insert(lines, " (No history available)")
+    table.insert(highlights, { #lines - 1, 1, -1, "WorkbenchSubHeader" })
+  else
+    local commit_idx = 0
+    for _, entry in ipairs(state.history) do
+      if entry.kind == "commit" then
+        commit_idx = commit_idx + 1
+        local marker = (commit_idx == state.selected_history_index) and "▶" or " "
+        local refs_part = (entry.refs and entry.refs ~= "") and (" (" .. entry.refs .. ")") or ""
+        table.insert(lines, " " .. marker .. " " .. entry.graph .. entry.hash:sub(1, 7)
+          .. refs_part .. " " .. entry.subject)
+        local line_no = #lines
+        state.line_to_history_index[line_no] = commit_idx
+        if commit_idx == state.selected_history_index then
+          table.insert(highlights, { line_no - 1, 1, 2, "WorkbenchActiveMarker" })
+        end
+        local art_end = 3 + #entry.graph
+        table.insert(highlights, { line_no - 1, 3, art_end, "WorkbenchDivider" })
+        table.insert(highlights, { line_no - 1, art_end, art_end + 7, "WorkbenchPath" })
+      else
+        table.insert(lines, "   " .. entry.graph)
+        table.insert(highlights, { #lines - 1, 3, -1, "WorkbenchDivider" })
+      end
+    end
+  end
+
+  vim.api.nvim_buf_set_lines(state.buf_history, 0, -1, false, lines)
+  vim.bo[state.buf_history].modifiable = false
+  vim.bo[state.buf_history].readonly = true
+
+  vim.api.nvim_buf_clear_namespace(state.buf_history, state.ns_id, 0, -1)
+  for _, h in ipairs(highlights) do
+    local end_col = h[3]
+    if end_col == -1 then
+      end_col = #lines[h[1] + 1]
+    end
+    pcall(vim.api.nvim_buf_add_highlight, state.buf_history, state.ns_id, h[4], h[1], h[2], end_col)
+  end
+
+  -- Position the cursor on the selected (or first) history row
+  if state.win_history and vim.api.nvim_win_is_valid(state.win_history) and #state.history_commits > 0 then
+    local target = (state.selected_history_index > 0) and state.selected_history_index or 1
+    local target_line = state.history_header_line_count + target
+    if target_line <= #lines then
+      pcall(vim.api.nvim_win_set_cursor, state.win_history, { target_line, 1 })
+    end
+  end
+end
+
+--- Select a history entry by commit index. Selection is read-only
+--- inspection: it never checks out a branch or mutates the repository.
+---@param index integer
+function M.select_history(index)
+  local count = #state.history_commits
+  if count == 0 then
+    return
+  end
+  if index < 1 then index = 1 end
+  if index > count then index = count end
+  if state.selected_history_index ~= index then
+    state.selected_history_index = index
+    M.render_history_pane()
+  end
+end
+
+--- Focus the history pane (Git Diff view only).
+function M.focus_history()
+  if state.view_mode ~= "diff" or not state.win_history
+    or not vim.api.nvim_win_is_valid(state.win_history) then
+    return false
+  end
+  vim.api.nvim_set_current_win(state.win_history)
+  return true
+end
+
+--- Resolve the comparison endpoint implied by a selection source. "history"
+--- uses the selected commit; "changes" resolves to the working tree.
+--- Returns nil plus a bounded reason when nothing is selectable.
+local function resolve_compare_endpoint(source)
+  if source == "history" then
+    local selected = state.history_commits[state.selected_history_index]
+    if not selected or not selected.hash then
+      return nil, "select a history row first"
+    end
+    return { kind = "commit", ref = selected.hash, label = selected.hash:sub(1, 7) }
+  end
+  return worktree_endpoint()
+end
+
+--- Two endpoints conflict when both resolve to the same commit (or both are
+--- the working tree). Unresolvable refs are surfaced at content-read time.
+local function compare_endpoints_conflict(a, b)
+  local hash_a = git.resolve_revision(a.ref, state.repo_root)
+    or (a.ref == git.WORKTREE_REF and git.WORKTREE_REF or nil)
+  local hash_b = git.resolve_revision(b.ref, state.repo_root)
+    or (b.ref == git.WORKTREE_REF and git.WORKTREE_REF or nil)
+  if not hash_a or not hash_b then
+    return false
+  end
+  return hash_a == hash_b
+end
+
+--- Assign one comparison endpoint side from the given selection source and
+--- repopulate the old/new comparison panes. Identical endpoints are
+--- rejected with a visible bounded error instead of guessing.
+---@param side "old" | "new"
+---@param source "changes" | "history"
+---@return boolean success
+function M.assign_compare_endpoint(side, source)
+  if side ~= "old" and side ~= "new" then
+    return false
+  end
+  local endpoint, err = resolve_compare_endpoint(source)
+  if not endpoint then
+    state.compare.error = err
+    M.render_history_pane()
+    return false
+  end
+
+  local other = (side == "old") and state.compare.new or state.compare.old
+  if compare_endpoints_conflict(endpoint, other) then
+    state.compare.error = "comparison endpoints must be distinct"
+    M.render_history_pane()
+    return false
+  end
+
+  state.compare[side] = endpoint
+  state.compare.error = nil
+  M.render_history_pane()
+  M.render_middle_pane()
+  M.render_right_pane()
+  apply_compare_statuslines()
+  return true
+end
+
+--- Reset the comparison to the default working-tree-versus-HEAD pair.
+---@return boolean
+function M.reset_compare()
+  state.compare = default_compare()
+  M.render_history_pane()
+  M.render_middle_pane()
+  M.render_right_pane()
+  apply_compare_statuslines()
+  return true
+end
+
+--- Install the history pane buffer maps. j/k/Up/Down and the mouse move the
+--- selection; O/N assign the old/new comparison endpoint from the selected
+--- row; D resets to the default comparison. Workbench-wide keys are
+--- mirrored so every pane stays fully operable.
+local function install_history_maps(buf)
+  local opts = { buffer = buf, silent = true, noremap = true }
+
+  -- View switching and shared workbench actions
+  vim.keymap.set("n", "1", function() M.set_view("files") end, opts)
+  vim.keymap.set("n", "b", function() M.set_view("files") end, opts)
+  vim.keymap.set("n", "f", function() M.set_view("files") end, opts)
+  vim.keymap.set("n", "2", function() M.set_view("diff") end, opts)
+  vim.keymap.set("n", "d", function() M.set_view("diff") end, opts)
+  vim.keymap.set("n", "g", function() M.set_view("diff") end, opts)
+  vim.keymap.set("n", "s", M.open_settings, opts)
+  vim.keymap.set("n", "S", M.open_settings, opts)
+
+  -- Deterministic history selection
+  vim.keymap.set("n", "j", function() M.select_history(state.selected_history_index + 1) end, opts)
+  vim.keymap.set("n", "k", function() M.select_history(state.selected_history_index - 1) end, opts)
+  vim.keymap.set("n", "<Down>", function() M.select_history(state.selected_history_index + 1) end, opts)
+  vim.keymap.set("n", "<Up>", function() M.select_history(state.selected_history_index - 1) end, opts)
+  local function select_history_row()
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local h_idx = state.line_to_history_index[cursor[1]]
+    if h_idx then
+      M.select_history(h_idx)
+    end
+  end
+  vim.keymap.set("n", "<CR>", select_history_row, opts)
+  vim.keymap.set("n", "<Space>", select_history_row, opts)
+
+  -- Two-endpoint comparison
+  vim.keymap.set("n", "O", function() M.assign_compare_endpoint("old", "history") end, opts)
+  vim.keymap.set("n", "N", function() M.assign_compare_endpoint("new", "history") end, opts)
+  vim.keymap.set("n", "D", M.reset_compare, opts)
+
+  -- Pane switching
+  vim.keymap.set("n", "<Tab>", function()
+    if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+      vim.api.nvim_set_current_win(state.win_middle)
+    end
+  end, opts)
+  vim.keymap.set("n", "<S-Tab>", function()
+    if state.win_left and vim.api.nvim_win_is_valid(state.win_left) then
+      vim.api.nvim_set_current_win(state.win_left)
+    end
+  end, opts)
+
+  -- Mouse
+  vim.keymap.set("n", "<LeftMouse>", on_left_click, opts)
+  vim.keymap.set("n", "<2-LeftMouse>", select_history_row, opts)
+  vim.keymap.set("n", "<LeftDrag>", on_left_drag, opts)
+  vim.keymap.set("n", "<LeftRelease>", on_left_release, opts)
+
+  -- Actions
+  vim.keymap.set("n", "r", M.refresh, opts)
+  vim.keymap.set("n", "<C-r>", M.refresh, opts)
+  vim.keymap.set("n", "?", M.show_help, opts)
+  vim.keymap.set("n", "q", function() M.close({ quit = true }) end, opts)
+  vim.keymap.set("n", "<Esc><Esc>", function() M.close({ quit = true }) end, opts)
+end
+
+
 --- Add the old-file pane between the navigation and preview panes.
 local function ensure_diff_layout()
   if not state.win_left or not vim.api.nvim_win_is_valid(state.win_left)
     or not state.win_right or not vim.api.nvim_win_is_valid(state.win_right) then
     return false
   end
-  if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+  if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle)
+    and state.win_history and vim.api.nvim_win_is_valid(state.win_history) then
     return true
   end
 
@@ -696,6 +1053,36 @@ local function ensure_diff_layout()
   if vim.api.nvim_win_is_valid(previous_win) and previous_win ~= state.win_middle then
     vim.api.nvim_set_current_win(previous_win)
   end
+
+  -- Split the left navigation column horizontally: current changes/status
+  -- above, current-branch history graph below. The split uses a fixed
+  -- session-only height; logical geometry persistence stays Files/Diff only.
+  if not state.win_history or not vim.api.nvim_win_is_valid(state.win_history) then
+    state.buf_history = fresh_buffer("[Workbench - History]")
+    configure_scratch_buffer(state.buf_history)
+    vim.api.nvim_set_current_win(state.win_left)
+    local ok_history = pcall(vim.cmd, "below split")
+    if ok_history then
+      state.win_history = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(state.win_history, state.buf_history)
+      local total_height = vim.api.nvim_win_get_height(state.win_left)
+        + vim.api.nvim_win_get_height(state.win_history)
+      local history_height = math.max(5, math.min(math.floor(total_height * 0.45), math.max(5, total_height - 8)))
+      pcall(vim.api.nvim_win_set_height, state.win_history, history_height)
+      set_history_window_options(state.win_history)
+      install_history_maps(state.buf_history)
+      vim.api.nvim_create_autocmd("CursorMoved", {
+        buffer = state.buf_history,
+        callback = on_history_cursor_moved,
+      })
+    else
+      pcall(vim.api.nvim_buf_delete, state.buf_history, { force = true })
+      state.buf_history = nil
+    end
+    if vim.api.nvim_win_is_valid(state.win_left) then
+      vim.api.nvim_set_current_win(state.win_left)
+    end
+  end
   return true
 end
 
@@ -703,11 +1090,19 @@ local function leave_diff_layout()
   if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
     pcall(vim.api.nvim_win_close, state.win_middle, true)
   end
+  if state.win_history and vim.api.nvim_win_is_valid(state.win_history) then
+    pcall(vim.api.nvim_win_close, state.win_history, true)
+  end
   if state.buf_middle and vim.api.nvim_buf_is_valid(state.buf_middle) then
     pcall(vim.api.nvim_buf_delete, state.buf_middle, { force = true })
   end
+  if state.buf_history and vim.api.nvim_buf_is_valid(state.buf_history) then
+    pcall(vim.api.nvim_buf_delete, state.buf_history, { force = true })
+  end
   state.win_middle = nil
   state.buf_middle = nil
+  state.win_history = nil
+  state.buf_history = nil
   state.drag = nil
 end
 
@@ -889,13 +1284,37 @@ function M.refresh()
     state.err = nil
   end
 
+  -- 3. Refresh Source Control history (read-only log, refs, branch name).
+  --    Endpoint selection is deliberately preserved across refreshes.
+  if state.is_git then
+    state.branch = git.get_current_branch(state.repo_root)
+    local entries, hist_err = git.get_history(state.repo_root)
+    state.history = entries or {}
+    state.history_err = hist_err
+  else
+    state.branch = nil
+    state.history = {}
+    state.history_err = nil
+  end
+  state.history_commits = {}
+  for _, entry in ipairs(state.history) do
+    if entry.kind == "commit" then
+      table.insert(state.history_commits, entry)
+    end
+  end
+  if (state.selected_history_index or 0) > #state.history_commits then
+    state.selected_history_index = #state.history_commits
+  end
+
   if state.selected_index > #state.files then
     state.selected_index = math.max(1, #state.files)
   end
 
   M.render_left_pane()
+  M.render_history_pane()
   M.render_middle_pane()
   M.render_right_pane()
+  apply_compare_statuslines()
 end
 
 --- Handle cursor movement in left pane
@@ -1117,6 +1536,11 @@ on_left_click = function()
         M.render_right_pane()
       end
     end
+  elseif mouse.winid == state.win_history then
+    local h_idx = state.line_to_history_index[mouse.line]
+    if h_idx then
+      M.select_history(h_idx)
+    end
   end
 end
 
@@ -1188,6 +1612,14 @@ function M.show_help()
     "   r                Refresh files and Git status",
     "   ?                Show this help",
     "   q or Esc Esc     Quit / Close workbench",
+    " ────────────────────────────────────────────────────────",
+    " Source Control (Git Diff view):",
+    "   Changes list     Current changes/status (top-left)",
+    "   History graph    Full current-branch history (bottom-left)",
+    "   H                Focus the history list",
+    "   O / N            Set old/new compare endpoint from selection",
+    "   D                Reset compare to HEAD vs working tree",
+    "   Selection is read-only; nothing is ever checked out.",
     " ────────────────────────────────────────────────────────",
     " Settings & Display:",
     "   Dot-folders & hidden files are hidden by default.",
@@ -1262,6 +1694,8 @@ function M.close(opts)
     state.win_left = nil
     state.buf_middle = nil
     state.win_middle = nil
+    state.buf_history = nil
+    state.win_history = nil
     state.buf_right = nil
     state.win_right = nil
     pcall(vim.cmd, "tabclose")
@@ -1279,6 +1713,9 @@ function M.close(opts)
   if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
     table.insert(wins, state.win_middle)
   end
+  if state.win_history and vim.api.nvim_win_is_valid(state.win_history) then
+    table.insert(wins, state.win_history)
+  end
 
   local all_wins = vim.api.nvim_list_wins()
 
@@ -1290,9 +1727,11 @@ function M.close(opts)
     end
     state.win_left = nil
     state.win_middle = nil
+    state.win_history = nil
     state.win_right = nil
     state.buf_left = nil
     state.buf_middle = nil
+    state.buf_history = nil
     state.buf_right = nil
     return
   end
@@ -1321,6 +1760,9 @@ function M.close(opts)
     if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
       pcall(vim.api.nvim_win_close, state.win_middle, true)
     end
+    if state.win_history and vim.api.nvim_win_is_valid(state.win_history) then
+      pcall(vim.api.nvim_win_close, state.win_history, true)
+    end
     if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
       pcall(vim.api.nvim_win_close, state.win_right, true)
     end
@@ -1330,9 +1772,11 @@ function M.close(opts)
     end
     state.win_left = nil
     state.win_middle = nil
+    state.win_history = nil
     state.win_right = nil
     state.buf_left = nil
     state.buf_middle = nil
+    state.buf_history = nil
     state.buf_right = nil
   end
 end
@@ -1479,6 +1923,11 @@ function M.open(opts)
       end
     end, opts)
 
+    -- Source Control comparison endpoints (TASK-012)
+    vim.keymap.set("n", "O", function() M.assign_compare_endpoint("old", "changes") end, opts)
+    vim.keymap.set("n", "N", function() M.assign_compare_endpoint("new", "changes") end, opts)
+    vim.keymap.set("n", "D", M.reset_compare, opts)
+    vim.keymap.set("n", "H", function() M.focus_history() end, opts)
     vim.keymap.set("n", "<CR>", function()
       local cursor = vim.api.nvim_win_get_cursor(0)
       if state.view_mode == "files" then
@@ -1672,6 +2121,11 @@ function M.open(opts)
   -- A new workbench launch always starts collapsed at the root
   state.expanded_dirs = {}
 
+  -- A fresh Source Control entry restores the default comparison endpoints
+  -- (working tree versus HEAD); custom endpoints never outlive the launch.
+  state.compare = default_compare()
+  state.selected_history_index = 0
+
   -- Populate data
   M.refresh()
 end
@@ -1700,6 +2154,21 @@ function M.get_state()
     expanded_dirs = state.expanded_dirs,
     selected_index = state.selected_index,
     selected_project_index = state.selected_project_index,
+    selected_history_index = state.selected_history_index,
+    history = state.history,
+    history_commits = state.history_commits,
+    history_count = #state.history_commits,
+    history_err = state.history_err,
+    branch = state.branch,
+    compare = {
+      old = vim.deepcopy(state.compare.old),
+      new = vim.deepcopy(state.compare.new),
+      error = state.compare.error,
+    },
+    history_header_line_count = state.history_header_line_count,
+    line_to_history_index = state.line_to_history_index,
+    win_history = state.win_history,
+    buf_history = state.buf_history,
     active_file = active_file,
     settings = settings.get_all(),
     header_line_count = state.header_line_count,

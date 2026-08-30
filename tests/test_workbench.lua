@@ -2653,6 +2653,425 @@ function tests.test_pane_layout_clamps_to_narrow_terminal()
 end
 
 -- =========================================================================
+-- TASK-012 New Feature Tests (Source Control Graph & Two-Endpoint Comparison)
+-- =========================================================================
+
+--- Create a fixture repository whose current branch contains a real merge
+--- node plus decorated local branches, and working-tree changes for the
+--- default comparison. Fixture setup only touches the temporary repository.
+local function create_merge_history_fixture()
+  local dir = vim.fn.tempname() .. "_merge_history_fixture"
+  vim.fn.mkdir(dir, "p")
+
+  local function run_git(args)
+    local out = vim.fn.system("git -C " .. vim.fn.shellescape(dir) .. " " .. args)
+    if vim.v.shell_error ~= 0 then
+      error("git " .. args .. " failed: " .. out)
+    end
+    return out
+  end
+
+  local function write_file(name, content)
+    local f = io.open(dir .. "/" .. name, "wb")
+    f:write(content)
+    f:close()
+  end
+
+  run_git("init -q -b main")
+  run_git("config user.email 'test@example.com'")
+  run_git("config user.name 'Test Runner'")
+
+  -- C1 on main: tracked content plus a binary file
+  write_file("feature.txt", "base line\n")
+  write_file("shared.txt", "c1 shared\n")
+  write_file("binary.bin", "\0\1\2\3\255")
+  run_git("add .")
+  run_git("commit -q -m 'C1 base'")
+
+  -- C2 on the feature branch
+  run_git("checkout -q -b feature")
+  write_file("feature.txt", "branch line\n")
+  run_git("add .")
+  run_git("commit -q -m 'C2 branch change'")
+
+  -- C3 on main, then M1 merging feature (true merge node with two parents)
+  run_git("checkout -q main")
+  write_file("shared.txt", "c3 shared\n")
+  run_git("add .")
+  run_git("commit -q -m 'C3 main change'")
+  run_git("merge -q --no-ff -m 'M1 merge feature' feature")
+
+  -- C4 after the merge
+  write_file("feature.txt", "post merge line\n")
+  run_git("add .")
+  run_git("commit -q -m 'C4 after merge'")
+
+  -- Working-tree changes for the default comparison
+  write_file("shared.txt", "worktree shared\n")
+  write_file("untracked_new.txt", "untracked line\n")
+
+  return dir
+end
+
+--- Byte-for-byte read-only snapshot: HEAD, index entries, status bytes, and
+--- the full parent-annotated commit list of the inspected repository.
+local function snapshot_repo_state(dir)
+  local function git_capture(args)
+    local cmd = { "git", "-C", dir }
+    for _, a in ipairs(args) do
+      table.insert(cmd, a)
+    end
+    local res = vim.system(cmd, { text = true }):wait()
+    return res.stdout or ""
+  end
+
+  return table.concat({
+    git_capture({ "rev-parse", "HEAD" }),
+    git_capture({ "ls-files", "-s" }),
+    git_capture({ "status", "--porcelain=v1", "-z", "-uall" }),
+    git_capture({ "log", "--format=%H %P" }),
+  }, "\30")
+end
+
+function tests.test_source_control_layout_graph_selection_and_readonly_invariance()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_merge_history_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  local before_state = snapshot_repo_state(fixture)
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+
+  -- Horizontal Source Control layout: changes above, history below, one column
+  assert_true(st.win_history ~= nil and vim.api.nvim_win_is_valid(st.win_history),
+    "Diff view must create a valid history pane")
+  assert_true(st.buf_history ~= nil and vim.api.nvim_buf_is_valid(st.buf_history),
+    "Diff view must create a valid history buffer")
+  local pos_left = vim.fn.win_screenpos(st.win_left)
+  local pos_hist = vim.fn.win_screenpos(st.win_history)
+  assert_true(pos_hist[1] > pos_left[1], "history pane must sit below the changes pane")
+  assert_eq(pos_hist[2], pos_left[2], "history pane must share the left Git column")
+  assert_eq(vim.api.nvim_win_get_width(st.win_history), vim.api.nvim_win_get_width(st.win_left),
+    "history pane must match the left column width")
+  assert_true(vim.api.nvim_win_get_height(st.win_history) >= 5
+    and vim.api.nvim_win_get_height(st.win_left) >= 5,
+    "both left-column panes must keep a usable height")
+  assert_true(st.win_middle ~= nil and vim.api.nvim_win_is_valid(st.win_middle)
+    and vim.fn.win_screenpos(st.win_middle)[1] == pos_left[1],
+    "old/new comparison panes must remain beside the Source Control column")
+  assert_true(st.git_file_count >= 2, "changes pane must still list current changes")
+
+  -- Full reachable ancestry: merge node present, not a first-parent list
+  assert_eq(st.history_count, 5, "history must include every reachable commit")
+  local merge
+  for _, c in ipairs(st.history_commits) do
+    if #c.parents == 2 then merge = c end
+  end
+  assert_true(merge ~= nil and merge.subject == "M1 merge feature",
+    "history must contain the merge node with two parents")
+
+  local hist_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+  assert_true(hist_text:find("HEAD -> main", 1, true) ~= nil,
+    "history rows must render branch decorations")
+  assert_true(hist_text:find("(feature)", 1, true) ~= nil,
+    "history rows must render the feature branch decoration")
+  assert_true(hist_text:find("|\\", 1, true) ~= nil or hist_text:find("|/", 1, true) ~= nil,
+    "history must render merge graph edges, not a first-parent list")
+  assert_true(hist_text:find("M1 merge feature", 1, true) ~= nil,
+    "merge commit subject must be visible")
+  assert_true(hist_text:find("Compare: [Old] HEAD -> [New] Worktree", 1, true) ~= nil,
+    "compare status must document the default endpoint direction")
+
+  -- Deterministic keyboard selection without checkout
+  assert_eq(st.selected_history_index, 0, "fresh history must start unselected")
+  local down_cb = buffer_map_callback(st.buf_history, "<Down>")
+  local up_cb = buffer_map_callback(st.buf_history, "<Up>")
+  assert_true(down_cb ~= nil and up_cb ~= nil, "history pane must map Up/Down selection")
+  down_cb()
+  st = workbench.get_state()
+  assert_eq(st.selected_history_index, 1, "Down must select the first history row")
+  local selected_commit = st.history_commits[1]
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+    :find("Selected: " .. selected_commit.hash:sub(1, 7), 1, true) ~= nil,
+    "selection line must visibly identify the selected commit")
+  down_cb()
+  st = workbench.get_state()
+  assert_eq(st.selected_history_index, 2, "Down must move the selection to the next row")
+  up_cb()
+  st = workbench.get_state()
+  assert_eq(st.selected_history_index, 1, "Up must move the selection back")
+
+  -- Exactly one visible selection marker on the selected row
+  local marker_rows = {}
+  for i, l in ipairs(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false)) do
+    if l:find("▶", 1, true) then
+      table.insert(marker_rows, i)
+    end
+  end
+  assert_eq(#marker_rows, 1, "exactly one history row must show the selection marker")
+  assert_eq(marker_rows[1], st.history_header_line_count + 1,
+    "the marker must sit on the selected history row")
+
+  -- Cursor-movement selection inside the history pane mirrors the changes list
+  local commit3_line
+  for line_no, idx in pairs(st.line_to_history_index) do
+    if idx == 3 then commit3_line = line_no end
+  end
+  assert_true(commit3_line ~= nil, "the third commit row must be visible")
+  vim.api.nvim_set_current_win(st.win_history)
+  vim.api.nvim_win_set_cursor(st.win_history, { commit3_line, 1 })
+  vim.cmd("doautocmd CursorMoved")
+  st = workbench.get_state()
+  assert_eq(st.selected_history_index, 3, "cursor movement must select the row under the cursor")
+
+  -- Mouse hit-testing covers exactly the commit rows, whatever the graph edges
+  local mapped_rows = 0
+  for _, idx in pairs(st.line_to_history_index) do
+    mapped_rows = mapped_rows + 1
+    assert_true(idx >= 1 and idx <= st.history_count,
+      "mapped row must reference a valid commit index")
+  end
+  assert_eq(mapped_rows, st.history_count, "every commit row must be mouse-selectable")
+
+  workbench.close()
+
+  -- Selection and rendering must be byte-for-byte read-only for the repository
+  assert_eq(snapshot_repo_state(fixture), before_state,
+    "Source Control interactions must leave HEAD, index, status, and history untouched")
+
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_two_endpoint_comparison_direction_default_and_refresh()
+  local workbench = require("novim.workbench")
+  local git = require("novim.git")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_merge_history_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+
+  -- Fresh entry defaults to working tree versus HEAD
+  assert_eq(st.compare.old.ref, "HEAD", "default old endpoint must be HEAD")
+  assert_eq(st.compare.new.ref, git.WORKTREE_REF, "default new endpoint must be the working tree")
+
+  local function file_index(path)
+    for i, f in ipairs(st.files) do
+      if f.path == path then return i end
+    end
+    return nil
+  end
+
+  local function commit_index(subject)
+    for i, c in ipairs(st.history_commits) do
+      if c.subject == subject then return i, c end
+    end
+    return nil
+  end
+
+  local function pane_text(buf)
+    return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+  end
+
+  workbench.select_file(file_index("shared.txt"))
+  local old_text = pane_text(st.buf_middle)
+  local new_text = pane_text(st.buf_right)
+  assert_true(old_text:find("c3 shared", 1, true) ~= nil, "default old pane must show HEAD content")
+  assert_true(new_text:find("worktree shared", 1, true) ~= nil,
+    "default new pane must show working-tree content")
+  assert_true(old_text:find("worktree shared", 1, true) == nil,
+    "default old pane must not show working-tree-only content")
+
+  -- Existing untracked-file handling stays intact under the default comparison
+  workbench.select_file(file_index("untracked_new.txt"))
+  assert_true(pane_text(st.buf_middle):find("No file in HEAD", 1, true) ~= nil,
+    "untracked file must keep the readable no-HEAD placeholder")
+
+  -- Explicit two-endpoint selection from graph-visible revisions
+  local _, c1 = commit_index("C1 base")
+  local _, c3 = commit_index("C3 main change")
+  workbench.select_history(commit_index("C1 base"))
+  assert_true(workbench.assign_compare_endpoint("old", "history"),
+    "old endpoint assignment from a history row must succeed")
+  st = workbench.get_state()
+  assert_eq(st.compare.old.ref, c1.hash, "old endpoint must become the selected commit")
+
+  workbench.select_history(commit_index("C3 main change"))
+  assert_true(workbench.assign_compare_endpoint("new", "history"),
+    "new endpoint assignment from a history row must succeed")
+  st = workbench.get_state()
+  assert_eq(st.compare.new.ref, c3.hash, "new endpoint must become the selected commit")
+
+  -- Documented direction: old pane shows the old endpoint, new pane the new
+  workbench.select_file(file_index("shared.txt"))
+  old_text = pane_text(st.buf_middle)
+  new_text = pane_text(st.buf_right)
+  assert_true(old_text:find("c1 shared", 1, true) ~= nil, "old pane must show old-endpoint content")
+  assert_true(new_text:find("c3 shared", 1, true) ~= nil, "new pane must show new-endpoint content")
+  assert_true(old_text:find("c3 shared", 1, true) == nil and old_text:find("worktree shared", 1, true) == nil,
+    "old pane must not show newer content")
+  hist_text = table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+  assert_true(hist_text:find("[Old] " .. c1.hash:sub(1, 7), 1, true) ~= nil
+    and hist_text:find("[New] " .. c3.hash:sub(1, 7), 1, true) ~= nil,
+    "compare status must reflect both selected endpoints in order")
+
+  -- Identical endpoints are rejected with a visible bounded error
+  local old_before = st.compare.old.ref
+  workbench.select_history(commit_index("C3 main change"))
+  assert_true(not workbench.assign_compare_endpoint("old", "history"),
+    "identical endpoints must be rejected")
+  st = workbench.get_state()
+  assert_true(st.compare.error ~= nil, "the rejection must surface a bounded error")
+  assert_eq(st.compare.old.ref, old_before, "a rejected assignment must not change the old endpoint")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+    :find("! comparison endpoints must be distinct", 1, true) ~= nil,
+    "the compare status line must render the bounded error")
+
+  -- Refresh updates data and the comparison without silently moving endpoints
+  local new_before = st.compare.new.ref
+  vim.fn.writefile({ "worktree shared v2" }, fixture .. "/shared.txt")
+  workbench.refresh()
+  st = workbench.get_state()
+  assert_eq(st.compare.old.ref, old_before, "refresh must not silently change the old endpoint")
+  assert_eq(st.compare.new.ref, new_before, "refresh must not silently change the new endpoint")
+
+  -- D restores the default pair
+  assert_true(workbench.reset_compare(), "explicit reset must succeed")
+  st = workbench.get_state()
+  assert_eq(st.compare.old.ref, "HEAD", "reset must restore the HEAD old endpoint")
+  assert_eq(st.compare.new.ref, git.WORKTREE_REF, "reset must restore the working-tree new endpoint")
+  assert_true(pane_text(st.buf_right):find("worktree shared v2", 1, true) ~= nil,
+    "refreshed working-tree content must render after reset")
+
+  -- View switches keep chosen endpoints; a fresh entry restores the default
+  workbench.select_history(commit_index("C2 branch change"))
+  assert_true(workbench.assign_compare_endpoint("old", "history"), "custom old endpoint must apply")
+  st = workbench.get_state()
+  local custom_old = st.compare.old.ref
+  workbench.set_view("files")
+  workbench.set_view("diff")
+  st = workbench.get_state()
+  assert_eq(st.compare.old.ref, custom_old, "view switches must preserve chosen endpoints")
+  assert_true(vim.api.nvim_win_is_valid(st.win_history),
+    "re-entering Diff must recreate the history pane")
+
+  workbench.close()
+  workbench.open({ view = "diff" })
+  st = workbench.get_state()
+  assert_eq(st.compare.old.ref, "HEAD", "a fresh Source Control entry must default to HEAD")
+  assert_eq(st.compare.new.ref, git.WORKTREE_REF,
+    "a fresh Source Control entry must default to the working tree")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_source_control_empty_error_states()
+  local workbench = require("novim.workbench")
+  local git = require("novim.git")
+  workbench.close()
+
+  local old_cwd = vim.fn.getcwd()
+
+  -- (a) Repository without commits
+  local empty_dir = vim.fn.tempname() .. "_empty_repo_fixture"
+  vim.fn.mkdir(empty_dir, "p")
+  vim.fn.system("git -C " .. vim.fn.shellescape(empty_dir) .. " init -q -b main")
+  vim.cmd("cd " .. vim.fn.fnameescape(empty_dir))
+
+  workbench.open({ view = "diff" })
+  local st = workbench.get_state()
+  assert_eq(st.history_count, 0, "an empty repository must have no history entries")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+    :find("No commits yet", 1, true) ~= nil,
+    "an empty repository must render a readable no-commits state")
+
+  -- Endpoint assignment without a selectable history row stays bounded
+  assert_true(not workbench.assign_compare_endpoint("old", "history"),
+    "endpoint assignment without a history row must be rejected")
+  st = workbench.get_state()
+  assert_true(st.compare.error ~= nil, "the rejection must surface a visible error")
+  assert_eq(st.compare.old.ref, "HEAD", "a rejected assignment must not change the old endpoint")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+    :find("! select a history row first", 1, true) ~= nil,
+    "the compare status line must render the selection error")
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(empty_dir)
+
+  -- (b) Non-Git directory keeps every pane valid and readable
+  local plain_dir = vim.fn.tempname() .. "_plain_dir_fixture"
+  vim.fn.mkdir(plain_dir, "p")
+  vim.cmd("cd " .. vim.fn.fnameescape(plain_dir))
+  workbench.open({ view = "diff" })
+  st = workbench.get_state()
+  assert_eq(st.history_count, 0, "a non-Git directory must have no history")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_history, 0, -1, false), "\n")
+    :find("Not a Git repository", 1, true) ~= nil,
+    "a non-Git directory must render a readable history state")
+  assert_true(vim.api.nvim_win_is_valid(st.win_history)
+    and vim.api.nvim_win_is_valid(st.win_middle) and vim.api.nvim_win_is_valid(st.win_right),
+    "all Diff panes must remain valid outside a repository")
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(plain_dir)
+
+  local fixture = create_merge_history_fixture()
+
+  -- (c) Unavailable revision content resolves to a bounded error, never a throw
+  local content, _, read_err = git.read_revision_content(string.rep("0", 40), "feature.txt", fixture)
+  assert_true(content == nil and read_err ~= nil,
+    "an unavailable revision must return a readable error instead of raising")
+  assert_eq(git.resolve_revision(string.rep("9", 40), fixture), nil,
+    "an unresolvable revision must resolve to nil")
+
+  -- (d) Binary content at selected endpoints stays a readable placeholder
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+  workbench.open({ view = "diff" })
+  st = workbench.get_state()
+  local f = io.open(fixture .. "/binary.bin", "ab")
+  f:write("x")
+  f:close()
+  workbench.refresh()
+  st = workbench.get_state()
+  local bin_idx
+  for i, file in ipairs(st.files) do
+    if file.path == "binary.bin" then bin_idx = i end
+  end
+  assert_true(bin_idx ~= nil, "modified binary file must be listed in the changes pane")
+  workbench.select_file(bin_idx)
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_middle, 0, -1, false), "\n")
+    :find("Binary file", 1, true) ~= nil,
+    "binary HEAD content must stay a readable placeholder")
+
+  local c1_idx
+  for i, c in ipairs(st.history_commits) do
+    if c.subject == "C1 base" then c1_idx = i end
+  end
+  workbench.select_history(c1_idx)
+  assert_true(workbench.assign_compare_endpoint("old", "history"),
+    "assigning a commit endpoint for binary content must succeed")
+  assert_true(table.concat(vim.api.nvim_buf_get_lines(st.buf_middle, 0, -1, false), "\n")
+    :find("Binary file", 1, true) ~= nil,
+    "binary content at a commit endpoint must stay a readable placeholder")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+-- =========================================================================
 -- Run all tests
 -- =========================================================================
 

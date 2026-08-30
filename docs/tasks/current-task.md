@@ -2,11 +2,11 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-012`
-Status: `PLANNED`
+Status: `IN_PROGRESS`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-012-source-control-graph`
-Expected baseline: `ca1edaf` (`origin/main` before this reconciliation)
+Expected baseline: `8b76dad` (`origin/main`)
 Pull request: `NOT_OPEN`
 
 ## Outcome
@@ -140,9 +140,137 @@ boundary must remain intact.
 
 ## Implementation handoff
 
-Status: `PLANNED` (awaiting implementation on the recorded isolated branch)
+Status: `READY_FOR_REVIEW` (local handoff on `task/TASK-012-source-control-graph`)
 
-Implement TASK-012 only on `task/TASK-012-source-control-graph` after reading
-this task, the repository instructions, and the latest review. Return a local
-`READY_FOR_REVIEW` handoff; do not push, open a PR, merge, or mark the task
-accepted as the implementer.
+Commit: `HEAD (handoff commit)` on `task/TASK-012-source-control-graph`
+(single local commit on top of planning commit `4c5b922`, baseline
+`8b76dad` = `origin/main`). Not pushed; no pull request opened; main
+untouched.
+
+## Change summary
+
+The Git Diff view is now the accepted Source Control view. Its left column
+is split horizontally: the current changes/status list stays on top and a
+new history pane below renders the full commit ancestry reachable from the
+current branch using Git's own `--graph` rendering, so merge nodes, graph
+edges, and local ref/branch decorations (`HEAD -> main`, `(feature)`,
+tags) appear verbatim rather than a first-parent list. History rows are
+selectable for inspection via `j`/`k`/`Up`/`Down`, `Enter`/`Space`, cursor
+movement, and mouse clicks, with exactly one visible `▶` marker plus a
+`Selected:` identification line; selection never checks out or mutates
+anything. `O`/`N` explicitly assign the old/new comparison endpoint from
+the selected history row (`changes`-pane cursor resolves to the working
+tree), populating the existing old/new panes in the documented old->new
+direction, which is also reflected in the `Compare: [Old] ... -> [New]
+...` status line and the old/new pane statuslines. `D` resets to the
+default working-tree-versus-`HEAD` pair; identical endpoints are rejected
+with a visible bounded error; refresh never silently moves endpoints; a
+fresh workbench entry always restores the default pair. Empty repos, no
+history, non-Git directories, unavailable refs, and binary/special
+content render bounded readable states. `git.lua` gained read-only
+`get_history`, `get_current_branch`, `resolve_revision`,
+`read_revision_content`, and a generalized `get_file_versions_between`
+(default pair preserves the exact prior `get_file_versions` semantics,
+including rename-aware old paths and all placeholder messages). No
+staging, commit, index write, checkout, or any other Git mutation was
+added; TASK-013's write surface is untouched.
+
+## Files changed
+
+- `config/nvim/lua/novim/git.lua` — read-only history/branch/revision
+  readers and the two-endpoint version reader (default pair unchanged).
+- `config/nvim/lua/novim/workbench.lua` — Source Control layout
+  (changes above, history below), history rendering/selection, endpoint
+  assignment/reset, refresh invariance, fresh-entry default, empty/error
+  states, cleanup paths, state exposure.
+- `config/nvim/lua/novim/keymaps.lua` — documented `H`, `O / N`, `D`
+  (backed by real buffer-local mappings on both directions per the
+  existing help/mapping consistency test).
+- `tests/test_workbench.lua` — merge-graph fixture plus three focused
+  TASK-012 tests (layout/graph/selection/read-only invariance,
+  two-endpoint direction/default/refresh, empty/error states).
+- `tests/test_smoke.lua` — regression assertion updated from the old
+  three-area Diff layout to the accepted four-area layout (changes,
+  history, old, new) with a Source Control pane existence check.
+- `docs/tasks/current-task.md` — this handoff.
+
+## Validation performed (local evidence only)
+
+- `./tests/run_tests.sh` — integration suite 45/45 passed (42 prior +
+  3 new TASK-012 tests), offline package suite passed ("Offline Package
+  Tests Passed", installed/source invariance PASS), smoke suite 8/8
+  passed, zero fixture residue, source tree clean.
+- Lua syntax checks via `loadfile` on all changed Lua files
+  (`workbench.lua`, `git.lua`, `keymaps.lua`, `settings_ui.lua`,
+  `test_workbench.lua`, `test_smoke.lua`) — all OK.
+- `bash -n` on `tests/run_tests.sh`, `tests/run_smoke_tests.sh`,
+  `tests/run_package_tests.sh`, `bin/novim-dev`, `bin/novim-dev-package`
+  — all OK.
+- `python3 -m json.tool docs/project.json` — OK.
+- `./bin/novim-dev --version` → `novim-dev 0.1.7-dev (custom checkout)`;
+  `novim --version` → `novim 0.1.7` (installed release untouched).
+- `git diff --check` — clean.
+- Diff scope scan: no Git mutation commands, no network/plugin additions,
+  no installed-release or normal-Neovim-config writes, no geometry or
+  settings regressions in the changed product files.
+- Real-surface check: `bin/novim-dev` launched in a PTY against a merge
+  fixture; the Source Control layout, merge graph, decorations, history
+  selection markers, and the identical-endpoint rejection
+  (`ERR=comparison endpoints must be distinct`) were observed live.
+
+## Acceptance-criterion evidence
+
+- Changes above history in the left Git column with usable old/new panes:
+  `test_source_control_layout_graph_selection_and_readonly_invariance`
+  (screenpos rows, shared column, equal widths, valid middle pane) and
+  smoke `test_smoke_git_diff_rendering_and_read_only_invariance`
+  (four visible areas).
+- Full ancestry with merge nodes and decorations: same test asserts
+  `history_count == 5`, a two-parent `M1 merge feature` node, `|\`/`|/`
+  edge art, and `HEAD -> main` / `(feature)` decorations.
+- Selection without mutation: keyboard callbacks, cursor movement, mouse
+  row mapping, single visible marker, plus a byte-for-byte before/after
+  snapshot of `rev-parse HEAD`, `ls-files -s`, `status --porcelain -z`,
+  and `log --format=%H %P` asserting zero repository change.
+- Two distinct endpoints populate old/new panes in the documented
+  direction: `test_two_endpoint_comparison_direction_default_and_refresh`
+  (C1 content in old pane, C3 content in new pane, compare line shows
+  `[Old] <hash> -> [New] <hash>`, reversed content asserted absent).
+- Fresh entry defaults to working tree versus `HEAD` with untracked
+  handling intact (`No file in HEAD` placeholder asserted); view switches
+  preserve chosen endpoints; close+reopen restores the default.
+- Refresh updates status/history/comparison without moving endpoints
+  (worktree file edited between refreshes; endpoint refs asserted
+  unchanged; reset `D` renders refreshed worktree content).
+- Bounded empty/error states: `test_source_control_empty_error_states`
+  covers no-commit repos, non-Git directories, no-selection rejection
+  (`! select a history row first`), identical-endpoint rejection
+  (`! comparison endpoints must be distinct`), unavailable revisions via
+  `read_revision_content`/`resolve_revision` (nil + error, no throw), and
+  binary placeholders at commit endpoints.
+- Existing contracts: all 42 prior integration tests, the full package
+  suite, and 8/8 smoke tests pass unchanged except the documented
+  three-area→four-area smoke layout update.
+
+## Residual risks and notes
+
+- The changes/history horizontal split uses a fixed session-only height
+  proportion and is not persisted; logical geometry persistence remains
+  Files/Diff-only by design (transient window IDs and history selection
+  are never persisted), matching the task guardrails.
+- The compare status line clips long endpoint/error text in very narrow
+  terminals; the underlying state stays correct and the panes remain
+  usable, matching the existing pane-minimum behavior.
+- The PTY real-surface check picked up interactive key-routing noise
+  (stray normal-mode text and a clean exit); every claimed behavior was
+  still observed live, and the deterministic suites exercise the full
+  flows headlessly.
+- All evidence above is local evidence only; no hosted, production,
+  recovery, or customer-acceptance claim is made.
+
+## Blockers and dependencies
+
+- Dependency: TASK-011 is accepted in merge commit `ca1edaf` via PR #19.
+- ADR-004 and the accepted successor brief already resolve the Source Control
+  graph, endpoint, and read-only product direction.
+- TASK-013 remains a successor slice and must not be implemented here.
