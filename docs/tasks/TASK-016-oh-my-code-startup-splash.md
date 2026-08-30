@@ -1,15 +1,13 @@
-# Current Task
+# TASK-016 — oh-my-code interactive startup splash
 
-Updated: 2026-08-30
-Task ID: `TASK-016`
-Status: `PLANNED`
-Delivery policy: `LIGHTWEIGHT`
-Base branch: `main`
-Task branch: `task/TASK-016-oh-my-code-startup-splash`
-Expected baseline: `8457dbf0e0274d642e09481a01fa6b9d777b9377`
-Pull request: not opened
-PR target: `origin/main`
-Dependency: `TASK-015` (accepted in PR #27)
+- Status: `PLANNED`
+- Delivery policy: `LIGHTWEIGHT`
+- Base branch: `main`
+- Expected baseline: `8457dbf0e0274d642e09481a01fa6b9d777b9377`
+- Task branch: `task/TASK-016-oh-my-code-startup-splash`
+- PR target: `origin/main`
+- Dependency: `TASK-015` (accepted in PR #27)
+- Follow-up: `TASK-017` public package and installer
 
 ## Outcome
 
@@ -37,7 +35,7 @@ launches must not wait for or render the splash.
 - Extend focused smoke/PTY coverage for interactive display, duration bound,
   disable controls, piped/headless/help/version bypasses, and argument
   forwarding.
-- Update launcher and local distribution documentation without claiming
+- Update the launcher and local distribution documentation without claiming
   hosted or release evidence.
 
 ## Out of scope
@@ -48,7 +46,7 @@ launches must not wait for or render the splash.
 - Version bump, GitHub repository rename, tag creation, GitHub Release, or
   hosted installer verification (`TASK-019`).
 - Internal `config/nvim/lua/novim/` namespace migration.
-- Changes to workbench/editor/Source Control behavior, package allowlist,
+- Changes to the workbench/editor/Source Control behavior, package allowlist,
   installed `novim`, normal Neovim configuration, or upstream synchronization.
 
 ## Acceptance criteria

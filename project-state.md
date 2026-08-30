@@ -4,13 +4,14 @@ Updated: 2026-08-30
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-015` (`PLANNED`)
+Current task: `TASK-016` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-015-oh-my-code-identity`
+Task branch: `task/TASK-016-oh-my-code-startup-splash`
+Expected baseline: `8457dbf0e0274d642e09481a01fa6b9d777b9377`
 Pull request: not opened
-Last accepted task: `TASK-014`
-Last accepted commit: `79724608028685b95d780af113f5e64caae5622a` (`origin/main` merge of PR #25)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/25`
+Last accepted task: `TASK-015`
+Last accepted commit: `8457dbf0e0274d642e09481a01fa6b9d777b9377` (`origin/main` merge of PR #27)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/27`
 
 ## Current truth
 
@@ -124,6 +125,13 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/25`
   confirmation with in-memory recovery, and the statusline documents the new
   interactions. Preview/Diff read-only panes, keyboard-only auto-copy,
   auto-save, and remote clipboard synchronization remain excluded.
+- `TASK-015` was locally reviewed `APPROVED` at candidate `75dc882` with
+  review record `7080358`, delivered through GitHub PR #27, and verified in
+  merge commit `8457dbf` on `origin/main`. The public `ohc` launcher now
+  identifies oh-my-code, `novim-dev` is an explicitly labeled one-release
+  compatibility alias, and both commands retain the isolated runtime boundary.
+  Installed `novim`, `bin/novim`, and the normal Neovim configuration remain
+  independent.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -134,12 +142,13 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/25`
 
 ## Active blockers
 
-- No product or dependency blocker exists. TASK-015 is ready for the
-  stateless-implementer on its recorded isolated branch.
+- No product or dependency blocker exists. TASK-016 is planned on its
+  recorded isolated branch and is ready for the stateless-implementer.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Hand TASK-015 to `$stateless-implementer`. Review its real diff and local
-launcher evidence before opening a PR. Do not rename the GitHub repository or
-publish `v1.0.0` until TASK-019 and its strict hosted checks.
+Hand TASK-016 to `$stateless-implementer`. Implement and review only the
+interactive-TTY startup splash and its explicit bypass controls. Do not rename
+the GitHub repository or publish `v1.0.0` until TASK-019 and its strict hosted
+checks.

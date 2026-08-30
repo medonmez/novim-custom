@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-015-oh-my-code-identity",
+    "taskBranch": "task/TASK-016-oh-my-code-startup-splash",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -24,17 +24,17 @@
     "installedCommand": "novim",
     "developmentCommand": "ohc",
     "compatibilityCommand": "novim-dev",
-    "developmentCommandStatus": "planned",
+    "developmentCommandStatus": "available",
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "TASK-015",
+    "currentTask": "TASK-016",
     "currentTaskStatus": "PLANNED",
     "pullRequest": null,
     "remoteChecks": "STRICT FOR HOSTED RELEASE; NOT APPLICABLE TO LOCAL PLAN",
-    "lastAcceptedTask": "TASK-014",
-    "lastAcceptedCommit": "7972460",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/25"
+    "lastAcceptedTask": "TASK-015",
+    "lastAcceptedCommit": "8457dbf0e0274d642e09481a01fa6b9d777b9377",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/27"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
