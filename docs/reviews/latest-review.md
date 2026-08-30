@@ -7,10 +7,10 @@ Delivery policy: `LIGHTWEIGHT`
 Baseline: `853b32a` (`origin/main`, reconciliation merge; recorded expected
 baseline `8457dbf` is an ancestor)
 Candidate: `6072f25` (`task/TASK-016-oh-my-code-startup-splash`)
-Pull request: not opened
-Remote task branch: not present
-Remote checks: not applicable before delivery
-Merge status: pending lightweight delivery
+Pull request: `https://github.com/medonmez/novim-custom/pull/29` (`MERGED`)
+Remote task branch: present (`task/TASK-016-oh-my-code-startup-splash`)
+Remote checks: none reported
+Merge status: `MERGED`
 
 ## Review result
 
@@ -86,14 +86,14 @@ recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`APPROVED` for lightweight delivery. The implementation is not yet accepted:
-the task branch has not been pushed, no PR exists, and the remote default
-branch does not yet contain the candidate. No repository rename, tag, release,
-or hosted installer action is in scope for TASK-016.
+`ACCEPTED` after lightweight PR #29 merge. The remote default branch contains
+the reviewed implementation and review record at merge commit
+`9904324ba79c666be46e6efe92e932eb1ea8e2d4`. No repository rename, tag, release,
+or hosted installer action occurred or is in scope for TASK-016.
 
 ## Next action
 
-Push the reviewed task branch, open one PR targeting `origin/main`, merge it
-promptly if mergeable under the repository's lightweight policy, verify the
-remote default branch contains the merge, and only then reconcile TASK-016 as
-`ACCEPTED` and advance the next task.
+TASK-016 is complete. The next actionable slice is TASK-017: plan and
+implement the public oh-my-code package, safe installer, and release-asset
+workflow without publishing the hosted release or touching installed
+`novim` paths.
