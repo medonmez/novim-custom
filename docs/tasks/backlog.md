@@ -21,9 +21,14 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | ACCEPTED | TASK-011 (accepted) |
 | 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | ACCEPTED | TASK-012 (accepted) |
 | 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | ACCEPTED | TASK-013 (accepted) |
+| 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | PLANNED | TASK-014 (accepted) |
+| 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | PROPOSED | TASK-015 (accepted) |
+| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | PROPOSED | TASK-015, TASK-016 (accepted) |
+| 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PROPOSED | TASK-015, TASK-016, TASK-017 (accepted) |
+| 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PROPOSED | TASK-015 through TASK-018 (accepted) |
 
-TASK-001 through TASK-014 are accepted. The planned backlog is exhausted; the
-next slice requires new product direction before a successor task is planned.
+TASK-001 through TASK-014 are accepted. The public release direction is
+accepted in ADR-006; only TASK-015 is currently actionable.
 
 ## Accepted task notes
 
@@ -86,11 +91,23 @@ next slice requires new product direction before a successor task is planned.
   Preview/Diff read-only panes, keyboard-only auto-copy, auto-save, and remote
   clipboard synchronization remain excluded.
 
+- `TASK-015` establishes the `ohc` public launcher and keeps `novim-dev` as a
+  one-release compatibility alias without changing installed `novim`.
+- `TASK-016` adds the one-second interactive-TTY splash and must not delay
+  help, version, headless, piped, or test launches.
+- `TASK-017` owns public archive naming, installer paths, safe alias handling,
+  and release workflow assets. Normal `ohc` launch remains network-free.
+- `TASK-018` owns the public README, Mermaid/terminal explanation, and a real
+  `ohc` terminal demo capture with no private project data.
+- `TASK-019` is the only task authorized to perform the hosted repository
+  rename, tag `v1.0.0`, GitHub Release creation, and fresh installer download
+  verification. It uses the strict release gate.
+
 ## Preserved boundaries
 
 - No plugin dependency is required for these slices.
 - No source, credentials, or Git metadata leave the machine by default.
 - The installed `novim`, normal Neovim configuration, and upstream-facing
-  command remain unchanged.
+  `bin/novim` command remain unchanged. `ohc` is a separate public command.
 - Local tests and local branches are not hosted, production, recovery, or
   customer-acceptance evidence.

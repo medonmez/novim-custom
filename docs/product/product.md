@@ -5,13 +5,15 @@ Status: `ACCEPTED FOR IMPLEMENTATION`
 
 ## Outcome
 
-Create a personal, terminal-first novim derivative that feels like the
-VS Code workbench inside a terminal: browse a project lazily, read code, and
-inspect local Git diffs through a responsive multi-pane interface.
+Create oh-my-code, a friendly terminal-first code workbench that feels like
+the VS Code workbench inside a terminal: browse a project lazily, read code,
+edit files, and inspect local Git changes through a responsive multi-pane
+interface.
 
-The derivative must be runnable through a separate command so experimentation
-cannot overwrite the installed upstream `novim` configuration or the user's
-personal Neovim configuration.
+The public product must be runnable through `ohc` so it cannot overwrite the
+installed upstream `novim` configuration or the user's personal Neovim
+configuration. The old `novim-dev` name remains a one-release compatibility
+alias.
 
 ## Users and problem
 
@@ -25,8 +27,8 @@ personal Neovim configuration.
 
 - Preserve the existing novim-friendly editing model and standard shortcuts
   unless a task explicitly changes them.
-- Launch through an independent development command, provisionally named
-  `novim-dev`.
+- Launch through the independent public `ohc` command. Keep `novim-dev` as a
+  compatibility alias for the first public release only.
 - Keep development configuration, writable runtime data, and state isolated
   from installed upstream `novim` and the user's normal Neovim configuration.
 - Show a VS Code-like workbench. Files view has a project tree on the left and
@@ -46,9 +48,10 @@ personal Neovim configuration.
   that `Esc` closes settings immediately.
 - Support local repository browsing and read-only Git inspection without
   sending source code or credentials to a service by default.
-- Keep the initial Git surface read-only: status, history, and diff inspection
-  are in scope; stage, unstage, commit, push, merge, rebase, and discard are
-  out of scope.
+- Keep Git operations local and bounded: status, history, diff inspection,
+  file-level stage/unstage, and local staged commits are in scope; push, pull,
+  fetch, merge, rebase, checkout, discard, amend, remote synchronization,
+  credentials, and partial-line staging are out of scope.
 - Use the working tree compared with `HEAD` as the initial diff baseline, and
   include untracked files in the review surface.
 - Refresh Git status and the selected diff when entering the Diff view. A
@@ -69,10 +72,10 @@ personal Neovim configuration.
 - Do not attempt to reproduce all of VS Code, an IDE debugger, or a hosted code
   review service in the first milestone.
 - Do not add a unified-diff display mode to the initial side-by-side contract.
-- Do not add Git mutations, remote operations, AI execution, or credential
-  handling without a separate explicit decision.
-- Do not modify the installed release under `~/.local/share/novim` as the
-  development workflow.
+- Do not add unbounded Git mutations, remote operations, AI execution, or
+  credential handling without a separate explicit decision.
+- Do not modify the installed release under `~/.local/share/novim` or the
+  installed `novim` command as part of the public workflow.
 - Do not require users to learn Vim commands for the core editing path.
 - Do not introduce plugins merely to implement the first workbench slice.
 - Keep upstream attribution and MIT license notices intact.
@@ -142,3 +145,24 @@ buffer in the right pane.
 This decision is recorded in ADR-005. It changes only the local editor
 interaction contract; no hosted clipboard, background synchronization,
 credential handling, or unrelated workbench behavior is implied.
+
+## Public release brief (accepted 2026-08-30)
+
+The product is now named `oh-my-code` and is intended for terminal-first
+developers who want a discoverable, VS Code-like code interface without
+leaving the terminal. The public command is `ohc`; `novim-dev` remains a
+one-release compatibility alias, while the installed upstream `novim` stays
+untouched.
+
+The first public release target is `v1.0.0`. It will use a dedicated
+`~/.local/share/oh-my-code` installation root and `~/.local/bin/ohc` command
+link, with safe handling for the compatibility alias. A one-second animated
+ANSI opening screen is shown only on interactive TTY launches and can be
+disabled with `--no-animation` or `OHC_NO_ANIMATION=1`; non-interactive,
+help/version, headless, and test launches do not wait for it.
+
+The release README is a public product surface. It will explain the terminal
+workbench, Files/Preview and Source Control flows, standard shortcuts,
+installation boundaries, and local-only behavior using a real terminal demo
+GIF and a compact architecture graphic. It must keep upstream and third-party
+attribution and distinguish local validation from hosted release evidence.

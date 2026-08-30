@@ -1,6 +1,6 @@
 -- tests/test_smoke.lua
--- Deterministic regression smoke test suite for novim-dev launcher and diff workbench
--- Part of novim custom derivative
+-- Deterministic regression smoke test suite for the oh-my-code ohc launcher and diff workbench
+-- Part of the oh-my-code (novim-custom) checkout
 
 local function assert_true(cond, msg)
   if not cond then
@@ -1017,7 +1017,7 @@ local passed = 0
 local failed = 0
 local failures = {}
 
-print("=== Running novim-dev Regression Smoke Test Suite ===")
+print("=== Running oh-my-code Regression Smoke Test Suite ===")
 
 local test_order = {
   "test_smoke_launcher_startup_and_isolated_paths",

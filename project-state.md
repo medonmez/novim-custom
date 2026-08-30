@@ -1,13 +1,13 @@
 # Project State
 
 Updated: 2026-08-30
-Repository: `novim-custom`
+Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `NONE` (backlog exhausted; awaiting product direction)
+Current task: `TASK-015` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-014-auto-copy-preview-exit` (merged)
-Pull request: `https://github.com/medonmez/novim-custom/pull/25` (`MERGED`)
+Task branch: `task/TASK-015-oh-my-code-identity`
+Pull request: not opened
 Last accepted task: `TASK-014`
 Last accepted commit: `79724608028685b95d780af113f5e64caae5622a` (`origin/main` merge of PR #25)
 Last merged pull request: `https://github.com/medonmez/novim-custom/pull/25`
@@ -20,6 +20,15 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/25`
   personal fork `medonmez/novim-custom` and `upstream` points to the official
   `link2004/novim` repository.
 - The installed `novim` release remains independent and is not being edited.
+- The accepted public product direction is `oh-my-code`, launched with `ohc`;
+  `novim-dev` remains a one-release compatibility alias.
+- The current GitHub repository is public as `medonmez/novim-custom` with no
+  release yet. The accepted hosted target is `medonmez/oh-my-code` and the
+  first release target is `v1.0.0`.
+- Public installation is planned for `~/.local/share/oh-my-code` with
+  `~/.local/bin/ohc`; these paths do not replace the installed `novim` paths.
+- The one-second interactive-TTY splash, public packaging/installer, README
+  assets, and hosted release are ordered successor tasks after TASK-015.
 - Workflow manifests and durable project records have been bootstrapped under
   `docs/` without removing or duplicating the upstream public documentation.
 - `TASK-001` was locally reviewed (`APPROVED` at candidate `b8512b6`) and
@@ -125,14 +134,12 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/25`
 
 ## Active blockers
 
-- The planned backlog is exhausted. No product or dependency blocker exists;
-  a successor task requires new product direction from the user.
+- No product or dependency blocker exists. TASK-015 is ready for the
+  stateless-implementer on its recorded isolated branch.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-No successor task is issued. Preserve the existing preview/edit separation,
-standard explicit copy/save shortcuts, unsaved-buffer safety, Source Control
-behavior, and launcher/release boundaries when a new product slice is planned.
-Local distribution and upstream sync remain documented in
-`docs/LOCAL_DISTRIBUTION.md` and `docs/UPSTREAM_SYNC.md`.
+Hand TASK-015 to `$stateless-implementer`. Review its real diff and local
+launcher evidence before opening a PR. Do not rename the GitHub repository or
+publish `v1.0.0` until TASK-019 and its strict hosted checks.

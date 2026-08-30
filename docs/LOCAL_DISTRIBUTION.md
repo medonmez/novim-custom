@@ -6,10 +6,14 @@ upstream `novim` command.
 
 ## Identity and package contents
 
-The checkout's `VERSION` file is the upstream-compatible base version. A
-package is named `novim-custom-<VERSION>.tar.gz`; the bundled launcher reports
-the same identity as `<VERSION>-dev (custom checkout)` through the separate
-`novim-dev` command.
+The checkout's public launcher is `bin/ohc`; it reports the public identity
+`oh-my-code (ohc) <VERSION>-dev`, deriving the development suffix from the
+checkout's upstream-compatible `VERSION` file. A local package is named
+`novim-custom-<VERSION>.tar.gz` and still stages the compatibility launcher
+`bin/novim-dev`, which reports `<VERSION>-dev (custom checkout)` and is a
+one-release compatibility alias for `ohc`. Migrating the package, installer,
+and release assets to the public `oh-my-code`/`ohc` identity is a separate
+planned task (`TASK-017`); this pre-release boundary is preserved until then.
 
 The archive is an explicit allowlist, containing:
 
@@ -63,6 +67,8 @@ temporary root first, then perform an explicit user-mediated replacement.
 
 ## Verification and removal boundaries
 
+At the checkout level, `./bin/ohc --version` and `./bin/novim-dev --version`
+report the public and compatibility identities without network activity.
 Verify the package manifest, `novim-dev --version`, and a headless launch from
 the temporary or dedicated derivative root before using it. A launch may
 create `.dev-data/`, `.dev-state/`, and `.dev-cache/` below that derivative

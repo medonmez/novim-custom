@@ -1,6 +1,6 @@
 # Repository Documentation Contract
 
-Repository: `novim-custom`
+Repository: `novim-custom` (public target: `oh-my-code`)
 Updated: 2026-08-29
 
 This file is the routing manifest for product documentation and the agent
@@ -39,24 +39,25 @@ created.
 
 ## Repository-specific notes
 
-- Purpose: Maintain a user-specific, terminal-first novim derivative with a
-  separate development command and focused usability improvements.
+- Purpose: Maintain oh-my-code, a terminal-first code workbench for developers
+  who want a VS Code-like workflow inside the terminal.
 - Source baseline: `https://github.com/link2004/novim`, currently cloned at
   tag `v0.1.7`, commit `8e36d447ee9c73d29b75f3dfc50db9452a2addf1`.
 - Local checkout assumption: `/Users/mert/novim-custom`.
-- Runtime and commands: upstream `bin/novim` launches Neovim with the bundled
-  `config/nvim` tree; the separate `bin/novim-dev` command is available after
-  `TASK-001`.
-- Remote delivery: `origin` is the personal fork
-  `https://github.com/medonmez/novim-custom.git`; `upstream` is the official
-  source repository. TASK-001 was delivered through PR #1 and merged to
-  `origin/main`. Use a task branch and pull request for subsequent remote
-  delivery.
-- Deployment or release notes: local development only; no hosted or production
-  deployment is claimed.
+- Runtime and commands: upstream `bin/novim` remains a preserved reference;
+  public work launches through `ohc`, with `novim-dev` retained as a
+  one-release compatibility alias.
+- Remote delivery: current `origin` is the personal repository
+  `https://github.com/medonmez/novim-custom.git`; the accepted public target is
+  `https://github.com/medonmez/oh-my-code` and the rename is pending the
+  release-delivery task. `upstream` remains the official source repository.
+  Use a task branch and pull request for subsequent remote delivery.
+- Deployment or release notes: the first public release is planned as
+  `v1.0.0`; no hosted release exists yet.
 - Sensitive-data boundaries: source and Git metadata are local. Do not put
   credentials, tokens, private source, or raw user data into repository docs.
   The development command must not perform network actions by default.
-- Packaging boundary: `bin/novim-dev-package` creates and installs an explicit
-  local derivative archive offline; it does not package `bin/novim`, write the
-  installed release paths, or perform upstream synchronization.
+- Packaging boundary: the current `bin/novim-dev-package` is a pre-release
+  offline helper. The public `oh-my-code` package, installer, and release
+  asset are separate planned slices and must not package `bin/novim`, write
+  the installed `novim` paths, or perform upstream synchronization.
