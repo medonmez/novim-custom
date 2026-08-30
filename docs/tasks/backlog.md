@@ -19,11 +19,10 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 10 | TASK-010 | Persist independent Files and Git Diff pane geometry across view switches and workbench launches | ACCEPTED | TASK-009 (accepted) |
 | 11 | TASK-011 | Make Settings focus-driven with arrow navigation, context-aware theme changes, Space toggles, and a mouse close affordance | ACCEPTED | TASK-010 (accepted) |
 | 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | ACCEPTED | TASK-011 (accepted) |
-| 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | CHANGES_REQUESTED | TASK-012 (accepted) |
+| 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | ACCEPTED | TASK-012 (accepted) |
 
-TASK-013 is the only actionable current task. Its accepted product direction
-is recorded in ADR-004 and `docs/tasks/current-task.md`; no later task may
-absorb its features incidentally.
+TASK-001 through TASK-013 are accepted. The planned backlog is exhausted; the
+next slice requires new product direction before a successor task is planned.
 
 ## Accepted task notes
 
@@ -59,15 +58,13 @@ absorb its features incidentally.
   changes/status above and current-branch history below. It must not silently
   check out or mutate a branch. The full reachable ancestry graph, merge nodes,
   and two user-selected revision/location endpoints are accepted in ADR-004.
-- `TASK-013` is now the only actionable planned slice. It is limited to
-  file-level local stage/unstage/commit with a user-entered message. Push,
-  pull, fetch, merge, rebase, branch checkout, discard, amend, remote
-  synchronization, credentials, and partial-line staging remain excluded.
-
-- `TASK-013` remains the only actionable slice after local review of candidate
-  `c90f863`: restore the history-pane `N` mapping, render write notices when
-  the changes list is empty, and preserve selected paths across commit
-  refresh. No PR or remote delivery was attempted.
+- `TASK-013` was accepted after local review and merge as PR #23. It provides
+  file-level local stage/unstage and local staged commit with a transient
+  user-entered message, while keeping push, pull, fetch, merge, rebase,
+  branch checkout, discard, amend, remote synchronization, credentials, and
+  partial-line staging excluded. The review corrections restored history-pane
+  `N`, clean-state write notices, and selected-path preservation across commit
+  refresh.
 
 - `TASK-012` is accepted with the full ancestry graph reachable from the
   current branch, including merge nodes, and two revision/location endpoints
