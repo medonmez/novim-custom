@@ -112,7 +112,7 @@ Deterministic local validation is provided through standalone scripts without ex
   1. CLI flags (`--version`, `-v`, `--help`) and output validation.
   2. Working directory independence (invoking from `/tmp`) and symlink path resolution.
   3. Isolation from installed `novim` (`~/.local/share/novim` remains untouched).
-  4. Headless Neovim execution of `tests/test_smoke.lua` against isolated temporary Git/project fixtures, verifying two-pane layout, divider constraints, view switching, source preview/editing handoff, unsaved buffer preservation, settings persistence/malformed fallback, and byte-for-byte Git read-only invariance.
+  4. Headless Neovim execution of `tests/test_smoke.lua` against isolated temporary Git/project fixtures, verifying two-pane layout, divider constraints, independent Files/Diff geometry persistence and clamping, view switching, source preview/editing handoff, unsaved buffer preservation, settings persistence/malformed fallback, and byte-for-byte Git read-only invariance.
   5. Post-run artifact cleanup verification ensuring zero fixture residue.
 
 ## Accepted target direction
@@ -142,12 +142,17 @@ The accepted next target is a read-only multi-pane diff workbench:
 Selected branch or historical-commit comparisons are future scope and are not
 required for the first workbench slice.
 
+## Implemented successor behavior
+
+- `TASK-010` persists logical, per-view pane geometry in the isolated settings
+  file. Files stores its left/right split; Diff stores its two visible
+  boundaries. Window and buffer IDs remain runtime-only, and values are
+  clamped against the current terminal width and pane minimums. Missing,
+  malformed, or impossible values fall back safely without replacing the live
+  layout on a settings-write failure.
+
 ## Accepted successor slices (not yet implemented)
 
-- `TASK-010` will persist logical, per-view pane geometry in the isolated
-  settings file. Files stores its left/right split; Diff stores its two visible
-  boundaries. Window and buffer IDs remain runtime-only, and values are
-  clamped against the current terminal width and pane minimums.
 - `TASK-011` will add a focus model for Settings controls so navigation does
   not move through the rendered help text. Its interaction contract is
   recorded as a proposal in `docs/product/product.md` and is separate from

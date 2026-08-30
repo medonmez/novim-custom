@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-010-pane-layout-persistence",
+    "taskBranch": "task/TASK-011-settings-focus-close",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -26,13 +26,13 @@
     "developmentCommandTask": "TASK-001"
   },
   "workflow": {
-    "currentTask": "TASK-010",
+    "currentTask": "TASK-011",
     "currentTaskStatus": "PLANNED",
     "pullRequest": null,
     "remoteChecks": "OPTIONAL / NOT_RUN",
-    "lastAcceptedTask": "TASK-009",
-    "lastAcceptedCommit": "b5cae85",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/15"
+    "lastAcceptedTask": "TASK-010",
+    "lastAcceptedCommit": "a039f29",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/17"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
