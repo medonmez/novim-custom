@@ -56,6 +56,12 @@ local state = {
   buf_history = nil,
   win_history = nil,
 
+  -- Local write state (TASK-013): one bounded notice about the last write
+  -- attempt and the transient commit-message input. Neither is persisted
+  -- across launches; the notice survives refreshes until the next attempt.
+  write_notice = nil, -- { level = "ok" | "error", text = string }
+  commit_input = nil, -- { buf, win, prev_win, error }
+
   header_line_count = 4,
   buf_left = nil,
   buf_middle = nil,
@@ -364,10 +370,25 @@ function M.render_left_pane()
       table.insert(lines, " Press 'r' to refresh, '?' for help, 'q' to quit.")
       table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSummary" })
     else
-      -- Summary line
+      -- Summary line, extended with the staged-entry count (TASK-013)
       local summary = format_diff_summary(state.stats)
+      local staged_count = 0
+      for _, f in ipairs(state.files) do
+        if f.is_staged then staged_count = staged_count + 1 end
+      end
+      if staged_count > 0 then
+        summary = summary .. " | staged: " .. staged_count
+      end
       table.insert(lines, summary)
       table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSummary" })
+
+      -- Bounded, visible notice about the last attempted write action. A
+      -- failed write renders an error here and never claims success.
+      if state.write_notice then
+        local is_error = (state.write_notice.level == "error")
+        table.insert(lines, (is_error and " ! " or " ✓ ") .. tostring(state.write_notice.text))
+        table.insert(highlights, { #lines - 1, 0, -1, is_error and "WorkbenchError" or "WorkbenchClean" })
+      end
 
       -- Line: Divider
       table.insert(lines, " " .. string.rep("─", 44))
@@ -375,22 +396,26 @@ function M.render_left_pane()
 
       state.header_line_count = #lines
 
-      -- File entries
+      -- File entries: "[M ]" = unstaged, "[M+]" = something staged for this
+      -- path, "[U ]" = untracked; rename rows show old -> new exactly.
       for idx, file in ipairs(state.files) do
         local marker = (idx == state.selected_index) and "▶" or " "
-        local status_label = file.status
-        if status_label == "??" then
-          status_label = "U "
-        elseif #status_label == 1 then
-          status_label = status_label .. " "
+        local status_code = (file.status == "??") and "U" or file.status
+        -- Two-column code: the second column is "+" when something for this
+        -- path is staged, " " when it is unstaged ("[M ]" / "[M+]" / "[U ]").
+        if #status_code < 2 then
+          status_code = status_code .. (file.is_staged and "+" or " ")
+        elseif file.is_staged then
+          status_code = status_code .. "+"
         end
+        local tag = "[" .. status_code .. "]"
 
         local display_name = file.path
         if file.orig_path then
           display_name = file.orig_path .. " -> " .. file.path
         end
 
-        local line_text = string.format(" %s [%s] %s", marker, status_label, display_name)
+        local line_text = string.format(" %s %s %s", marker, tag, display_name)
         table.insert(lines, line_text)
 
         local current_line_idx = #lines - 1
@@ -401,7 +426,7 @@ function M.render_left_pane()
           table.insert(highlights, { current_line_idx, 1, 2, "WorkbenchActiveMarker" })
         end
 
-        -- Highlight status tag
+        -- Highlight status tag (columns depend on the tag width)
         local hl_group = "WorkbenchStatusM"
         if file.status == "??" or file.status == "U" then
           hl_group = "WorkbenchStatusU"
@@ -413,8 +438,8 @@ function M.render_left_pane()
           hl_group = "WorkbenchStatusR"
         end
 
-        table.insert(highlights, { current_line_idx, 3, 7, hl_group })
-        table.insert(highlights, { current_line_idx, 8, -1, "WorkbenchPath" })
+        table.insert(highlights, { current_line_idx, 3, 3 + #tag, hl_group })
+        table.insert(highlights, { current_line_idx, 4 + #tag, -1, "WorkbenchPath" })
       end
     end
   end
@@ -948,6 +973,293 @@ function M.reset_compare()
   return true
 end
 
+-- =========================================================================
+-- Local writes (TASK-013): file-level stage/unstage and staged commits
+-- =========================================================================
+
+--- Bound rendered write text to one readable line.
+---@param text string
+---@param cap integer
+---@return string
+local function bounded_write_text(text, cap)
+  text = tostring(text or "")
+  if #text > cap then
+    return text:sub(1, cap - 3) .. "..."
+  end
+  return text
+end
+
+local function trim_message(text)
+  return (tostring(text or ""):match("^%s*(.-)%s*$"))
+end
+
+--- Find the current changes index of a repository-relative path.
+local function file_index_for_path(path)
+  for idx, file in ipairs(state.files) do
+    if file.path == path then
+      return idx
+    end
+  end
+  return nil
+end
+
+--- Perform one file-level index action ("stage" or "unstage") on the given
+--- change entry (default: the selected row). Exactly one entry is targeted;
+--- nothing is staged or unstaged in bulk. Both outcomes refresh the Source
+--- Control view, keep the user's selection context where the entry still
+--- exists, and surface a bounded notice that never claims a failed write
+--- succeeded.
+---@param kind "stage" | "unstage"
+---@param entry? ChangedFile
+---@return boolean ok
+local function perform_change_action(kind, entry)
+  if state.view_mode ~= "diff" or not state.is_git then
+    return false
+  end
+  entry = entry or state.files[state.selected_index]
+  if not entry then
+    return false
+  end
+
+  local target_path = entry.path
+  local ok, err
+  if kind == "stage" then
+    ok, err = git.stage_file(entry, state.repo_root)
+  else
+    ok, err = git.unstage_file(entry, state.repo_root)
+  end
+
+  if ok then
+    state.write_notice = {
+      level = "ok",
+      text = (kind == "stage" and "Staged: " or "Unstaged: ")
+        .. bounded_write_text(target_path, 90),
+    }
+  else
+    state.write_notice = {
+      level = "error",
+      text = (kind == "stage" and "Stage failed: " or "Unstage failed: ")
+        .. bounded_write_text(err or "unknown error", 110),
+    }
+  end
+
+  -- Reconcile the visible status with the actual repository result.
+  M.refresh()
+  local new_idx = file_index_for_path(target_path)
+  if new_idx then
+    state.selected_index = new_idx
+    M.render_left_pane()
+    M.render_middle_pane()
+    M.render_right_pane()
+  end
+  return ok
+end
+
+--- Stage the currently selected change entry at file granularity.
+---@param entry? ChangedFile
+---@return boolean ok
+function M.stage_selected_file(entry)
+  return perform_change_action("stage", entry)
+end
+
+--- Unstage the currently selected change entry at file granularity.
+---@param entry? ChangedFile
+---@return boolean ok
+function M.unstage_selected_file(entry)
+  return perform_change_action("unstage", entry)
+end
+
+--- Toggle the staged state of one change row (the mouse double-click
+--- affordance). The caller resolves the row through the application-owned
+--- line hit-testing table, so the targeted entry is deterministic.
+---@param index integer
+---@return boolean ok
+function M.toggle_stage_for_index(index)
+  local entry = state.files[index]
+  if not entry then
+    return false
+  end
+  if entry.is_staged then
+    return perform_change_action("unstage", entry)
+  end
+  return perform_change_action("stage", entry)
+end
+
+--- Whether the transient commit-message input is open.
+---@return boolean
+function M.commit_input_open()
+  return state.commit_input ~= nil and state.commit_input.win ~= nil
+    and vim.api.nvim_win_is_valid(state.commit_input.win)
+end
+
+local COMMIT_INPUT_TITLE = " Commit message — Enter: commit, Esc: cancel "
+local COMMIT_INPUT_ERROR_TITLE = " ! Commit message cannot be empty "
+
+--- Close the commit-message input without any Git mutation and restore
+--- focus to the changes pane.
+local function close_commit_input()
+  local ci = state.commit_input
+  if not ci then
+    return
+  end
+  state.commit_input = nil
+  if ci.win and vim.api.nvim_win_is_valid(ci.win) then
+    pcall(vim.api.nvim_win_hide, ci.win)
+  end
+  if ci.buf and vim.api.nvim_buf_is_valid(ci.buf) then
+    pcall(vim.api.nvim_buf_delete, ci.buf, { force = true })
+  end
+  if ci.prev_win and vim.api.nvim_win_is_valid(ci.prev_win) then
+    pcall(vim.api.nvim_set_current_win, ci.prev_win)
+  end
+end
+
+--- Re-apply the full float config with one title. Passing the stored
+--- config keeps position, size, and border deterministic across updates.
+local function set_commit_input_title(title)
+  local ci = state.commit_input
+  if ci and ci.config and ci.win and vim.api.nvim_win_is_valid(ci.win) then
+    local cfg = vim.deepcopy(ci.config)
+    cfg.title = title
+    pcall(vim.api.nvim_win_set_config, ci.win, cfg)
+  end
+end
+
+--- Confirm the commit-message input. Blank or whitespace-only messages are
+--- rejected visibly while the input stays open; a valid message closes the
+--- input and creates one local staged commit.
+local function confirm_commit_message()
+  local ci = state.commit_input
+  if not ci or not ci.buf or not vim.api.nvim_buf_is_valid(ci.buf) then
+    return false
+  end
+  local raw_lines = vim.api.nvim_buf_get_lines(ci.buf, 0, -1, false)
+  local message = trim_message(table.concat(raw_lines, " "))
+  if message == "" then
+    ci.error = "Commit message cannot be empty"
+    set_commit_input_title(COMMIT_INPUT_ERROR_TITLE)
+    return false
+  end
+  close_commit_input()
+  return M.commit_staged(message)
+end
+
+--- Open the bounded commit-message input (Git Diff view only). The float
+--- takes focus immediately for typing; Enter confirms, Esc cancels with no
+--- Git mutation. The buffer is transient scratch state and is never
+--- persisted or reused as durable memory.
+---@return boolean success
+function M.open_commit_input()
+  if state.view_mode ~= "diff" or not state.is_git then
+    return false
+  end
+  if M.commit_input_open() then
+    vim.api.nvim_set_current_win(state.commit_input.win)
+    return true
+  end
+
+  local prev_win = vim.api.nvim_get_current_win()
+  local width = math.max(30, math.min(64, vim.o.columns - 8))
+  local height = 1
+  local row = math.max(1, math.floor((vim.o.lines - 8) / 2))
+  local col = math.max(1, math.floor((vim.o.columns - width) / 2))
+
+  local buf = fresh_buffer("[Workbench - Commit Message]")
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buflisted = false
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "" })
+
+  local input_config = {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = COMMIT_INPUT_TITLE,
+    title_pos = "center",
+  }
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, input_config)
+  if not ok or not win then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    return false
+  end
+
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].spell = false
+  state.commit_input = {
+    buf = buf, win = win, prev_win = prev_win, error = nil, config = input_config,
+  }
+
+  local opts = { buffer = buf, silent = true, noremap = true }
+  vim.keymap.set("n", "<CR>", function() return confirm_commit_message() end, opts)
+  vim.keymap.set("n", "<Esc>", function()
+    close_commit_input()
+    return true
+  end, opts)
+  vim.keymap.set("i", "<CR>", function()
+    vim.cmd("stopinsert")
+    return confirm_commit_message()
+  end, opts)
+  vim.keymap.set("i", "<Esc>", function()
+    vim.cmd("stopinsert")
+    close_commit_input()
+    return true
+  end, opts)
+  -- Clear a visible rejection as soon as the message is edited again.
+  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    buffer = buf,
+    callback = function()
+      local ci = state.commit_input
+      if ci and ci.error then
+        ci.error = nil
+        set_commit_input_title(COMMIT_INPUT_TITLE)
+      end
+    end,
+  })
+
+  vim.cmd("startinsert")
+  return true
+end
+
+--- Create one local commit from the currently staged index. Unstaged files
+--- are never auto-staged; failures surface a bounded error, refresh the
+--- view, and never fabricate a history entry or a success notice.
+---@param message string
+---@return boolean ok
+function M.commit_staged(message)
+  if state.view_mode ~= "diff" or not state.is_git then
+    return false
+  end
+
+  local ok, err, hash = git.commit_staged(message, state.repo_root)
+  if not ok then
+    state.write_notice = {
+      level = "error",
+      text = "Commit failed: " .. bounded_write_text(err or "unknown error", 110),
+    }
+    M.render_left_pane()
+    M.render_history_pane()
+    return false
+  end
+
+  state.write_notice = {
+    level = "ok",
+    text = "Committed: " .. (hash and hash:sub(1, 7) or "?")
+      .. " " .. bounded_write_text(trim_message(message), 70),
+  }
+  -- Refresh reconciles status, history, and the selected comparison with
+  -- the new HEAD; the comparison stays the user's chosen read-only pair.
+  M.refresh()
+  return true
+end
+
+
 --- Install the history pane buffer maps. j/k/Up/Down and the mouse move the
 --- selection; O/N assign the old/new comparison endpoint from the selected
 --- row; D resets to the default comparison. Workbench-wide keys are
@@ -982,8 +1294,13 @@ local function install_history_maps(buf)
 
   -- Two-endpoint comparison
   vim.keymap.set("n", "O", function() M.assign_compare_endpoint("old", "history") end, opts)
-  vim.keymap.set("n", "N", function() M.assign_compare_endpoint("new", "history") end, opts)
   vim.keymap.set("n", "D", M.reset_compare, opts)
+
+  -- Local write actions (TASK-013): stage/unstage act on the selected
+  -- change row; commit opens the transient message input.
+  vim.keymap.set("n", "a", function() return M.stage_selected_file() end, opts)
+  vim.keymap.set("n", "u", function() return M.unstage_selected_file() end, opts)
+  vim.keymap.set("n", "c", function() return M.open_commit_input() end, opts)
 
   -- Pane switching
   vim.keymap.set("n", "<Tab>", function()
@@ -1619,14 +1936,20 @@ function M.show_help()
     "   H                Focus the history list",
     "   O / N            Set old/new compare endpoint from selection",
     "   D                Reset compare to HEAD vs working tree",
-    "   Selection is read-only; nothing is ever checked out.",
+    "   a                Stage the selected change (file level)",
+    "   u                Unstage the selected change (file level)",
+    "   c                Commit staged changes (message input)",
+    "   Double-Click     Toggle stage/unstage on a change row",
+    "   History stays read-only; nothing is ever checked out.",
     " ────────────────────────────────────────────────────────",
     " Settings & Display:",
     "   Dot-folders & hidden files are hidden by default.",
     "   Press [s] to open Settings and toggle visibility.",
     "   Settings persist across launches in isolated state.",
     " ────────────────────────────────────────────────────────",
-    " Note: Git Diff is strictly read-only inspection.",
+    " Note: Git writes are limited to file-level stage/unstage",
+    " and local commits; remote and history actions stay out.",
+    " Commit input: Enter commits, Esc cancels with no change.",
   }
 
   local width = 60
@@ -1679,6 +2002,11 @@ function M.close(opts)
   end
 
   opts = opts or {}
+  -- The commit-message input is transient session state: closing the
+  -- workbench discards any open input and the last write notice without a
+  -- Git mutation. Layout persistence is unaffected.
+  close_commit_input()
+  state.write_notice = nil
   -- Persist the effective layout before any teardown path runs.
   save_current_view_geometry()
   local is_tab_mode = state.is_tab
@@ -1928,6 +2256,12 @@ function M.open(opts)
     vim.keymap.set("n", "N", function() M.assign_compare_endpoint("new", "changes") end, opts)
     vim.keymap.set("n", "D", M.reset_compare, opts)
     vim.keymap.set("n", "H", function() M.focus_history() end, opts)
+
+    -- Local write actions (TASK-013): file-level stage/unstage of the
+    -- selected change row and the transient commit-message input.
+    vim.keymap.set("n", "a", function() return M.stage_selected_file() end, opts)
+    vim.keymap.set("n", "u", function() return M.unstage_selected_file() end, opts)
+    vim.keymap.set("n", "c", function() return M.open_commit_input() end, opts)
     vim.keymap.set("n", "<CR>", function()
       local cursor = vim.api.nvim_win_get_cursor(0)
       if state.view_mode == "files" then
@@ -1983,7 +2317,10 @@ function M.open(opts)
     vim.keymap.set("n", "<LeftMouse>", on_left_click, opts)
     vim.keymap.set("n", "<2-LeftMouse>", function()
       local mouse = vim.fn.getmousepos()
-      if mouse.winid == state.win_left and state.view_mode == "files" then
+      if mouse.winid ~= state.win_left then
+        return
+      end
+      if state.view_mode == "files" then
         local p_idx = state.line_to_project_index[mouse.line]
         if p_idx then
           state.selected_project_index = p_idx
@@ -1993,6 +2330,13 @@ function M.open(opts)
           elseif entry then
             M.open_file(entry)
           end
+        end
+      else
+        -- Diff view: double-click on a change row toggles file-level
+        -- stage/unstage for exactly that entry (TASK-013).
+        local f_idx = state.line_to_file_index[mouse.line]
+        if f_idx then
+          M.toggle_stage_for_index(f_idx)
         end
       end
     end, opts)
@@ -2126,6 +2470,10 @@ function M.open(opts)
   state.compare = default_compare()
   state.selected_history_index = 0
 
+  -- Write notices belong to the session that attempted the write; a fresh
+  -- Source Control entry starts with no transient notice.
+  state.write_notice = nil
+
   -- Populate data
   M.refresh()
 end
@@ -2160,6 +2508,16 @@ function M.get_state()
     history_count = #state.history_commits,
     history_err = state.history_err,
     branch = state.branch,
+    write_notice = state.write_notice and {
+      level = state.write_notice.level,
+      text = state.write_notice.text,
+    } or nil,
+    commit_input = {
+      open = M.commit_input_open(),
+      buf = state.commit_input and state.commit_input.buf or nil,
+      win = state.commit_input and state.commit_input.win or nil,
+      error = state.commit_input and state.commit_input.error or nil,
+    },
     compare = {
       old = vim.deepcopy(state.compare.old),
       new = vim.deepcopy(state.compare.new),
@@ -2172,6 +2530,7 @@ function M.get_state()
     active_file = active_file,
     settings = settings.get_all(),
     header_line_count = state.header_line_count,
+    line_to_file_index = state.line_to_file_index,
     win_left = state.win_left,
     win_middle = state.win_middle,
     win_right = state.win_right,
