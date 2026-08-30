@@ -21,14 +21,14 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 12 | TASK-012 | Add a VS Code-like Git Source Control layout with current changes above a selectable full current-branch graph and two-endpoint comparison | ACCEPTED | TASK-011 (accepted) |
 | 13 | TASK-013 | Add file-level staging, unstaging, commit-message input, and local staged commit | ACCEPTED | TASK-012 (accepted) |
 | 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | ACCEPTED | TASK-013 (accepted) |
-| 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | PLANNED | TASK-014 (accepted) |
-| 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | PROPOSED | TASK-015 (accepted) |
+| 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | ACCEPTED | TASK-014 (accepted) |
+| 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | PLANNED | TASK-015 (accepted) |
 | 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | PROPOSED | TASK-015, TASK-016 (accepted) |
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PROPOSED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PROPOSED | TASK-015 through TASK-018 (accepted) |
 
-TASK-001 through TASK-014 are accepted. The public release direction is
-accepted in ADR-006; only TASK-015 is currently actionable.
+TASK-001 through TASK-015 are accepted. The public release direction is
+accepted in ADR-006; only TASK-016 is currently actionable.
 
 ## Accepted task notes
 
@@ -72,7 +72,7 @@ accepted in ADR-006; only TASK-015 is currently actionable.
   `N`, clean-state write notices, and selected-path preservation across commit
   refresh.
 
-- `TASK-014` is the only actionable planned slice. It is limited to local
+- `TASK-014` was accepted after local review and merge as PR #25. It is limited to local
   editable-file mouse selection auto-copy, direct `Esc` return from Insert,
   Normal, and Visual modes to that file's Preview, explicit confirmation for
   unsaved buffers, and bottom editor statusline guidance. Preview/Diff
@@ -91,10 +91,12 @@ accepted in ADR-006; only TASK-015 is currently actionable.
   Preview/Diff read-only panes, keyboard-only auto-copy, auto-save, and remote
   clipboard synchronization remain excluded.
 
-- `TASK-015` establishes the `ohc` public launcher and keeps `novim-dev` as a
-  one-release compatibility alias without changing installed `novim`.
+- `TASK-015` was accepted after local review and merge as PR #27 at
+  `8457dbf`. It establishes the `ohc` public launcher and keeps `novim-dev` as
+  a one-release compatibility alias without changing installed `novim`.
 - `TASK-016` adds the one-second interactive-TTY splash and must not delay
-  help, version, headless, piped, or test launches.
+  help, version, headless, piped, or test launches. Its current task record
+  defines the accepted disable controls and compatibility-alias boundary.
 - `TASK-017` owns public archive naming, installer paths, safe alias handling,
   and release workflow assets. Normal `ohc` launch remains network-free.
 - `TASK-018` owns the public README, Mermaid/terminal explanation, and a real

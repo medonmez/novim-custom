@@ -1,10 +1,13 @@
 # TASK-015 — oh-my-code identity and `ohc` launcher
 
-- Status: `PLANNED`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Expected baseline: `99056a51c3e25bfbd05758371eb47ec7085917bb`
-- Task branch: `task/TASK-015-oh-my-code-identity`
+- Task branch: `task/TASK-015-oh-my-code-identity` (merged)
+- Candidate: `75dc882bc37ce772104a250dde5e0c2292aaeac7`
+- Pull request: `#27` (`MERGED`)
+- Merge commit: `8457dbf0e0274d642e09481a01fa6b9d777b9377` (`origin/main`)
 - PR target: `origin/main`
 - Dependency: none
 - Follow-up: `TASK-016` startup splash
@@ -102,3 +105,16 @@ installer, README assets, and hosted release.
 
 The implementer must stop at a local handoff commit on this branch. No push,
 PR, repository rename, or release action is part of implementation.
+
+## Closure
+
+TASK-015 was locally reviewed `APPROVED` after inspecting the real diff and
+running the focused/full local validation. PR #27 was merged into `main`, and
+the remote default branch was fetched and verified to contain the reviewed
+implementation and review record at `8457dbf`.
+
+All acceptance criteria passed. The checkout now exposes `ohc` as the public
+oh-my-code launcher, retains `novim-dev` as an explicitly labeled one-release
+compatibility alias, and preserves the isolated runtime and installed
+`novim` boundaries. No hosted release, repository rename, tag, or installer
+evidence is implied.
