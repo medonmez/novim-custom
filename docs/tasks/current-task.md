@@ -6,7 +6,7 @@ Status: `PLANNED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-011-settings-focus-close`
-Expected baseline: `a039f29` (`origin/main`)
+Expected baseline: `a63bd76` (`origin/main`)
 Pull request: `NOT_OPEN`
 
 ## Outcome
