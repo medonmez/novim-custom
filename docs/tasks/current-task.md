@@ -2,7 +2,7 @@
 
 Updated: 2026-08-30
 Task ID: `TASK-013`
-Status: `CHANGES_REQUESTED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-013-local-git-writes`
@@ -136,13 +136,13 @@ local staged commit with an explicitly entered message.
 
 ## Implementation handoff
 
-Status: `CHANGES_REQUESTED` after local review on
+Status: `READY_FOR_REVIEW` after applying the three review corrections on
 `task/TASK-013-local-git-writes`.
 
-Implementation candidate: `c90f863b77aebbb5f07e69e8d86e3ffff0d5e998` on
-`task/TASK-013-local-git-writes` (single product handoff commit on top of
-planning commit `f6b1135`, baseline `9006898` = `origin/main`). A separate
-local review-record commit is now on this branch; nothing is pushed, no pull
+Implementation candidate: `HEAD (handoff commit)` on
+`task/TASK-013-local-git-writes`. Prior history: product candidate
+`c90f863` plus review record `0b58051` on top of planning commit
+`f6b1135`, baseline `9006898` = `origin/main`. Nothing is pushed, no pull
 request is open, and main is untouched.
 
 ## Change summary
@@ -184,7 +184,9 @@ confirm/cancel/workbench close, and the write notice is session-only.
   state, staged-tag rendering and staged count, stage/unstage/toggle
   actions with refresh and selection preservation, commit-message float
   lifecycle with visible blank-message rejection, commit execution with
-  bounded success/error notices, `get_state` exposure
+  bounded success/error notices, restored history-pane `N` endpoint
+  mapping, clean-state notice rendering, selected-path restoration after
+  commit refresh, `get_state` exposure
   (`write_notice`, `commit_input`, `line_to_file_index`), input teardown
   on close, fresh-entry notice reset.
 - `config/nvim/lua/novim/keymaps.lua` — documented `a`, `u`, `c` and the
@@ -192,17 +194,19 @@ confirm/cancel/workbench close, and the write notice is session-only.
   mappings; the existing help/mapping consistency test pins both
   directions).
 - `tests/test_workbench.lua` — fixture helpers (byte-exact git output,
-  worktree byte snapshot, porcelain map) plus four focused TASK-013
+  worktree byte snapshot, porcelain map) plus seven focused TASK-013
   tests covering stage/unstage lifecycle and invariance, special paths,
-  commit validation/cancel/success, and failed writes.
+  commit validation/cancel/success, failed writes, the restored
+  history-pane `N` endpoint mapping, clean-state write notices, and
+  selected-path preservation across commit refresh.
 - `docs/tasks/current-task.md` — this handoff.
 
 ## Validation performed (local evidence only)
 
-- `./tests/run_tests.sh` — integration suite 49/49 passed (45 prior +
-  4 new TASK-013 tests), offline package suite passed ("Offline Package
-  Tests Passed", installed/source invariance PASS), smoke suite 8/8
-  passed, zero fixture residue, source tree clean.
+- `./tests/run_tests.sh` — integration suite 52/52 passed (49 prior +
+  3 new review-correction regressions), offline package suite passed
+  ("Offline Package Tests Passed", installed/source invariance PASS),
+  smoke suite 8/8 passed, zero fixture residue, source tree clean.
 - `luajit -bl` on changed Lua files (`git.lua`, `workbench.lua`,
   `keymaps.lua`, `test_workbench.lua`) — all parse OK.
 - `bash -n` on `tests/run_tests.sh`, `tests/run_smoke_tests.sh`,
@@ -296,19 +300,37 @@ confirm/cancel/workbench close, and the write notice is session-only.
 
 ## Review follow-up
 
-Local review of `c90f863b77aebbb5f07e69e8d86e3ffff0d5e998` is
-`CHANGES_REQUESTED`. The same task remains active; no PR or remote delivery
-was attempted.
+Local review of `c90f863b77aebbb5f07e69e8d86e3ffff0d5e998` returned
+`CHANGES_REQUESTED` with three findings; all three are corrected on this
+same task. No PR or remote delivery was attempted.
 
-Required corrections:
+Corrections applied:
 
-- Restore the existing `N` new-endpoint mapping in the history pane and add a
-  focused mapping/behavior regression.
-- Render the bounded write notice when a commit leaves the changes list empty,
-  including the failed empty-index commit path, with buffer-level assertions.
-- Preserve the selected change path across successful commit refresh when the
-  selected entry still exists, with a regression where an earlier staged entry
-  disappears.
+- History-pane `N` restored: `install_history_maps` again maps `N` to
+  `assign_compare_endpoint("new", "history")` beside `O`, matching the
+  changes-pane pair and the documented `O / N` help. Regression:
+  `test_history_pane_new_endpoint_mapping_restored` asserts the
+  buffer-local mapping exists and that invoking it with a selected history
+  row assigns that commit as the new endpoint (old endpoint untouched,
+  `[New] <hash>` rendered).
+- Clean-state write notices: the empty-changes branch of the left pane now
+  renders `state.write_notice` exactly like the populated branch, so the
+  final-commit `✓ Committed: …` and the failed empty-index `! Commit
+  failed: …` are visible when no change rows remain. Regression:
+  `test_write_notice_renders_when_changes_list_empties` commits the only
+  change and asserts the clean state plus the success notice in the left
+  buffer, then fails a follow-up commit from the empty staged index and
+  asserts the bounded error renders in the same clean state.
+- Selected path preserved across commit refresh: `M.commit_staged`
+  captures the selected change path before committing, refreshes
+  status/history, and restores the selection by path when the entry still
+  exists (the same pattern as the stage/unstage actions). Regression:
+  `test_commit_refresh_preserves_selected_change_path` stages an earlier
+  row, selects a later still-changed row, commits, and asserts the
+  selection, the rendered `▶` row, and the comparison panes all stay on
+  the selected path while only the staged entry leaves the list.
 
-The full local suite passed, but it did not cover these three gaps. Return the
-same branch to review after the corrections and the required validation rerun.
+The accepted structured Git write boundary (`add --`, `reset --`,
+`rm --cached --force --`, `commit -m` via structured `vim.system` argv) is
+unchanged, as are TASK-012 comparison semantics, settings/geometry
+persistence, and every other accepted surface.

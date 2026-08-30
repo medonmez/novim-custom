@@ -362,6 +362,14 @@ function M.render_left_pane()
 
       table.insert(lines, " No changed or untracked files relative to HEAD.")
       table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSubHeader" })
+      -- A write attempt that emptied the changes list (a final commit, or a
+      -- failed commit with nothing staged) must still render its bounded
+      -- notice here, not only when change rows exist.
+      if state.write_notice then
+        local is_error = (state.write_notice.level == "error")
+        table.insert(lines, (is_error and " ! " or " ✓ ") .. tostring(state.write_notice.text))
+        table.insert(highlights, { #lines - 1, 0, -1, is_error and "WorkbenchError" or "WorkbenchClean" })
+      end
 
       table.insert(lines, " ")
       table.insert(lines, " " .. string.rep("─", 44))
@@ -1248,6 +1256,12 @@ function M.commit_staged(message)
     return false
   end
 
+  -- Capture the selected change path before the commit: the refresh below
+  -- only clamps the numeric index, so rows removed by the commit would
+  -- silently move the selection onto a different file.
+  local selected_entry = state.files[state.selected_index]
+  local selected_path = selected_entry and selected_entry.path or nil
+
   state.write_notice = {
     level = "ok",
     text = "Committed: " .. (hash and hash:sub(1, 7) or "?")
@@ -1256,6 +1270,18 @@ function M.commit_staged(message)
   -- Refresh reconciles status, history, and the selected comparison with
   -- the new HEAD; the comparison stays the user's chosen read-only pair.
   M.refresh()
+
+  -- Restore the captured path when it still exists in the refreshed list;
+  -- the numeric index alone may now point at a different change row.
+  if selected_path then
+    local restored_idx = file_index_for_path(selected_path)
+    if restored_idx then
+      state.selected_index = restored_idx
+      M.render_left_pane()
+      M.render_middle_pane()
+      M.render_right_pane()
+    end
+  end
   return true
 end
 
@@ -1294,6 +1320,7 @@ local function install_history_maps(buf)
 
   -- Two-endpoint comparison
   vim.keymap.set("n", "O", function() M.assign_compare_endpoint("old", "history") end, opts)
+  vim.keymap.set("n", "N", function() M.assign_compare_endpoint("new", "history") end, opts)
   vim.keymap.set("n", "D", M.reset_compare, opts)
 
   -- Local write actions (TASK-013): stage/unstage act on the selected
