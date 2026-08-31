@@ -24,6 +24,15 @@ SOURCE_HEAD_BEFORE="$(git -C "$PROJECT_ROOT" rev-parse --verify HEAD)"
 SOURCE_STATUS_BEFORE="$(git -C "$PROJECT_ROOT" status --porcelain=v1)"
 
 cleanup() {
+  # Restore source fixtures left behind by a failed probe before the
+  # fixture backup itself is removed with RUN_ROOT.
+  if [[ -f "$RUN_ROOT/source-ohc-real" && -L "$PROJECT_ROOT/bin/ohc" ]]; then
+    rm -f "$PROJECT_ROOT/bin/ohc"
+    mv "$RUN_ROOT/source-ohc-real" "$PROJECT_ROOT/bin/ohc"
+  fi
+  if [[ -L "$PROJECT_ROOT/config/nvim/.package-test-leak" ]]; then
+    rm -f "$PROJECT_ROOT/config/nvim/.package-test-leak"
+  fi
   if [[ -d "$RUN_ROOT" ]]; then
     rm -rf "$RUN_ROOT"
   fi
@@ -185,6 +194,36 @@ if tar -tvzf "$ARCHIVE_ONE" | grep -Eq '^[[:space:]]*[bchlps]'; then
   fail "package archive contains a link or special file"
 fi
 echo "  PASS: allowlisted contents, single safe root, no forbidden entries"
+echo "--- Package source-tree fail-closed validation ---"
+PRIVATE_SOURCE="$RUN_ROOT/private-source.txt"
+printf 'private-source' > "$PRIVATE_SOURCE"
+SYMLINK_PROBE_DIR="$RUN_ROOT/symlink-probe"
+SYMLINK_PROBE_OUTPUT="$SYMLINK_PROBE_DIR/oh-my-code-$VERSION.tar.gz"
+mkdir -p "$SYMLINK_PROBE_DIR"
+
+mv "$PROJECT_ROOT/bin/ohc" "$RUN_ROOT/source-ohc-real"
+ln -s "$PRIVATE_SOURCE" "$PROJECT_ROOT/bin/ohc"
+if "$PACKAGER" package "$SYMLINK_PROBE_OUTPUT" >/dev/null 2>&1; then
+  fail "package helper dereferenced a symlinked required file"
+fi
+[[ ! -e "$SYMLINK_PROBE_OUTPUT" && ! -L "$SYMLINK_PROBE_OUTPUT" ]] ||
+  fail "symlinked required file still produced an archive"
+[[ -z "$(find "$SYMLINK_PROBE_DIR" -name '.oh-my-code-package.*' -print -quit)" ]] ||
+  fail "symlink probe left archive bytes in the output directory"
+mv "$RUN_ROOT/source-ohc-real" "$PROJECT_ROOT/bin/ohc"
+
+ln -s "$PRIVATE_SOURCE" "$PROJECT_ROOT/config/nvim/.package-test-leak"
+if "$PACKAGER" package "$SYMLINK_PROBE_OUTPUT" >/dev/null 2>&1; then
+  fail "package helper packaged a symlinked config/nvim entry"
+fi
+[[ ! -e "$SYMLINK_PROBE_OUTPUT" && ! -L "$SYMLINK_PROBE_OUTPUT" ]] ||
+  fail "symlinked config entry still produced an archive"
+rm -f "$PROJECT_ROOT/config/nvim/.package-test-leak"
+
+"$PACKAGER" package "$SYMLINK_PROBE_OUTPUT" >/dev/null
+[[ "$(sha256_file "$SYMLINK_PROBE_OUTPUT")" == "$(sha256_file "$ARCHIVE_ONE")" ]] ||
+  fail "source validation changed the clean-tree package"
+echo "  PASS: symlinked source inputs rejected with no archive; clean tree unchanged"
 
 echo "--- Hostile archive fixtures ---"
 FIXTURES="$RUN_ROOT/fixtures"
@@ -246,10 +285,22 @@ with tarfile.open(fixture("extra-entry"), "w:gz") as t:
     add(t, root + "/VERSION", (version + "\n").encode())
     add(t, root + "/extra-not-allowed.txt", b"x")
 
+with tarfile.open(fixture("wrong-version"), "w:gz") as t:
+    add(t, root + "/")
+    add(t, root + "/VERSION", b"wrong-version\n")
+    add(t, root + "/LICENSE", b"MIT\n")
+    add(t, root + "/THIRD_PARTY_LICENSES.md", b"third party\n")
+    add(t, root + "/bin/")
+    add(t, root + "/bin/ohc", b"#!/bin/sh\n", mode=0o755)
+    add(t, root + "/bin/novim-dev", b"#!/bin/sh\n", mode=0o755)
+    add(t, root + "/config/")
+    add(t, root + "/config/nvim/")
+    add(t, root + "/config/nvim/init.lua", b"-- init\n")
+
 with open(fixture("malformed"), "wb") as f:
     f.write(b"this is not a tar.gz archive")
 PYFIXTURES
-echo "  fixtures built: traversal, absolute, symlink-member, extra-entry, malformed"
+echo "  fixtures built: traversal, absolute, symlink-member, extra-entry, malformed, wrong-version"
 echo "  PASS: hostile fixtures prepared"
 
 echo "--- Offline helper install and launcher identity ---"
@@ -277,13 +328,25 @@ fi
 [[ -L "$SYMLINK_ROOT" ]] || fail "symlinked root was replaced"
 [[ -z "$(find "$RUN_ROOT/symlink-outside" -mindepth 1 -print -quit)" ]] || fail "symlinked root target was populated"
 
-for fixture_name in traversal absolute symlink extra-entry malformed; do
+for fixture_name in traversal absolute symlink extra-entry malformed wrong-version; do
   if "$PACKAGER" install "$FIXTURES/$fixture_name/oh-my-code-$VERSION.tar.gz" "$RUN_ROOT/hostile-install" >/dev/null 2>&1; then
     fail "helper accepted the $fixture_name archive"
   fi
 done
 [[ ! -e "$RUN_ROOT/hostile-install" ]] || fail "hostile archive created an install root"
 [[ ! -e "$RUN_ROOT/evil.txt" ]] || fail "traversal fixture escaped the archive boundary"
+echo "--- Offline helper: archive VERSION identity mismatch ---"
+VERSION_MISMATCH_ARCHIVE="$FIXTURES/wrong-version/oh-my-code-$VERSION.tar.gz"
+if "$PACKAGER" install "$VERSION_MISMATCH_ARCHIVE" "$RUN_ROOT/version-mismatch-absent" >/dev/null 2>&1; then
+  fail "offline helper accepted an archive whose VERSION disagrees with its root"
+fi
+[[ ! -e "$RUN_ROOT/version-mismatch-absent" ]] || fail "VERSION mismatch created an install root"
+mkdir -p "$RUN_ROOT/version-mismatch-empty"
+if "$PACKAGER" install "$VERSION_MISMATCH_ARCHIVE" "$RUN_ROOT/version-mismatch-empty" >/dev/null 2>&1; then
+  fail "offline helper installed despite a VERSION mismatch"
+fi
+[[ -z "$(find "$RUN_ROOT/version-mismatch-empty" -mindepth 1 -print -quit)" ]] || fail "VERSION mismatch mutated an existing empty target"
+echo "  PASS: VERSION mismatch refused with the target unchanged"
 
 diff -ru "$PROJECT_ROOT/config/nvim" "$INSTALL_ROOT/config/nvim" >/dev/null || fail "installed config differs from package source"
 cmp -s "$PROJECT_ROOT/VERSION" "$INSTALL_ROOT/VERSION" || fail "installed VERSION differs"
@@ -383,15 +446,16 @@ expect_installer_failure "symlinked command directory" "$SBX_BIN_LINK" \
 echo "  PASS: collisions, symlinked roots, nonempty targets all fail closed"
 
 echo "--- Installer: hostile and malformed archives ---"
-for fixture_name in traversal absolute symlink extra-entry malformed; do
+for fixture_name in traversal absolute symlink extra-entry malformed wrong-version; do
   SBX_HOSTILE="$RUN_ROOT/home-hostile-$fixture_name"
   mkdir -p "$SBX_HOSTILE"
   expect_installer_failure "hostile archive ($fixture_name)" "$SBX_HOSTILE" \
     env OHC_INSTALL_ARCHIVE="$FIXTURES/$fixture_name/oh-my-code-$VERSION.tar.gz" "$INSTALLER"
 done
 [[ ! -e "$RUN_ROOT/home-hostile-traversal/.local/share/oh-my-code" ]] || fail "hostile archive created an install root"
+[[ ! -e "$RUN_ROOT/home-hostile-wrong-version/.local/share/oh-my-code" ]] || fail "VERSION-mismatch archive created an install root"
 [[ ! -e "$RUN_ROOT/evil.txt" ]] || fail "installer wrote a traversal entry outside the archive"
-echo "  PASS: malformed, traversal, absolute, symlink, and allowlist refusals"
+echo "  PASS: malformed, traversal, absolute, symlink, allowlist, and VERSION-mismatch refusals"
 
 echo "--- Installer: networked download path over a local fixture server ---"
 WWW_ROOT="$RUN_ROOT/www"

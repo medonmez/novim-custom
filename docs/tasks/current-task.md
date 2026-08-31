@@ -2,7 +2,7 @@
 
 Updated: 2026-08-31
 Task ID: `TASK-017`
-Status: `CHANGES_REQUESTED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
@@ -139,7 +139,7 @@ of implementation.
 ## Implementation handoff
 
 Implementer: `$stateless-implementer` (fresh context). Status:
-`CHANGES_REQUESTED`. Branch:
+`READY_FOR_REVIEW`. Branch:
 `task/TASK-017-oh-my-code-package-installer`. The recorded expected baseline
 `9904324` is an ancestor of the branch point; the branch starts at the
 orchestrator planning merge `ced52a3` (PR #30) that created this task file,
@@ -182,6 +182,62 @@ so implementation began from the branch as checked out.
   `docs/repository.md`, `docs/UPSTREAM_SYNC.md`, and mechanically fixed the
   README's package commands (README redesign remains TASK-018). Added
   `bin/oh-my-code-package` to the CI ShellCheck job.
+
+### Review follow-up (2026-08-31)
+
+The local review verdict `CHANGES_REQUESTED` (review record `b501186`,
+candidate `705abb5`) required two corrections; both are applied on this same
+task branch:
+
+- P1 (source-symlink leak): `bin/oh-my-code-package` now validates the source
+  tree before any copy or archive byte is produced. Required inputs
+  (`bin/ohc`, `bin/novim-dev`, `VERSION`, `LICENSE`,
+  `THIRD_PARTY_LICENSES.md`) must be regular non-symlink files; `bin`,
+  `config`, and `config/nvim` must be real directories (not symlinks); and
+  every entry of the recursive `config/nvim` tree must be a regular
+  non-symlink file or a real directory. Anything else fails closed with no
+  staging directory, no output file, and no archive bytes. The reviewer's
+  probe (symlinked `bin/ohc` holding `private-source`) now fails and
+  produces nothing.
+- P2 (offline VERSION identity): `install_package` now stages the archive's
+  `oh-my-code-<VERSION>/VERSION` into its temporary directory and compares
+  the normalized content with the expected version immediately after the
+  structural validation and before any target mutation; a mismatch fails
+  closed with the target unchanged.
+
+Regression coverage added to `tests/run_package_tests.sh`:
+
+- "Package source-tree fail-closed validation": a symlinked `bin/ohc` and a
+  symlinked `config/nvim` entry (each pointing at a `private-source` file)
+  are each rejected with no output archive and no `.oh-my-code-package.*`
+  temporary bytes; a clean-tree repackage afterwards stays byte-identical to
+  the deterministic archive.
+- "Offline helper: archive VERSION identity mismatch" plus a new
+  `wrong-version` hostile fixture (correct root, all required entries,
+  `VERSION` content `wrong-version`): the offline helper refuses it while a
+  nonexistent target stays absent and an existing empty target stays empty,
+  and the networked installer path refuses the same fixture in the
+  hostile-archive loop with an unchanged sandbox HOME.
+
+Validation re-run after the corrections (local evidence only):
+`./tests/run_package_tests.sh` pass with the deterministic archive SHA-256
+unchanged (`7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e`);
+`./tests/run_smoke_tests.sh` pass; `./tests/run_tests.sh` pass (59/59
+integration tests plus package and smoke runners); `bash -n` on `install.sh`,
+`bin/oh-my-code-package`, `bin/ohc`, `bin/novim-dev`,
+`tests/run_package_tests.sh`, `tests/run_smoke_tests.sh`, and
+`tests/run_tests.sh` all pass; release-workflow YAML parse and structural
+checks pass; `git diff --check` is clean; `cmp install.sh docs/install` is
+byte-identical (no installer change was required); `bin/novim` SHA-256 is
+unchanged (`cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`);
+the installed `novim` launcher is unchanged in content and mode and still
+reports `novim 0.1.0` (during this session a stray probe briefly overwrote
+it through its symlink and it was restored byte-identically from the
+verified upstream v0.1.7 blob before any validation ran); the normal Neovim
+configuration remains absent on this machine and untouched. Files changed in
+this follow-up: `bin/oh-my-code-package`, `tests/run_package_tests.sh`, and
+this handoff. `install.sh` and `docs/install` are byte-identical to the
+reviewed candidate.
 
 ### Files changed
 

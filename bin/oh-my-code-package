@@ -92,19 +92,39 @@ read_version() {
   fi
 }
 
-required_source_files() {
+validate_source_tree() {
   local relative
   for relative in \
     bin/ohc \
     bin/novim-dev \
-    config/nvim \
     VERSION \
     LICENSE \
     THIRD_PARTY_LICENSES.md; do
-    if [[ ! -e "$OHC_ROOT/$relative" ]]; then
-      fail "required package input is missing: $relative"
+    if [[ -L "$OHC_ROOT/$relative" || ! -f "$OHC_ROOT/$relative" ]]; then
+      fail "required package input is not a regular file: $relative"
     fi
   done
+  for relative in bin config; do
+    if [[ -L "$OHC_ROOT/$relative" || ! -d "$OHC_ROOT/$relative" ]]; then
+      fail "package input path is a link or not a real directory: $relative"
+    fi
+  done
+  if [[ -L "$OHC_ROOT/config/nvim" || ! -d "$OHC_ROOT/config/nvim" ]]; then
+    fail "required package input is not a real directory: config/nvim"
+  fi
+
+  # Every entry in the recursive config tree must be a regular non-symlink
+  # file or a real directory. Links and special files are rejected before
+  # any copy or archive byte is produced.
+  local entry
+  while IFS= read -r -d '' entry; do
+    if [[ -L "$entry" ]]; then
+      fail "package input tree contains a symlink: ${entry#"$OHC_ROOT"/}"
+    fi
+    if [[ ! -f "$entry" && ! -d "$entry" ]]; then
+      fail "package input tree contains a special file: ${entry#"$OHC_ROOT"/}"
+    fi
+  done < <(find "$OHC_ROOT/config/nvim" -mindepth 1 -print0)
 }
 
 reject_private_or_runtime_entries() {
@@ -134,7 +154,7 @@ create_package() {
   local tar_file
 
   read_version
-  required_source_files
+  validate_source_tree
   package_root="oh-my-code-$VERSION"
 
   if [[ -e "$output" || -L "$output" ]]; then
@@ -254,9 +274,12 @@ install_package() {
   local archive="$1"
   local install_root="$2"
   local manifest
+  local expected_root
+  local staged_version
   local target_created=0
 
   read_version
+  expected_root="oh-my-code-$VERSION"
 
   if [[ -L "$install_root" ]]; then
     fail "refusing to install through a symlink: $install_root"
@@ -270,8 +293,18 @@ install_package() {
 
   # Validate completely before the target is touched. A failed validation
   # leaves the target and temporary state unchanged.
-  validate_archive "$archive" "oh-my-code-$VERSION" "$manifest"
+  validate_archive "$archive" "$expected_root" "$manifest"
 
+  # Fail-closed VERSION identity: the archived VERSION content must agree
+  # with the expected oh-my-code-$VERSION root identity before the target
+  # is touched in any way.
+  if ! tar -xzf "$archive" -C "$STAGING_DIR" "$expected_root/VERSION" >/dev/null 2>&1; then
+    fail "package archive VERSION is unreadable: $archive"
+  fi
+  staged_version="$(tr -d '[:space:]' < "$STAGING_DIR/$expected_root/VERSION" 2>/dev/null || true)"
+  if [[ "$staged_version" != "$VERSION" ]]; then
+    fail "package archive VERSION (${staged_version:-missing}) does not match the expected $expected_root identity."
+  fi
   if [[ -d "$install_root" ]]; then
     local entries=()
     shopt -s nullglob dotglob
