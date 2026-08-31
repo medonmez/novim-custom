@@ -168,7 +168,7 @@ validate_archive() {
   if grep -Eq '^/' "$manifest"; then
     fail "release archive contains an absolute-path entry."
   fi
-  if grep -q '\\' "$manifest"; then
+  if grep -qF "\\" "$manifest"; then
     fail "release archive contains a backslash path entry."
   fi
 

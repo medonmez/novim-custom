@@ -139,7 +139,7 @@ of implementation.
 ## Implementation handoff
 
 Implementer: `$stateless-implementer` (fresh context). Status:
-`CHANGES_REQUESTED`. Branch:
+`READY_FOR_REVIEW`. Branch:
 `task/TASK-017-oh-my-code-package-installer`. The recorded expected baseline
 `9904324` is an ancestor of the branch point; the branch starts at the
 orchestrator planning merge `ced52a3` (PR #30) that created this task file,
@@ -245,9 +245,48 @@ Local review approved the corrected candidate and PR #31 was merged as
 `f070a74`, but the unprotected target allowed merge while its only CI check
 was still queued. The `shellcheck` job then failed on `install.sh:171` with
 `SC1003` for the backslash-regex literal; `docs/install` has the same line.
-The task is not accepted. Fix the installer copies so the repository
-ShellCheck job passes, rerun the relevant local checks, and request a new
-review/traceability PR for the same TASK-017 before acceptance.
+The task is not accepted; the same task was fixed on this branch as follows.
+
+Root cause: the installer searched the tar manifest with the single-quoted
+BRE literal `'\\'`. ShellCheck 0.10 flags a single-quoted token that ends
+with a backslash before the closing quote (`SC1003`, "Want to escape a
+single quote?"). The identical construct also exists at
+`bin/oh-my-code-package:226`; CI failed on `install.sh` first and never
+reported the second file.
+
+Fix: `grep -q '\\'` became `grep -qF "\\"` in `install.sh`, `docs/install`,
+and `bin/oh-my-code-package`. The double-quoted `"\\"` is a one-character
+fixed-string pattern, and `grep -F` matches any manifest line containing a
+literal backslash exactly as the previous BRE `\\` pattern did (verified on
+a backslash manifest and a clean manifest), so backslash path entries are
+still rejected fail-closed before the allowlist loop. A focused `backslash`
+hostile fixture (entry `oh-my-code-<VERSION>/ba\d.txt`) was added to
+`tests/run_package_tests.sh` and wired into both the offline-helper and the
+networked-installer refusal loops; it is rejected with no install root and
+no escaped files. No archive layout, allowlist, VERSION-identity check,
+workflow, launcher, or other accepted surface was touched.
+
+Validation rerun after the fix (local evidence only, ShellCheck 0.10.0 —
+the same version Ubuntu `apt-get install shellcheck` provides on the CI
+runner): `shellcheck install.sh`, `shellcheck bin/oh-my-code-package`, and
+`shellcheck bin/novim` (the exact CI file list) plus `shellcheck
+docs/install` are all clean; `bash -n` passes on `install.sh`,
+`bin/oh-my-code-package`, `bin/ohc`, `bin/novim-dev`, `bin/novim`,
+`tests/run_package_tests.sh`, `tests/run_smoke_tests.sh`, and
+`tests/run_tests.sh`; `cmp install.sh docs/install` is byte-identical;
+`./tests/run_package_tests.sh` passes with the deterministic archive SHA-256
+unchanged (`7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e`);
+`./tests/run_smoke_tests.sh` passes (9/9 headless regression included);
+`./tests/run_tests.sh` passes (59/59 integration tests plus the package and
+smoke runners); `git diff --check` is clean. Before/after invariance holds:
+`bin/novim` remains
+`cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`, the
+installed `novim` launcher remains
+`5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a` reporting
+`novim 0.1.7` (verified before any edit and re-verified after the suites),
+and the normal Neovim configuration remains absent and untouched. Handoff
+status returns to `READY_FOR_REVIEW` for the same TASK-017.
+`$project-orchestrator` handles the follow-up review/traceability PR.
 
 ### Files changed
 
@@ -322,5 +361,6 @@ review/traceability PR for the same TASK-017 before acceptance.
 ### Commit
 
 Commit reference: HEAD (handoff commit) on
-`task/TASK-017-oh-my-code-package-installer`. No push, pull request,
-repository rename, tag, or GitHub Release was performed.
+`task/TASK-017-oh-my-code-package-installer`; the ShellCheck follow-up
+commit is the new branch head after the prior handoff commit `8c1617c`. No
+push, pull request, repository rename, tag, or GitHub Release was performed.
