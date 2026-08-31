@@ -2,7 +2,7 @@
 
 Updated: 2026-08-31
 Task ID: `TASK-017`
-Status: `READY_FOR_REVIEW`
+Status: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
@@ -139,7 +139,7 @@ of implementation.
 ## Implementation handoff
 
 Implementer: `$stateless-implementer` (fresh context). Status:
-`READY_FOR_REVIEW`. Branch:
+`CHANGES_REQUESTED`. Branch:
 `task/TASK-017-oh-my-code-package-installer`. The recorded expected baseline
 `9904324` is an ancestor of the branch point; the branch starts at the
 orchestrator planning merge `ced52a3` (PR #30) that created this task file,

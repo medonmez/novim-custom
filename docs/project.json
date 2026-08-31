@@ -29,7 +29,7 @@
   },
   "workflow": {
     "currentTask": "TASK-017",
-    "currentTaskStatus": "PLANNED",
+        "currentTaskStatus": "CHANGES_REQUESTED",
     "pullRequest": null,
     "remoteChecks": "STRICT FOR HOSTED RELEASE; NOT APPLICABLE TO LOCAL PLAN",
     "lastAcceptedTask": "TASK-016",

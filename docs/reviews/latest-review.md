@@ -1,99 +1,110 @@
 # Latest Review
 
 Updated: 2026-08-31
-Task ID: `TASK-016`
-Local verdict: `APPROVED`
+Task ID: `TASK-017`
+Local verdict: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
-Baseline: `853b32a` (`origin/main`, reconciliation merge; recorded expected
-baseline `8457dbf` is an ancestor)
-Candidate: `6072f25` (`task/TASK-016-oh-my-code-startup-splash`)
-Pull request: `https://github.com/medonmez/novim-custom/pull/29` (`MERGED`)
-Remote task branch: present (`task/TASK-016-oh-my-code-startup-splash`)
-Remote checks: none reported
-Merge status: `MERGED`
+Baseline: `ced52a3` (planning merge; recorded expected baseline
+`9904324ba79c666be46e6efe92e932eb1ea8e2d4` is an ancestor)
+Candidate: `705abb515dc5252e16a32c25e218210092d6823e`
+Branch: `task/TASK-017-oh-my-code-package-installer`
+Pull request: not opened
+Remote task branch: absent
+Merge status: not applicable
 
 ## Review result
 
-The candidate was inspected against the actual `origin/main` baseline and the
-complete task delta. The implementation is limited to the public `ohc`
-launcher, the one-release `novim-dev` compatibility alias, focused PTY smoke
-coverage, and the corresponding local architecture/distribution and task
-handoff records.
-
-Both launchers consume `--no-animation`, detect `--headless` anywhere in the
-argument list, honor `OHC_NO_ANIMATION=1`, and render the ANSI splash only when
-stdout is a TTY. Help and version exit before the splash. Arguments that are
-not launcher controls are forwarded with array-safe shell expansion. The
-existing isolated config/data/state/cache paths and launcher identities remain
-intact.
-
-No unresolved correctness, regression, security, privacy, data-integrity,
-public-contract, or scope issue remains for this local review.
+The candidate is on the recorded isolated branch with a clean working tree
+and the expected baseline relationship. The public package, installer,
+release-workflow preparation, focused package tests, and distribution
+documentation are within TASK-017 scope. The local package/installer suite
+and the existing regression suites pass, but the package producer does not
+fail closed for hostile allowlist source inputs and the offline helper does
+not enforce archive VERSION identity. Delivery is therefore not approved.
 
 ## Findings
 
-None blocking.
+### P1 — Package creation can dereference an allowlisted source symlink and archive private data
 
-Non-blocking observations retained from the handoff:
+`bin/oh-my-code-package:95-107, 148-155` checks required inputs with `-e` and
+copies them before validating their source types. A direct reviewer probe made
+`bin/ohc` a symlink to a temporary file containing `private-source`; the
+package command succeeded and the resulting archive contained that content as
+`oh-my-code-0.1.7/bin/ohc`. The staged-name scan does not catch this because
+the symlink is dereferenced by `cp`.
 
-- The PTY duration assertion uses a `[0.60s, 1.80s]` observation window around
-  fixed launcher sleeps; extreme machine load could make this test-only check
-  flaky without changing the fixed product delay.
-- Splash redraw relies on cursor-up terminal support and the art wraps
-  cosmetically on very narrow terminals; bypass and timing behavior are not
-  affected.
-- The PTY matrix warns and skips when `python3` is absent. It ran successfully
-  in this review environment.
-- Splash mechanics remain duplicated in both launchers because the current
-  pre-release package allowlist stages only `bin/novim-dev`; consolidation is
-  appropriately deferred to `TASK-017`.
+This violates the public allowlist/private-data boundary and means a symlinked
+`config/nvim` or other special allowlist input is not fail-closed before a
+release asset is generated. Validate the source tree before copying: required
+files must be regular non-symlink files, `config/nvim` must be a real
+directory, and every entry in the recursive config tree must be an allowed
+regular file or directory. Add a regression fixture proving a source symlink
+is rejected and no archive is produced.
+
+### P2 — Offline helper accepts an archive whose VERSION content disagrees with its root
+
+`bin/oh-my-code-package:176-237, 253-294` validates the root name and the
+presence of `VERSION`, but does not compare the extracted VERSION content with
+the expected `oh-my-code-$VERSION` identity. A reviewer-created archive with
+the correct root and all required entries but `VERSION=wrong-version` was
+accepted by `bin/oh-my-code-package install`.
+
+The public `install.sh` has a corresponding staged VERSION check, so this is
+specific to the offline helper; however, the helper documents its extraction
+as validated and is part of the same public archive boundary. Compare the
+normalized VERSION content with the expected package version before extraction
+or before target mutation, and add a mismatch fixture with unchanged-target
+assertions.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Normal interactive `ohc` launch renders a bounded splash and then starts Neovim | PASS | The real PTY matrix rendered the `oh-my-code` splash for both launchers, observed the final version frame within `0.60s–1.80s`, and exited cleanly after `:qa!`. |
-| Disable controls suppress the splash and `--no-animation` is not forwarded | PASS | PTY flag/env runs were splash-free and prompt; the Lua `vim.v.argv` assertion passed for both launchers, including a direct reviewer probe with the flag in mid-argument position. |
-| Help, version, headless, piped, and test launches remain immediate and forwarded | PASS | Smoke Step 5 checks help/version, headless-under-TTY, piped, flag/env bypasses; direct `ohc`/`novim-dev` CLI and file passthrough checks passed; the 9-test headless smoke suite passed. |
-| `novim-dev` compatibility and one-release identity boundary are preserved | PASS | Existing CLI identity/help assertions passed unchanged, and the same splash eligibility/disable matrix passed for `novim-dev`. |
-| Focused and existing suites remain green | PASS | Reviewer rerun of `./tests/run_tests.sh` passed: 59/59 integration tests, offline package/upstream-boundary suite, and 9/9 smoke tests, including the new PTY step. |
-| `bin/novim`, installed `novim`, and normal Neovim config remain invariant | PASS | After validation, `bin/novim` remained SHA-256 `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`; `/Users/mert/.local/bin/novim` remained `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, output remained `novim 0.1.7` / `powered by NVIM v0.12.5`, and `/Users/mert/.config/nvim` remained absent. |
+| Byte-identical package and overwrite refusal | PASS | Reviewer rerun of `./tests/run_package_tests.sh`; repeated archive SHA-256 was `7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e`. |
+| Allowlisted archive with no private, link, special, Git, or `bin/novim` entries | FAIL | Normal archive and hostile archive fixtures pass, but the source-symlink probe produced a package containing private source content. |
+| Public installer validation, install root, and command links | PASS | Local archive and fixture HTTP-server paths passed; the server observed exactly the archive and `.sha256` GETs. |
+| Fail-closed collisions and download/archive failures | PASS for covered cases | Collision, symlinked root/bin directory, nonempty root, malformed, traversal, absolute, symlink-member, checksum, 404, and unreachable-host cases passed with unchanged tested targets. |
+| Installed launchers, identity, splash bypasses, isolation, and no installed `novim` mutation | PASS | Package suite and smoke suite passed with isolated config/data/state/cache assertions and invariance checks. |
+| Release workflow asset preparation and no `bin/novim` packaging/mutation | PASS locally | PyYAML structural validation passed; `bin/novim` SHA-256 remained `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`. No tag or release was run. |
+| Focused/full suites, syntax, and diff checks | PASS | `./tests/run_package_tests.sh`, `./tests/run_smoke_tests.sh`, `./tests/run_tests.sh`, `bash -n`, YAML validation, `git diff --check`, and `cmp install.sh docs/install` passed. |
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`,
-  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, the prior review,
-  ADR-006, and the relevant architecture/distribution records.
-- Confirmed the checkout is on
-  `task/TASK-016-oh-my-code-startup-splash`, at candidate `6072f25`, with a
-  clean working tree before review; the candidate parent is `853b32a` and the
-  recorded `8457dbf` baseline is an ancestor.
-- Inspected the complete candidate diff. Only
-  `bin/ohc`, `bin/novim-dev`, `tests/run_smoke_tests.sh`,
-  `docs/architecture.md`, `docs/LOCAL_DISTRIBUTION.md`, and the current-task
-  handoff changed. No changes were found under `bin/novim`, `config/nvim/`,
-  the package helper, or installed paths.
-- Ran `bash -n bin/ohc bin/novim-dev tests/run_smoke_tests.sh`,
-  `git diff --check 853b32a..6072f25`, direct CLI checks, mid-position flag
-  consumption and early-exit probes, and `./tests/run_tests.sh`; all passed.
-- The implementer also reported an earlier independent PTY measurement of
-  `0.863s` (`ohc`) and `0.853s` (`novim-dev`) and a second smoke-runner pass;
-  these remain local handoff evidence. This review reran the complete suite
-  once and observed the PTY matrix pass.
+  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, ADR-006, and the
+  distribution/architecture records.
+- Confirmed the candidate branch, clean initial worktree, parent `ced52a3`,
+  and recorded baseline ancestry. Inspected the complete TASK-017 commit diff;
+  it contains the package helper, installer, release/CI workflow changes,
+  package tests, and scoped documentation updates only.
+- Reran `./tests/run_package_tests.sh` independently: deterministic package,
+  allowlist/hostile fixtures, local and networked installer paths, checksum
+  failures, collision preservation, workflow structure, sync fixture, and
+  existing-path invariance all passed.
+- Reran `./tests/run_smoke_tests.sh`: CLI, isolation, passthrough, PTY splash
+  matrix, and 9/9 headless regression checks passed.
+- Reran `./tests/run_tests.sh`: 59/59 integration tests, package suite, and
+  smoke runner passed. Shell syntax, YAML parsing/structure, `git diff --check`,
+  and installer/docs equality also passed.
+- Direct adversarial probes found the P1 source-symlink leak and the P2
+  offline VERSION mismatch acceptance described above.
 
 All evidence above is local review evidence. It is not hosted, production,
-recovery, or customer-acceptance evidence.
+recovery, or customer-acceptance evidence. The default installer URL points to
+the not-yet-published `medonmez/oh-my-code` target by design; hosted release
+verification remains TASK-019 scope. Cross-run archive identity was verified
+on this macOS checkout; Ubuntu runner evidence remains pending.
 
 ## Delivery decision
 
-`ACCEPTED` after lightweight PR #29 merge. The remote default branch contains
-the reviewed implementation and review record at merge commit
-`9904324ba79c666be46e6efe92e932eb1ea8e2d4`. No repository rename, tag, release,
-or hosted installer action occurred or is in scope for TASK-016.
+`CHANGES_REQUESTED`. No PR, push, merge, repository rename, tag, or GitHub
+Release action was performed. Keep TASK-017 active on the same branch and
+return it to `$stateless-implementer` for the two findings above.
 
 ## Next action
 
-TASK-016 is complete. The next actionable slice is TASK-017: plan and
-implement the public oh-my-code package, safe installer, and release-asset
-workflow without publishing the hosted release or touching installed
-`novim` paths.
+Revise TASK-017 on
+`task/TASK-017-oh-my-code-package-installer`: reject symlink/non-regular
+package inputs before copying, enforce offline archive VERSION identity, add
+regression coverage, and repeat the focused/full local checks. Then request a
+new review of the same task.
