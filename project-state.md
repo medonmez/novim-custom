@@ -4,11 +4,11 @@ Updated: 2026-08-31
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-017` (`CHANGES_REQUESTED`)
+Current task: `TASK-017` (`READY_FOR_REVIEW`)
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
 Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
-Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`, follow-up required)
+Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`; follow-up PR pending)
 Last accepted task: `TASK-016`
 Last accepted commit: `9904324ba79c666be46e6efe92e932eb1ea8e2d4` (`origin/main` merge of PR #29)
 Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
@@ -150,17 +150,17 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
 
 ## Active blockers
 
-- TASK-017 implementation is merged in `origin/main` at `f070a74`, but its
-  post-merge `shellcheck` check failed with `SC1003` at `install.sh:171`.
-  Acceptance is withheld pending the same-task installer correction. The
-  review also records and hash-verifies the repaired installed-`novim`
-  incident from the prior fixer probe.
+- TASK-017 implementation is merged in `origin/main` at `f070a74`. Its
+  post-merge `shellcheck` check exposed `SC1003` at `install.sh:171`; the
+  same-task correction is locally approved at `369dedb` and awaits the
+  follow-up PR's ShellCheck check before acceptance. The review also records
+  and hash-verifies the repaired installed-`novim` incident from the prior
+  fixer probe.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Return TASK-017 to `$stateless-implementer` for the `shellcheck` correction in
-both installer copies, then re-review and deliver the follow-up PR. Do not
-issue TASK-018 or rename the GitHub repository, create the `v1.0.0` tag, or
-publish a GitHub Release until TASK-017 is accepted and TASK-019 performs its
-strict hosted checks.
+Deliver the locally approved TASK-017 correction through its follow-up PR and
+verify the ShellCheck check before acceptance. Do not issue TASK-018 or rename
+the GitHub repository, create the `v1.0.0` tag, or publish a GitHub Release
+until TASK-017 is accepted and TASK-019 performs its strict hosted checks.

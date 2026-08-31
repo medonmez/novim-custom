@@ -2,12 +2,12 @@
 
 Updated: 2026-08-31
 Task ID: `TASK-017`
-Status: `CHANGES_REQUESTED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
 Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
-Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`, follow-up required)
+Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`; follow-up PR pending)
 PR target: `origin/main`
 Dependency: `TASK-016` (accepted in PR #29)
 

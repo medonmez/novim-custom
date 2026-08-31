@@ -29,7 +29,7 @@
   },
   "workflow": {
     "currentTask": "TASK-017",
-        "currentTaskStatus": "CHANGES_REQUESTED",
+        "currentTaskStatus": "READY_FOR_REVIEW",
         "pullRequest": "https://github.com/medonmez/novim-custom/pull/31",
     "remoteChecks": "STRICT FOR HOSTED RELEASE; NOT APPLICABLE TO LOCAL PLAN",
     "lastAcceptedTask": "TASK-016",
