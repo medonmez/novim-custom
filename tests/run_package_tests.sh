@@ -266,6 +266,10 @@ with tarfile.open(fixture("absolute"), "w:gz") as t:
     add(t, root + "/")
     add(t, "/etc/oh-my-code-pwned.txt", b"pwned")
 
+with tarfile.open(fixture("backslash"), "w:gz") as t:
+    add(t, root + "/")
+    add(t, root + "/ba\\d.txt", b"pwned")
+
 with tarfile.open(fixture("symlink"), "w:gz") as t:
     add(t, root + "/")
     add(t, root + "/VERSION", (version + "\n").encode())
@@ -300,7 +304,7 @@ with tarfile.open(fixture("wrong-version"), "w:gz") as t:
 with open(fixture("malformed"), "wb") as f:
     f.write(b"this is not a tar.gz archive")
 PYFIXTURES
-echo "  fixtures built: traversal, absolute, symlink-member, extra-entry, malformed, wrong-version"
+echo "  fixtures built: traversal, absolute, backslash-entry, symlink-member, extra-entry, malformed, wrong-version"
 echo "  PASS: hostile fixtures prepared"
 
 echo "--- Offline helper install and launcher identity ---"
@@ -328,7 +332,7 @@ fi
 [[ -L "$SYMLINK_ROOT" ]] || fail "symlinked root was replaced"
 [[ -z "$(find "$RUN_ROOT/symlink-outside" -mindepth 1 -print -quit)" ]] || fail "symlinked root target was populated"
 
-for fixture_name in traversal absolute symlink extra-entry malformed wrong-version; do
+for fixture_name in traversal absolute backslash symlink extra-entry malformed wrong-version; do
   if "$PACKAGER" install "$FIXTURES/$fixture_name/oh-my-code-$VERSION.tar.gz" "$RUN_ROOT/hostile-install" >/dev/null 2>&1; then
     fail "helper accepted the $fixture_name archive"
   fi
@@ -446,7 +450,7 @@ expect_installer_failure "symlinked command directory" "$SBX_BIN_LINK" \
 echo "  PASS: collisions, symlinked roots, nonempty targets all fail closed"
 
 echo "--- Installer: hostile and malformed archives ---"
-for fixture_name in traversal absolute symlink extra-entry malformed wrong-version; do
+for fixture_name in traversal absolute backslash symlink extra-entry malformed wrong-version; do
   SBX_HOSTILE="$RUN_ROOT/home-hostile-$fixture_name"
   mkdir -p "$SBX_HOSTILE"
   expect_installer_failure "hostile archive ($fixture_name)" "$SBX_HOSTILE" \
@@ -455,7 +459,7 @@ done
 [[ ! -e "$RUN_ROOT/home-hostile-traversal/.local/share/oh-my-code" ]] || fail "hostile archive created an install root"
 [[ ! -e "$RUN_ROOT/home-hostile-wrong-version/.local/share/oh-my-code" ]] || fail "VERSION-mismatch archive created an install root"
 [[ ! -e "$RUN_ROOT/evil.txt" ]] || fail "installer wrote a traversal entry outside the archive"
-echo "  PASS: malformed, traversal, absolute, symlink, allowlist, and VERSION-mismatch refusals"
+echo "  PASS: malformed, traversal, absolute, backslash-entry, symlink, allowlist, and VERSION-mismatch refusals"
 
 echo "--- Installer: networked download path over a local fixture server ---"
 WWW_ROOT="$RUN_ROOT/www"

@@ -101,11 +101,11 @@ accepted in ADR-006; only TASK-017 is currently actionable.
   contains the local review closure and acceptance evidence.
 - `TASK-017` owns public archive naming, installer paths, safe alias handling,
   and release workflow assets. Normal `ohc` launch remains network-free.
-- `TASK-017` passed local review at `6b902a8` after the package helper began
-  rejecting symlink/non-regular allowlist inputs before copying and the
-  offline archive began enforcing `VERSION` identity. The review records a
-  separately repaired installed-`novim` probe incident; hosted release work
-  remains excluded.
+- `TASK-017` passed local review at `6b902a8`, but merged PR #31 exposed a
+  `shellcheck` `SC1003` failure at `install.sh:171`. The same-task correction
+  is locally approved at `369dedb`; acceptance remains pending the follow-up
+  PR check. The review records a separately repaired installed-`novim` probe
+  incident; hosted release work remains excluded.
 - `TASK-018` owns the public README, Mermaid/terminal explanation, and a real
   `ohc` terminal demo capture with no private project data.
 - `TASK-019` is the only task authorized to perform the hosted repository
