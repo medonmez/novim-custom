@@ -23,12 +23,12 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | ACCEPTED | TASK-013 (accepted) |
 | 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | ACCEPTED | TASK-014 (accepted) |
 | 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | ACCEPTED | TASK-015 (accepted) |
-| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | READY_FOR_REVIEW | TASK-015, TASK-016 (accepted) |
-| 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PROPOSED | TASK-015, TASK-016, TASK-017 (accepted) |
+| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | ACCEPTED | TASK-015, TASK-016 (accepted) |
+| 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PLANNED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PROPOSED | TASK-015 through TASK-018 (accepted) |
 
-TASK-001 through TASK-016 are accepted. The public release direction is
-accepted in ADR-006; only TASK-017 is currently actionable.
+TASK-001 through TASK-017 are accepted. The public release direction is
+accepted in ADR-006; only TASK-018 is currently actionable.
 
 ## Accepted task notes
 
@@ -101,11 +101,10 @@ accepted in ADR-006; only TASK-017 is currently actionable.
   contains the local review closure and acceptance evidence.
 - `TASK-017` owns public archive naming, installer paths, safe alias handling,
   and release workflow assets. Normal `ohc` launch remains network-free.
-- `TASK-017` passed local review at `6b902a8`, but merged PR #31 exposed a
-  `shellcheck` `SC1003` failure at `install.sh:171`. The same-task correction
-  is locally approved at `369dedb`; acceptance remains pending the follow-up
-  PR check. The review records a separately repaired installed-`novim` probe
-  incident; hosted release work remains excluded.
+- `TASK-017` was accepted after the same-task ShellCheck correction at
+  `369dedb` and follow-up PR #32, merged at `bad06b69`. The review records a
+  separately repaired installed-`novim` probe incident; hosted release work
+  remains excluded.
 - `TASK-018` owns the public README, Mermaid/terminal explanation, and a real
   `ohc` terminal demo capture with no private project data.
 - `TASK-019` is the only task authorized to perform the hosted repository

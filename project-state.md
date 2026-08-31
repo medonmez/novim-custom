@@ -4,14 +4,14 @@ Updated: 2026-08-31
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-017` (`READY_FOR_REVIEW`)
+Current task: `TASK-018` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-017-oh-my-code-package-installer`
-Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
-Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`; follow-up PR pending)
-Last accepted task: `TASK-016`
-Last accepted commit: `9904324ba79c666be46e6efe92e932eb1ea8e2d4` (`origin/main` merge of PR #29)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
+Task branch: `task/TASK-018-oh-my-code-readme-demo-assets`
+Expected baseline: `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9`
+Pull request: not opened
+Last accepted task: `TASK-017`
+Last accepted commit: `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9` (`origin/main` merge of PR #32)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/32`
 
 ## Current truth
 
@@ -29,8 +29,8 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
 - Public installation is planned for `~/.local/share/oh-my-code` with
   `~/.local/bin/ohc`; these paths do not replace the installed `novim` paths.
 - The one-second interactive-TTY splash is implemented and accepted in
-  TASK-016. Public packaging/installer, README assets, and hosted release are
-  the remaining ordered successor tasks.
+  TASK-016. Public packaging/installer is accepted in TASK-017; README assets
+  and hosted release are the remaining ordered successor tasks.
 - Workflow manifests and durable project records have been bootstrapped under
   `docs/` without removing or duplicating the upstream public documentation.
 - `TASK-001` was locally reviewed (`APPROVED` at candidate `b8512b6`) and
@@ -150,17 +150,15 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
 
 ## Active blockers
 
-- TASK-017 implementation is merged in `origin/main` at `f070a74`. Its
-  post-merge `shellcheck` check exposed `SC1003` at `install.sh:171`; the
-  same-task correction is locally approved at `369dedb` and awaits the
-  follow-up PR's ShellCheck check before acceptance. The review also records
-  and hash-verifies the repaired installed-`novim` incident from the prior
-  fixer probe.
+- TASK-017 is accepted in `origin/main` at `bad06b69` after follow-up PR #32
+  passed the ShellCheck correction check. The review also records and
+  hash-verifies the repaired installed-`novim` incident from the prior fixer
+  probe.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Deliver the locally approved TASK-017 correction through its follow-up PR and
-verify the ShellCheck check before acceptance. Do not issue TASK-018 or rename
-the GitHub repository, create the `v1.0.0` tag, or publish a GitHub Release
-until TASK-017 is accepted and TASK-019 performs its strict hosted checks.
+Issue TASK-018 on `task/TASK-018-oh-my-code-readme-demo-assets` from the
+verified `origin/main` baseline. Do not rename the GitHub repository, create
+the `v1.0.0` tag, or publish a GitHub Release; those remain TASK-019's strict
+hosted scope.

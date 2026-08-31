@@ -1,10 +1,13 @@
 # TASK-017 — oh-my-code public package and safe installer
 
-- Status: `PLANNED`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
 - Task branch: `task/TASK-017-oh-my-code-package-installer`
+- Candidate: `369dedb` (review record `5ef96a7`)
+- Pull request: `#32` (`MERGED`)
+- Merge commit: `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9` (`origin/main`)
 - PR target: `origin/main`
 - Dependency: `TASK-016` (accepted in PR #29)
 - Follow-up: `TASK-018` README and real demo assets
@@ -133,3 +136,20 @@ one-release `novim-dev` compatibility boundary.
 The implementer must stop at a local handoff commit on this branch. No
 repository rename, tag, GitHub Release, or hosted installer acceptance is part
 of implementation.
+
+## Closure
+
+TASK-017 was locally reviewed `APPROVED` after the ShellCheck correction was
+inspected and the focused, full, smoke, syntax, workflow, invariant, and
+diff checks passed. The follow-up PR #32 passed the Ubuntu ShellCheck job and
+was merged into `main` at `bad06b69`. The remote default branch was fetched
+and verified to contain the reviewed head.
+
+The package remains deterministic at SHA-256
+`7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e`.
+Checkout `bin/novim` and the installed `novim 0.1.7` release remained
+unchanged under guarded validation. The installed-release incident from the
+prior fixer probe is recorded in the review record; this task performed no
+additional write to that installed release. No hosted release, repository
+rename, tag, production, recovery-service, or customer-acceptance claim is
+made.

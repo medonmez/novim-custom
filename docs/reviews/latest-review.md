@@ -12,7 +12,9 @@ Implementation candidate: `369dedbda70b551fa3dbfa84e46bb8f45c8856ed`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
 Previous pull request: `https://github.com/medonmez/novim-custom/pull/31`
 (`MERGED` at `f070a7446f6fe93d2e1ba32e15d2e0fe45f27ff8`)
-Follow-up pull request: pending
+Follow-up pull request: `https://github.com/medonmez/novim-custom/pull/32`
+(`MERGED` at `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9`)
+Target branch contains reviewed head: `YES`
 
 ## Review result
 
@@ -23,11 +25,10 @@ fixed-string search. A direct probe gave the same results as the former
 `grep -q '\\'` BRE: a manifest entry containing a backslash is rejected and
 a clean manifest is accepted.
 
-The previously reported CI failure is therefore corrected without weakening
-archive validation. The local review is approved for delivery. The local
-environment does not have a `shellcheck` executable, so the previously failing
-ShellCheck job must be observed as successful on the follow-up PR before the
-merge and acceptance decision.
+The previously reported CI failure was corrected without weakening archive
+validation. The local review was approved for delivery, the follow-up PR #32
+was opened and merged, and its ShellCheck job completed successfully. The
+remote default branch now contains the reviewed head and merge result.
 
 ## Findings
 
@@ -53,15 +54,16 @@ No remaining code-level finding in the reviewed follow-up diff.
 | Collision and failure safety | PASS | Collision, malformed, traversal, absolute, backslash, symlink, allowlist, VERSION, checksum, 404, and unreachable-host cases fail closed with unchanged targets. |
 | Launcher identity, isolation, and installed `novim` boundary | PASS | Package, smoke, and full suites pass; installed `novim` guard remains unchanged. |
 | Release workflow and `bin/novim` boundary | PASS | Workflow structure validation passes; no tag/release was run; checkout `bin/novim` hash is unchanged. |
-| Required validation including the prior ShellCheck regression | PASS locally; remote check pending | `bash -n`, YAML structure, package, smoke, full suite, installer-copy comparison, direct pattern-equivalence probe, and `git diff --check` pass. Local ShellCheck is unavailable; follow-up PR CI is the required remote confirmation. |
+| Required validation including the prior ShellCheck regression | PASS | `bash -n`, YAML structure, package, smoke, full suite, installer-copy comparison, direct pattern-equivalence probe, and `git diff --check` pass; follow-up PR #32 CI run `33399937834` passed its Ubuntu ShellCheck job. Local ShellCheck was unavailable, so the remote job is the authoritative ShellCheck result for delivery. |
 
 ## Validation performed
 
 - Inspected `AGENTS.md`, the repository routing contract, project state,
   current task, backlog, ADR-006, and the prior CI-failure review.
-- Confirmed a clean task branch at `369dedb`, two commits ahead of the remote
-  task branch, with no unrelated changes. The prior PR #31 is merged; the
-  follow-up has not yet been pushed or opened.
+- Confirmed the implementation branch at `369dedb` plus review record
+  `5ef96a7`, with no unrelated changes. The prior PR #31 and follow-up PR #32
+  are merged; `origin/main` contains the follow-up head at merge commit
+  `bad06b69`.
 - Reran `./tests/run_package_tests.sh`: deterministic archive, source-tree
   symlink rejection, hostile `backslash-entry` rejection in the offline
   helper, installer collision/failure checks, fixture-server download and
@@ -105,14 +107,11 @@ customer-acceptance claim.
 
 ## Delivery decision
 
-`APPROVED` for the follow-up PR. Push the two local commits and open one
-follow-up PR against `main`. Because the previous merged PR exposed this
-exact CI regression, do not merge until the follow-up ShellCheck check is
-successful. Do not create a tag, publish a release, or perform the hosted
-repository rename; those remain TASK-019 scope.
+`ACCEPTED` after PR #32 was merged and `origin/main` was verified to contain
+the reviewed head. No tag, release, or hosted repository rename was created;
+those remain TASK-019 scope.
 
 ## Next action
 
-Push `task/TASK-017-oh-my-code-package-installer`, open the follow-up PR, and
-verify its ShellCheck result. After the remote default branch contains the
-follow-up merge, reconcile TASK-017 as `ACCEPTED` and only then issue TASK-018.
+Reconcile the accepted TASK-017 records and issue TASK-018 for the public
+README and real terminal demo assets.
