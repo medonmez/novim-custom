@@ -1,99 +1,124 @@
-# Local novim-custom Distribution
+# Local oh-my-code Distribution
 Updated: 2026-08-31
 
-This is a local distribution path for this checkout. It is not a hosted
-release, a package-manager formula, or an update path for the installed
-upstream `novim` command.
+This is the local packaging and installation path for this checkout. It is
+not a hosted release, a package-manager formula, or an update path for the
+installed upstream `novim` command. Public release publication and hosted
+installer verification belong to the release-delivery task (`TASK-019`).
 
 ## Identity and package contents
 
-The checkout's public launcher is `bin/ohc`; it reports the public identity
-`oh-my-code (ohc) <VERSION>-dev`, deriving the development suffix from the
-checkout's upstream-compatible `VERSION` file. A local package is named
-`novim-custom-<VERSION>.tar.gz` and still stages the compatibility launcher
-`bin/novim-dev`, which reports `<VERSION>-dev (custom checkout)` and is a
-one-release compatibility alias for `ohc`. Migrating the package, installer,
-and release assets to the public `oh-my-code`/`ohc` identity is a separate
-planned task (`TASK-017`); this pre-release boundary is preserved until then.
+The public launcher is `bin/ohc`; it reports the identity
+`oh-my-code (ohc) <VERSION>-dev` from the checkout's `VERSION` file. The
+public package helper is `bin/oh-my-code-package`. It builds the
+deterministic, offline archive `oh-my-code-<VERSION>.tar.gz` rooted at
+`oh-my-code-<VERSION>/`, containing:
 
-The archive is an explicit allowlist, containing:
-
-- `bin/novim-dev`;
+- `bin/ohc`, the public launcher;
+- `bin/novim-dev`, the one-release compatibility alias launcher;
 - the complete `config/nvim/` tree, including the bundled runtime plugin;
 - `VERSION`;
 - `LICENSE`; and
 - `THIRD_PARTY_LICENSES.md`.
 
 It intentionally does not contain `bin/novim`, Git metadata, `.dev-*` runtime
-directories, credentials, environment files, or private runtime data. The
-installed upstream `novim` release remains outside this package.
+directories, credentials, environment files, private runtime data, or any
+link or special file. The installed upstream `novim` release remains outside
+this package.
 
-## Create and test a local package
+## Create and inspect a local package
 
-Packaging is deterministic and offline. Give it a new output path; the helper
-refuses to overwrite an existing archive.
+Packaging is deterministic and offline: repeated runs of the same checkout
+produce byte-identical archives, and the helper refuses to overwrite an
+existing output.
 
 ```bash
-PACKAGE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/novim-custom-package.XXXXXX")"
-ARCHIVE="$PACKAGE_TMP/novim-custom.tar.gz"
+PACKAGE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/oh-my-code-package.XXXXXX")"
+ARCHIVE="$PACKAGE_TMP/oh-my-code-<VERSION>.tar.gz"
 
-./bin/novim-dev-package package "$ARCHIVE"
+./bin/oh-my-code-package package "$ARCHIVE"
 tar -tzf "$ARCHIVE"
-
-INSTALL_ROOT="$PACKAGE_TMP/install"
-./bin/novim-dev-package install "$ARCHIVE" "$INSTALL_ROOT"
-"$INSTALL_ROOT/bin/novim-dev" --version
-NOVIM_PACKAGE_ROOT="$INSTALL_ROOT" "$INSTALL_ROOT/bin/novim-dev" --headless \
-  -c "lua assert(vim.fs.normalize(vim.fn.stdpath('config')) == vim.fs.normalize(os.getenv('NOVIM_PACKAGE_ROOT') .. '/config/nvim'))" \
-  -c 'qall!'
+shasum -a 256 "$ARCHIVE"   # sha256sum on Linux
 ```
 
-The install command accepts only a new or empty, explicitly named directory.
-It extracts the package there and never creates an alias named `novim`. For a
-user-local installation, use a dedicated derivative directory and inspect any
-existing link before creating the optional convenience link:
+## Install locally
+
+The offline helper extracts a validated archive into a new or empty,
+explicitly named directory. It never creates command links and never writes
+outside that directory.
 
 ```bash
-DERIVATIVE_ROOT="$HOME/.local/share/novim-custom"
-./bin/novim-dev-package install /path/to/novim-custom.tar.gz "$DERIVATIVE_ROOT"
-mkdir -p "$HOME/.local/bin"
-# First confirm that this path is absent or already points to the derivative.
-ln -s "$DERIVATIVE_ROOT/bin/novim-dev" "$HOME/.local/bin/novim-dev"
+INSTALL_ROOT="$PACKAGE_TMP/install"
+./bin/oh-my-code-package install "$ARCHIVE" "$INSTALL_ROOT"
+"$INSTALL_ROOT/bin/ohc" --version
+"$INSTALL_ROOT/bin/novim-dev" --version
 ```
 
-This link is separate from `$HOME/.local/bin/novim`, and the install root is
-separate from `$HOME/.local/share/novim`. Do not replace an existing nonempty
-derivative root with an in-place extraction: verify the new package in a
-temporary root first, then perform an explicit user-mediated replacement.
+The public installer is `install.sh` (served as `docs/install` for
+`curl | bash`). It downloads only the declared public Release asset —
+`oh-my-code-<VERSION>.tar.gz` plus its `oh-my-code-<VERSION>.tar.gz.sha256`
+checksum companion — verifies the checksum, validates the archive structure
+fail-closed, installs only below `~/.local/share/oh-my-code`, and creates
+`~/.local/bin/ohc` plus the one-release `~/.local/bin/novim-dev`
+compatibility link:
+
+```bash
+./install.sh v1.0.0                # explicit release tag
+curl -fsSL <installer-url> | bash -s -- v1.0.0
+```
+
+Installer boundaries:
+
+- Neovim >= 0.8.0 must already be installed; the installer never installs
+  Neovim, never uses a package manager for it, never uses `sudo`, and never
+  runs `novim --update`.
+- `~/.local/bin/ohc` and `~/.local/bin/novim-dev` are created only when
+  absent or already pointing into the managed `~/.local/share/oh-my-code`
+  root. Unrelated existing files or links are refused, never replaced.
+- The install root must be new or empty and must not be a symlink.
+- Failed downloads, checksum mismatches, malformed archives, traversal
+  entries, allowlist violations, and link collisions leave the target and
+  temporary state safe and unchanged.
+- `~/.local/bin/novim`, `~/.local/share/novim`, and the normal Neovim
+  configuration are never touched.
+
+There is no in-place update: to reinstall, remove the install root
+explicitly first. Update/uninstall commands are out of scope.
 
 ## Verification and removal boundaries
 
 At the checkout level, `./bin/ohc --version` and `./bin/novim-dev --version`
 report the public and compatibility identities without network activity.
-Verify the package manifest, `novim-dev --version`, and a headless launch from
-the temporary or dedicated derivative root before using it. A launch may
-create `.dev-data/`, `.dev-state/`, and `.dev-cache/` below that derivative
-root; those are runtime state and are never package inputs.
+Verify the archive manifest, both launcher identities, and a headless launch
+from the temporary or dedicated root before relying on it:
 
-Startup splash: on an interactive TTY launch, the checkout launchers
-(`bin/ohc` and `bin/novim-dev`) render a bounded approximately-one-second ANSI
-splash before starting Neovim. Version and help checks never render or wait for
-the splash, so the verification commands above stay immediate. For scripted or
-non-interactive full-startup verification, pass `--no-animation` (consumed by
-the launcher and never forwarded to Neovim) or set `OHC_NO_ANIMATION=1`, or run
-without a TTY (for example `--headless` or piped output); every bypass starts
-Neovim immediately. The splash performs no network call, credential flow,
-plugin load, or background process.
+```bash
+NO_ANIMATION_ROOT="$INSTALL_ROOT" "$INSTALL_ROOT/bin/ohc" --headless --no-animation \
+  -c "lua assert(vim.fs.normalize(vim.fn.stdpath('config')) == vim.fs.normalize(os.getenv('NO_ANIMATION_ROOT') .. '/config/nvim'))" \
+  -c 'qall!'
+```
 
-Removal is limited to the exact derivative root and, after checking its link
-target, the optional `$HOME/.local/bin/novim-dev` link. Never remove or
-overwrite `$HOME/.local/bin/novim`, `$HOME/.local/share/novim`, the normal
-Neovim configuration, or the checkout as part of this workflow. Temporary
-package and install roots are local validation artifacts and may be removed
-after the checks finish.
+A launch may create `.dev-data/`, `.dev-state/`, and `.dev-cache/` below the
+install root; those are runtime state and are never package inputs.
 
-No package or install command fetches upstream data, runs `novim --update`, or
-performs a Git mutation. Upstream synchronization is a separate, explicit
+Startup splash: on an interactive TTY launch, the launchers (`bin/ohc` and
+`bin/novim-dev`) render a bounded approximately-one-second ANSI splash before
+starting Neovim. Version and help checks never render or wait for the splash.
+For scripted or non-interactive full-startup verification, pass
+`--no-animation` (consumed by the launcher and never forwarded to Neovim) or
+set `OHC_NO_ANIMATION=1`, or run without a TTY (for example `--headless` or
+piped output); every bypass starts Neovim immediately. The splash performs no
+network call, credential flow, plugin load, or background process.
+
+Removal is limited to the exact install root and, after checking their link
+targets, the `~/.local/bin/ohc` and `~/.local/bin/novim-dev` links the
+installer created. Never remove or overwrite `$HOME/.local/bin/novim`,
+`$HOME/.local/share/novim`, the normal Neovim configuration, or the checkout
+as part of this workflow. Temporary package and install roots are local
+validation artifacts and may be removed after the checks finish.
+
+No package or install command fetches upstream data, runs `novim --update`,
+or performs a Git mutation. Upstream synchronization is a separate, explicit
 workflow described in [UPSTREAM_SYNC.md](UPSTREAM_SYNC.md).
 
 All results from these commands are local development evidence only; they do

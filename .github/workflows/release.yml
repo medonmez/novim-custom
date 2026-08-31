@@ -1,5 +1,9 @@
 name: Release
 
+# Preparation for the TASK-019 hosted release gate: building this workflow
+# requires a `v*` tag push. Nothing here edits or packages `bin/novim`, and no
+# release is created by ordinary pushes or pull requests.
+
 on:
   push:
     tags:
@@ -14,28 +18,70 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get version from tag
+      - name: Read VERSION
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Update version in bin/novim
         run: |
-          sed -i "s/NOVIM_VERSION=\".*\"/NOVIM_VERSION=\"${{ steps.version.outputs.VERSION }}\"/" bin/novim
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Update VERSION file
-        run: echo "${{ steps.version.outputs.VERSION }}" > VERSION
-
-      - name: Create tarball
+      - name: Verify tag matches VERSION
         run: |
-          mkdir -p dist/novim
-          cp -r bin config LICENSE README.md VERSION dist/novim/
-          cd dist && tar -czvf novim.tar.gz novim
+          EXPECTED="refs/tags/v$(tr -d '[:space:]' < VERSION)"
+          if [[ "$GITHUB_REF" != "$EXPECTED" ]]; then
+            echo "::error::tag $GITHUB_REF does not match VERSION (expected $EXPECTED)"
+            exit 1
+          fi
+
+      - name: Guard bin/novim against workflow mutation
+        run: git diff --exit-code bin/novim
+
+      - name: Build public archive
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir -p dist
+          ./bin/oh-my-code-package package "dist/oh-my-code-$VERSION.tar.gz"
+
+      - name: Verify archive manifest
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          ARCHIVE="dist/oh-my-code-$VERSION.tar.gz"
+          ROOT="oh-my-code-$VERSION"
+          tar -tzf "$ARCHIVE" > "$RUNNER_TEMP/manifest.txt"
+          M="$RUNNER_TEMP/manifest.txt"
+          grep -Fqx "$ROOT/bin/ohc" "$M"
+          grep -Fqx "$ROOT/bin/novim-dev" "$M"
+          grep -Fqx "$ROOT/VERSION" "$M"
+          grep -Fqx "$ROOT/LICENSE" "$M"
+          grep -Fqx "$ROOT/THIRD_PARTY_LICENSES.md" "$M"
+          if grep -Fqx "$ROOT/bin/novim" "$M"; then
+            echo "::error::archive contains the installed-release launcher"
+            exit 1
+          fi
+          if grep -Eq '(^|/)\.git(/|$)|(^|/)\.dev-[^/]*(/|$)' "$M"; then
+            echo "::error::archive contains Git metadata or runtime state"
+            exit 1
+          fi
+
+      - name: Generate checksum asset
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          cd dist
+          sha256sum "oh-my-code-$VERSION.tar.gz" > "oh-my-code-$VERSION.tar.gz.sha256"
+          cat "oh-my-code-$VERSION.tar.gz.sha256"
 
       - name: Sync docs/install with install.sh
-        run: cp install.sh docs/install
+        run: |
+          cp install.sh docs/install
+          if ! git diff --exit-code --quiet docs/install; then
+            echo "::error::docs/install is stale relative to install.sh; commit the synced copy"
+            exit 1
+          fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: dist/novim.tar.gz
+          files: |
+            dist/oh-my-code-${{ steps.version.outputs.VERSION }}.tar.gz
+            dist/oh-my-code-${{ steps.version.outputs.VERSION }}.tar.gz.sha256
+          fail_on_unmatched_files: true
           generate_release_notes: true

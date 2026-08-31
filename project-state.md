@@ -4,7 +4,7 @@ Updated: 2026-08-31
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-017` (`PLANNED`)
+Current task: `TASK-017` (`READY_FOR_REVIEW`)
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
 Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
@@ -150,13 +150,14 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
 
 ## Active blockers
 
-- No product or dependency blocker exists. TASK-017 is planned on its
-  recorded isolated branch and is ready for the stateless-implementer.
+- TASK-017 local review is approved at candidate `6b902a8`; lightweight remote
+  delivery remains pending. The review also records and hash-verifies the
+  repaired installed-`novim` incident from the prior fixer probe.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Hand TASK-017 to `$stateless-implementer`. Implement and review only the public
-oh-my-code package, safe installer, and release-asset preparation. Do not
-rename the GitHub repository, create the `v1.0.0` tag, or publish a GitHub
-Release until TASK-019 and its strict hosted checks.
+Deliver TASK-017 through one lightweight PR from its recorded branch, verify
+the merged `origin/main`, then reconcile the canonical records and issue
+TASK-018. Do not rename the GitHub repository, create the `v1.0.0` tag, or
+publish a GitHub Release; those remain TASK-019 strict hosted actions.
