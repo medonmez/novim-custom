@@ -2,12 +2,12 @@
 
 Updated: 2026-08-31
 Task ID: `TASK-017`
-Status: `READY_FOR_REVIEW`
+Status: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
 Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
-Pull request: not opened
+Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`, follow-up required)
 PR target: `origin/main`
 Dependency: `TASK-016` (accepted in PR #29)
 
@@ -139,7 +139,7 @@ of implementation.
 ## Implementation handoff
 
 Implementer: `$stateless-implementer` (fresh context). Status:
-`READY_FOR_REVIEW`. Branch:
+`CHANGES_REQUESTED`. Branch:
 `task/TASK-017-oh-my-code-package-installer`. The recorded expected baseline
 `9904324` is an ancestor of the branch point; the branch starts at the
 orchestrator planning merge `ced52a3` (PR #30) that created this task file,
@@ -238,6 +238,16 @@ validation rerun. The normal Neovim configuration remains absent on this
 machine and untouched. Files changed in this follow-up:
 `bin/oh-my-code-package`, `tests/run_package_tests.sh`, and this handoff.
 `install.sh` and `docs/install` are byte-identical to the reviewed candidate.
+
+### Post-merge CI follow-up (2026-08-31)
+
+Local review approved the corrected candidate and PR #31 was merged as
+`f070a74`, but the unprotected target allowed merge while its only CI check
+was still queued. The `shellcheck` job then failed on `install.sh:171` with
+`SC1003` for the backslash-regex literal; `docs/install` has the same line.
+The task is not accepted. Fix the installer copies so the repository
+ShellCheck job passes, rerun the relevant local checks, and request a new
+review/traceability PR for the same TASK-017 before acceptance.
 
 ### Files changed
 

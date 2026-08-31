@@ -2,112 +2,122 @@
 
 Updated: 2026-08-31
 Task ID: `TASK-017`
-Local verdict: `APPROVED`
+Local verdict: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
-Baseline: `b501186` (prior review record; recorded expected baseline
+Implementation baseline: `b501186` (recorded expected baseline
 `9904324ba79c666be46e6efe92e932eb1ea8e2d4` is an ancestor)
-Candidate: `6b902a86bf3f6b5ffabf2e7d750d1cd962856312`
-Branch: `task/TASK-017-oh-my-code-package-installer`
-Pull request: not opened
-Remote task branch: absent
-Merge status: not attempted
+Reviewed head: `ad0ace2a98a3e0bf528504b774ae0325f8fff78c`
+Implementation candidate: `6b902a86bf3f6b5ffabf2e7d750d1cd962856312`
+Task branch: `task/TASK-017-oh-my-code-package-installer`
+Pull request: `https://github.com/medonmez/novim-custom/pull/31` (`MERGED`)
+Merge commit: `f070a7446f6fe93d2e1ba32e15d2e0fe45f27ff8`
+Target branch contains reviewed head: `YES`
 
 ## Review result
 
-The candidate remains on the recorded isolated branch with a clean worktree
-and the expected baseline relationship. The follow-up changes are limited to
-the package helper, package/installer regression coverage, and the TASK-017
-handoff. `install.sh`, `docs/install`, the release workflow, and the public
-archive bytes remain unchanged from the reviewed candidate.
+The corrected implementation passed local review and the two prior package
+findings are resolved. The branch was pushed and PR #31 was opened as the
+single traceability PR. Because `main` has no branch protection, GitHub
+allowed the merge while the only CI check was still queued. After merge, the
+repository `shellcheck` job failed on the unchanged public installer line
+`install.sh:171` (the same source is `docs/install:171`) with `SC1003`.
 
-The two prior findings are resolved. Package creation now validates every
-allowlisted source input before copying, rejecting symlinks and special files;
-the offline helper now verifies archived VERSION identity before target
-mutation. The new negative tests exercise both paths and preserve the clean
-checkout afterward. No unresolved correctness, regression, security, privacy,
-data-integrity, public-contract, or scope issue remains for local review.
+This is a real repository validation failure, so the task is not accepted
+despite the merge. The same TASK-017 needs a follow-up correction and review;
+no successor task is issued.
 
 ## Findings
 
-None blocking.
+### P1 — Public installer fails the repository ShellCheck job
 
-Non-blocking observations:
+The CI run [33367609435](https://github.com/medonmez/novim-custom/actions/runs/33367609435)
+failed in `Run ShellCheck` at `install.sh:171`:
 
-- The source-tree regression temporarily moves `bin/ohc` and creates a config
-  symlink in the checked-out tree, restoring both on the passing path. The
-  wrapper-guarded run ended clean; future test failures should retain the same
-  cleanup guarantee so a failed probe cannot leave tracked source altered.
-- Deterministic archive identity was independently confirmed on this macOS
-  checkout. Ubuntu runner evidence remains pending; the release workflow is
-  still preparation for TASK-019 and was not executed as a hosted release.
-- Local `shellcheck` was unavailable in this environment. The repository CI
-  shellcheck step remains the remote validation path; no required remote check
-  was available or run during this local review.
+```text
+SC1003 (info): Want to escape a single quote?
+```
+
+The offending backslash-regex literal is duplicated byte-for-byte in
+`docs/install:171`. Correct both installer copies while preserving rejection
+of archive entries containing backslashes, then rerun ShellCheck and the
+focused/full local checks. Do not silence the check broadly without retaining
+the validation behavior.
+
+## Resolved prior findings
+
+- The P1 source-symlink leak is resolved by `validate_source_tree` in
+  `bin/oh-my-code-package:95-127`, before copying or archive creation. New
+  tests reject symlinked required/config inputs and leave no output/staging
+  bytes.
+- The P2 offline VERSION identity gap is resolved by
+  `bin/oh-my-code-package:298-307`, which stages and compares VERSION before
+  touching the target. The wrong-version fixture is rejected by both helper
+  and public installer paths.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Byte-identical package and overwrite refusal | PASS | Reviewer-guarded `./tests/run_package_tests.sh`; repeated archive SHA-256 remained `7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e`. |
-| Allowlisted archive with no private, link, special, Git, or `bin/novim` entries | PASS | Source-tree validation rejects symlinked required/config inputs before staging; normal manifest and hostile archive checks pass. |
-| Public installer validation, install root, and command links | PASS | Local archive and fixture HTTP-server paths pass; exactly archive and `.sha256` assets are fetched. |
-| Fail-closed collisions and download/archive failures | PASS | Collision, symlinked root/bin directory, nonempty root, malformed, traversal, absolute, symlink-member, allowlist, VERSION mismatch, checksum, 404, and unreachable-host cases preserve tested targets. |
-| Installed launchers, identity, splash bypasses, isolation, and no installed `novim` mutation | PASS | Package/smoke suites pass; installed package identities, isolated paths, bypass controls, and no `bin/novim` alias are asserted. |
-| Release workflow asset preparation and no `bin/novim` packaging/mutation | PASS locally | PyYAML structure checks pass; `bin/novim` remains SHA-256 `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`; no tag/release was run. |
-| Focused/full suites, syntax, and diff checks | PASS | `./tests/run_package_tests.sh`, `./tests/run_smoke_tests.sh`, `./tests/run_tests.sh` (59/59), `bash -n`, YAML structure, `cmp install.sh docs/install`, and `git diff --check` pass. |
+| Byte-identical package and overwrite refusal | PASS | Guarded `./tests/run_package_tests.sh`; archive SHA-256 remained `7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e`. |
+| Allowlisted archive and source fail-closed boundary | PASS locally | Source symlink/non-regular validation and hostile archive tests pass before staging/output. |
+| Public installer validation, root, and links | PASS locally | Local and fixture-server installs pass; exactly archive and checksum assets are fetched. |
+| Collision and malformed/download failure safety | PASS locally | Collision, symlink, nonempty, hostile, VERSION mismatch, checksum, 404, and unreachable-host cases preserve tested targets. |
+| Installed launchers, identity, isolation, and installed `novim` boundary | PASS locally | Package/smoke tests pass; installed-release hash/version guards remain unchanged. |
+| Release workflow assets and `bin/novim` boundary | PASS locally | YAML structure passes; `bin/novim` remains SHA-256 `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`; no tag/release was run. |
+| Required validation including ShellCheck | FAIL | Local `bash -n`, YAML, package/smoke/full suites, `cmp`, and diff checks pass, but remote CI ShellCheck fails with `SC1003`. |
 
 ## Incident and recovery record
 
-During the prior fixer investigation, a temporary probe wrote checkout
-`bin/novim` bytes through the `~/.local/bin/novim` symlink onto the installed
-`~/.local/share/novim/bin/novim` target. The resulting `novim 0.1.0` output was
-incorrectly treated as unchanged because the post-mutation measurement used
-the damaged file and provenance was inferred from README/LICENSE/VERSION
+During the fixer investigation, a temporary probe wrote checkout `bin/novim`
+bytes through the `~/.local/bin/novim` symlink onto the installed
+`~/.local/share/novim/bin/novim` target. The resulting `novim 0.1.0` output
+was incorrectly treated as unchanged because the post-mutation measurement
+used the damaged file and provenance was inferred from README/LICENSE/VERSION
 instead of the binary.
 
-The installed target was subsequently restored only after the upstream
-`link2004/novim` v0.1.7 release asset produced the recorded binary hash
-`5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`. This
-review performed no write to the installed release. Read-only verification
-now shows target mode `755`, the same `5955e1f2...` hash, and `novim 0.1.7`;
-`bin/novim` remains `cb8e8785...`, and the normal Neovim config is absent.
-The package, smoke, and full-suite runs were wrapped with the installed
-binary hash/version before-and-after guard and preserved that state.
+The target was restored only after the upstream `link2004/novim` v0.1.7
+release asset matched the recorded binary hash
+`5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`.
+This review performed no write to the installed release. Read-only checks
+show mode 755, that hash, and `novim 0.1.7`; `bin/novim` remains
+`cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`, and the
+normal Neovim config is absent. The validation runs were guarded by installed
+binary hash/version before-and-after checks and preserved that state.
 
-This is local incident and recovery evidence only; it is not hosted,
-production, recovery-service, or customer-acceptance evidence. The review
-does not treat the initial post-mutation invariance claim as valid evidence.
+The handoff’s previous claim that the restored binary still reported
+`novim 0.1.0` was corrected in the canonical task record. This incident and
+recovery evidence is local only; it is not hosted, production,
+recovery-service, or customer-acceptance evidence.
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`,
-  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, ADR-006, the prior
-  review, and the distribution/architecture records.
-- Confirmed candidate `6b902a8`, parent `b501186`, recorded baseline ancestry,
-  correct task branch, and a clean worktree before review. Inspected the full
-  follow-up diff and confirmed `install.sh`/`docs/install` byte identity.
-- Reran `./tests/run_package_tests.sh` with installed `novim` hash/version and
-  checkout-status guards; source symlink rejection, VERSION mismatch refusal,
-  deterministic archive, installer failures, network fixture, workflow
-  structure, and invariance checks passed.
-- Reran `./tests/run_smoke_tests.sh` with the installed-release guard: CLI,
-  isolation, passthrough, PTY splash matrix, and 9/9 headless checks passed.
-- Reran `./tests/run_tests.sh` with the same installed-release guard: 59/59
-  integration tests, package suite, and smoke runner passed.
-- Ran `bash -n` on all changed shell scripts, PyYAML workflow structure checks,
-  `git diff --check`, `python3 -m json.tool docs/project.json`, and the
-  installed target mode/hash/version read-back.
+  `docs/tasks/current-task.md`, `docs/tasks/backlog.md`, ADR-006, and the
+  previous review.
+- Confirmed the candidate branch, clean worktree, parent `b501186`, and
+  baseline ancestry. Inspected the full follow-up diff and confirmed
+  `install.sh`/`docs/install` equality before CI reported the failure.
+- Reran `./tests/run_package_tests.sh`, `./tests/run_smoke_tests.sh`, and
+  `./tests/run_tests.sh` with installed `novim` hash/version guards; all local
+  checks passed, including 59/59 integration tests and 9/9 smoke tests.
+- Ran `bash -n`, PyYAML workflow structure checks, `cmp install.sh docs/install`,
+  `git diff --check`, JSON validation, and read-only installed target
+  mode/hash/version verification.
+- Reviewed the post-merge CI log, which failed only at ShellCheck `SC1003` on
+  `install.sh:171`; no other CI job was present.
+
+All local and CI evidence above is explicitly separated from hosted release,
+production, recovery-service, and customer-acceptance evidence.
 
 ## Delivery decision
 
-`APPROVED` for LIGHTWEIGHT delivery. No hosted release, repository rename,
-tag, or customer-acceptance claim is authorized by this task. The reviewed
-branch may now be pushed for one traceability PR targeting `origin/main` and
-merged promptly if no explicit repository/provider rule blocks it.
+`CHANGES_REQUESTED` after PR #31 merge. The merge is retained; no force-push
+or revert is performed. Do not mark TASK-017 accepted or issue TASK-018 until
+the same-task installer correction passes ShellCheck and a follow-up review.
 
 ## Next action
 
-Push `task/TASK-017-oh-my-code-package-installer`, open/update one PR for
-TASK-017 against `main`, put this evidence and incident boundary in the PR,
-merge when mergeable, verify the merged `origin/main`, then reconcile the
-canonical task records before issuing TASK-018.
+Return TASK-017 to `$stateless-implementer`: make the backslash check in
+`install.sh` and `docs/install` ShellCheck-clean without weakening archive
+validation, rerun the focused/full suites, then open the necessary follow-up
+traceability PR and request review.
