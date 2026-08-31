@@ -23,7 +23,7 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 14 | TASK-014 | Add automatic mouse-copy in editable files and direct Esc return to same-file Preview | ACCEPTED | TASK-013 (accepted) |
 | 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | ACCEPTED | TASK-014 (accepted) |
 | 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | ACCEPTED | TASK-015 (accepted) |
-| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | CHANGES_REQUESTED | TASK-015, TASK-016 (accepted) |
+| 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | READY_FOR_REVIEW | TASK-015, TASK-016 (accepted) |
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PROPOSED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PROPOSED | TASK-015 through TASK-018 (accepted) |
 
@@ -101,9 +101,11 @@ accepted in ADR-006; only TASK-017 is currently actionable.
   contains the local review closure and acceptance evidence.
 - `TASK-017` owns public archive naming, installer paths, safe alias handling,
   and release workflow assets. Normal `ohc` launch remains network-free.
-- `TASK-017` review requires the package helper to reject symlink/non-regular
-  allowlist inputs before copying and to validate the offline archive's
-  `VERSION` content against its expected root identity.
+- `TASK-017` passed local review at `6b902a8` after the package helper began
+  rejecting symlink/non-regular allowlist inputs before copying and the
+  offline archive began enforcing `VERSION` identity. The review records a
+  separately repaired installed-`novim` probe incident; hosted release work
+  remains excluded.
 - `TASK-018` owns the public README, Mermaid/terminal explanation, and a real
   `ohc` terminal demo capture with no private project data.
 - `TASK-019` is the only task authorized to perform the hosted repository

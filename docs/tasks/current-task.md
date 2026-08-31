@@ -230,14 +230,14 @@ integration tests plus package and smoke runners); `bash -n` on `install.sh`,
 checks pass; `git diff --check` is clean; `cmp install.sh docs/install` is
 byte-identical (no installer change was required); `bin/novim` SHA-256 is
 unchanged (`cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`);
-the installed `novim` launcher is unchanged in content and mode and still
-reports `novim 0.1.0` (during this session a stray probe briefly overwrote
-it through its symlink and it was restored byte-identically from the
-verified upstream v0.1.7 blob before any validation ran); the normal Neovim
-configuration remains absent on this machine and untouched. Files changed in
-this follow-up: `bin/oh-my-code-package`, `tests/run_package_tests.sh`, and
-this handoff. `install.sh` and `docs/install` are byte-identical to the
-reviewed candidate.
+the installed `novim` launcher is currently mode 755, has the recorded
+`5955e1f2...` target hash, and reports `novim 0.1.7`; during this session a
+stray probe briefly overwrote it through its symlink. It was restored
+byte-identically from the verified upstream v0.1.7 release asset before the
+validation rerun. The normal Neovim configuration remains absent on this
+machine and untouched. Files changed in this follow-up:
+`bin/oh-my-code-package`, `tests/run_package_tests.sh`, and this handoff.
+`install.sh` and `docs/install` are byte-identical to the reviewed candidate.
 
 ### Files changed
 

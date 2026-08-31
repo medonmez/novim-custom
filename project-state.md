@@ -4,7 +4,7 @@ Updated: 2026-08-31
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-017` (`CHANGES_REQUESTED`)
+Current task: `TASK-017` (`READY_FOR_REVIEW`)
 Base branch: `main`
 Task branch: `task/TASK-017-oh-my-code-package-installer`
 Expected baseline: `9904324ba79c666be46e6efe92e932eb1ea8e2d4`
@@ -150,14 +150,14 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/29`
 
 ## Active blockers
 
-- TASK-017 remains on its recorded isolated branch after local review, but
-  package-source link handling and offline archive VERSION-identity validation
-  require correction before delivery.
+- TASK-017 local review is approved at candidate `6b902a8`; lightweight remote
+  delivery remains pending. The review also records and hash-verifies the
+  repaired installed-`novim` incident from the prior fixer probe.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Return TASK-017 to `$stateless-implementer` for the recorded review corrections.
-Do not open a PR, rename the GitHub repository, create the `v1.0.0` tag, or
-publish a GitHub Release until the same task passes local review and TASK-019
-performs its strict hosted checks.
+Deliver TASK-017 through one lightweight PR from its recorded branch, verify
+the merged `origin/main`, then reconcile the canonical records and issue
+TASK-018. Do not rename the GitHub repository, create the `v1.0.0` tag, or
+publish a GitHub Release; those remain TASK-019 strict hosted actions.
