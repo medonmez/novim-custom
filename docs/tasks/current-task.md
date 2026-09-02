@@ -121,7 +121,7 @@ safety boundaries.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_REVIEW`
+- Handoff status: `READY_FOR_REVIEW`
 - Candidate commit: `HEAD (handoff commit)`
 - Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
 - Task branch: `task/TASK-020-files-create-rename`
@@ -157,7 +157,8 @@ safety boundaries.
 
 ### Residual risks
 
-- None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
+- Review findings are blocking delivery; copy, paste, and move remain deferred
+  to proposed `TASK-021` per ADR-007.
 
 ### Review follow-up
 
