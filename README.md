@@ -63,12 +63,19 @@ credential flow, or required download.
 
 ## Installation
 
-### No hosted release yet
+### Install the public `v1.0.0` release
 
-The first public release is planned as `v1.0.0`, delivered through a GitHub
-Release plus a networked installer. **That release has not been published
-yet**, so there is no hosted download, package-manager formula, or update
-channel today.
+The first public release is available through the
+[GitHub Release](https://github.com/medonmez/oh-my-code/releases/tag/v1.0.0).
+With Neovim 0.8.0 or newer already installed, run the version-pinned public
+installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/medonmez/oh-my-code/v1.0.0/install.sh | bash -s -- v1.0.0
+```
+
+The installer does not install Neovim, use `sudo`, or replace an existing
+unrelated command path.
 
 ### Run from this checkout
 
@@ -99,16 +106,15 @@ ARCHIVE="$PACKAGE_TMP/oh-my-code-$(cat VERSION).tar.gz"
 Package contents, verification, and removal boundaries are documented in the
 [local distribution guide](docs/LOCAL_DISTRIBUTION.md).
 
-### Public installer (prepared, not yet published)
+### Public installer
 
-`install.sh` (also served as `docs/install` for `curl | bash`) is prepared for
-the future release. It will download only the declared `v1.0.0` release asset
-and its checksum, verify both, validate the archive fail-closed, install only
-below `~/.local/share/oh-my-code`, and create `~/.local/bin/ohc` plus the
-one-release `~/.local/bin/novim-dev` compatibility link only when absent or
-already pointing into the managed root. Until the release is published, it has
-no asset to download. When installation exists, there is no in-place update:
-to reinstall, remove the install root explicitly first.
+`install.sh` (also served as `docs/install` for `curl | bash`) downloads only
+the declared `v1.0.0` release archive and checksum, verifies both, validates
+the archive fail-closed, installs only below `~/.local/share/oh-my-code`, and
+creates `~/.local/bin/ohc` plus the one-release `~/.local/bin/novim-dev`
+compatibility link only when absent or already pointing into the managed root.
+There is no in-place update: to reinstall, remove the install root explicitly
+first.
 
 ## First launch
 
@@ -280,7 +286,7 @@ flowchart LR
         pkg --> archive
     end
 
-    subgraph hosted["First public release — prepared, not yet published"]
+    subgraph hosted["Public release — v1.0.0"]
         installer["install.sh — downloads only the declared<br/>release asset and its checksum"]
         root["~/.local/share/oh-my-code"]
         links["~/.local/bin/ohc and ~/.local/bin/novim-dev<br/>(only when absent or already managed)"]
@@ -292,7 +298,7 @@ flowchart LR
         usercfg["your normal Neovim configuration"]
     end
 
-    archive -.->|"future v1.0.0 release asset"| installer
+    archive -.->|"v1.0.0 release asset"| installer
 ```
 
 - The launchers resolve their own root dynamically and run Neovim with the
@@ -322,8 +328,8 @@ overwrites or updates.
 - Normal launch and all workbench features are network-free.
 - Git information is obtained through local Git subprocesses; no source,
   credentials, or raw private data leave the machine by default.
-- The installer (once a release exists) downloads only the declared release
-  asset and never runs any upstream updater.
+- The installer downloads only the declared release asset and never runs any
+  upstream updater.
 
 ## Credits and acknowledgments
 

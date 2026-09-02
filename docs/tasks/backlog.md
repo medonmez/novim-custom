@@ -25,10 +25,10 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | ACCEPTED | TASK-015 (accepted) |
 | 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | ACCEPTED | TASK-015, TASK-016 (accepted) |
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
-| 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PLANNED | TASK-015 through TASK-018 (accepted) |
+| 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | ACCEPTED | TASK-015 through TASK-018 (accepted) |
 
-TASK-001 through TASK-018 are accepted. The public release direction is
-accepted in ADR-006; only TASK-019 is currently actionable.
+TASK-001 through TASK-019 are accepted. The public release direction is
+accepted in ADR-006; no successor task is currently actionable.
 
 ## Accepted task notes
 
@@ -113,6 +113,10 @@ accepted in ADR-006; only TASK-019 is currently actionable.
 - `TASK-019` is the only task authorized to perform the hosted repository
   rename, tag `v1.0.0`, GitHub Release creation, and fresh installer download
   verification. It uses the strict release gate.
+- `TASK-019` was accepted after PR #36 merged at `8f50c01`, repository rename
+  read-back, successful release workflow run `33686893104`, public asset
+  checksum verification, and fresh public installer success plus collision
+  failure evidence.
 
 ## Preserved boundaries
 

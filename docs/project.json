@@ -9,13 +9,13 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-019-oh-my-code-release",
+    "taskBranch": null,
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
-    "originUrl": "https://github.com/medonmez/novim-custom.git",
+    "originUrl": "https://github.com/medonmez/oh-my-code.git",
     "publicTargetUrl": "https://github.com/medonmez/oh-my-code",
     "upstreamRemoteName": "upstream",
-    "githubForkUrl": "https://github.com/medonmez/novim-custom",
+    "githubForkUrl": "https://github.com/medonmez/oh-my-code",
     "baselineCommit": "8e36d447ee9c73d29b75f3dfc50db9452a2addf1",
     "baselineTag": "v0.1.7",
     "githubForkCreated": true
@@ -28,13 +28,13 @@
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "TASK-019",
-    "currentTaskStatus": "PLANNED",
+    "currentTask": "NONE",
+    "currentTaskStatus": "IDLE",
     "pullRequest": null,
-    "remoteChecks": "STRICT FOR HOSTED RELEASE; NOT APPLICABLE TO LOCAL PLAN",
-    "lastAcceptedTask": "TASK-018",
-    "lastAcceptedCommit": "ed5a35937d19982832fa0c770486d7496f93d21b",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/34"
+    "remoteChecks": "TASK-019 STRICT HOSTED RELEASE COMPLETED",
+    "lastAcceptedTask": "TASK-019",
+    "lastAcceptedCommit": "8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1",
+    "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/36"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
@@ -50,9 +50,11 @@
   "openDecisions": [],
   "release": {
     "targetVersion": "1.0.0",
-    "status": "PLANNED",
+    "status": "PUBLISHED",
     "delivery": "GitHub Release plus networked installer",
-    "animation": "one-second interactive-TTY ANSI splash with explicit disable controls"
+    "animation": "one-second interactive-TTY ANSI splash with explicit disable controls",
+    "url": "https://github.com/medonmez/oh-my-code/releases/tag/v1.0.0",
+    "workflowRun": "https://github.com/medonmez/oh-my-code/actions/runs/33686893104"
   },
   "acceptedProductDirection": {
     "primaryWorkflow": "terminal-first project navigation, editing, and bounded local Git review",

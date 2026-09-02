@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 2026-08-31
+Updated: 2026-09-03
 Status: `OBSERVED_BASELINE_WITH_ACCEPTED_EXTENSION`
 
 ## Current system
@@ -10,10 +10,9 @@ The repository is a direct clone of upstream novim at tag `v0.1.7`.
 ### Public oh-my-code boundary
 
 The public product identity is `oh-my-code` and its primary command is `ohc`,
-launched in this checkout through the executable `bin/ohc`. The repository is
-transitioning from `medonmez/novim-custom` to the public GitHub target
-`medonmez/oh-my-code`; the hosted rename is a release-delivery action, not a
-local assumption. `bin/novim-dev` remains a self-contained one-release
+launched in this checkout through the executable `bin/ohc`. The public GitHub
+repository is `medonmez/oh-my-code`; the former `medonmez/novim-custom` name
+redirects to it. `bin/novim-dev` remains a self-contained one-release
 compatibility alias that explicitly labels its compatibility status. The
 internal Lua modules under `config/nvim/lua/novim/` remain stable
 implementation namespaces for this release.
@@ -157,15 +156,15 @@ removal boundaries are documented in `docs/LOCAL_DISTRIBUTION.md`. Explicit
 upstream comparison and integration is documented separately in
 `docs/UPSTREAM_SYNC.md`.
 
-### Release workflow (preparation)
+### Release workflow
 
-`.github/workflows/release.yml` is prepared for the release-delivery task
-(`TASK-019`) and runs only on `v*` tag pushes. It verifies that the tag
-matches the checkout `VERSION` file, builds the public archive with
+`.github/workflows/release.yml` runs only on `v*` tag pushes. It verifies that
+the tag matches the checkout `VERSION` file, builds the public archive with
 `bin/oh-my-code-package`, verifies the archive manifest (including the
-absence of `bin/novim`), generates `oh-my-code-<VERSION>.tar.gz.sha256`,
-and attaches both assets to the release. The workflow never edits or
-packages `bin/novim` and does not run on ordinary pushes or pull requests.
+absence of `bin/novim`), generates `oh-my-code-<VERSION>.tar.gz.sha256`, and
+attaches both assets to the release. The workflow never edits or packages
+`bin/novim` and does not run on ordinary pushes or pull requests. The
+`v1.0.0` workflow run and release assets were verified in TASK-019.
 
 ## Local testing and regression smoke layer
 
