@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": null,
+    "taskBranch": "task/TASK-020-files-create-rename",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/oh-my-code.git",
@@ -28,8 +28,8 @@
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "NONE",
-    "currentTaskStatus": "IDLE",
+    "currentTask": "TASK-020",
+    "currentTaskStatus": "PLANNED",
     "pullRequest": null,
     "remoteChecks": "TASK-019 STRICT HOSTED RELEASE COMPLETED",
     "lastAcceptedTask": "TASK-019",
@@ -94,6 +94,15 @@
       "newFile": "right",
       "refreshOnEntry": true,
       "unifiedFallback": false
+    },
+    "filesystemMutation": {
+      "currentTask": "TASK-020",
+      "interaction": "Files-pane context menu plus n New File, N New Folder, and F2 Rename; Enter confirms and Esc cancels",
+      "targeting": "Selected directory, selected file parent, or project root when no usable selection exists",
+      "nameInput": "One complete path component, including file extension; dot-prefixed names allowed",
+      "boundary": "Local only; root-contained; reject absolute paths, parent traversal, separators, NULs, symlinked sources/parents, root rename, collisions, and overwrite",
+      "refresh": "Refresh visible lazy tree and preview, preserve unaffected expansion, follow created/renamed selection, preserve open renamed-file buffers",
+      "deferred": "TASK-021 proposed for copy, paste, and move; delete and bulk operations remain out of scope"
     },
     "themes": {
       "default": "Tokyo Night",

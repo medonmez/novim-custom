@@ -4,10 +4,10 @@ Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `NONE` (`IDLE`; TASK-019 accepted)
+Current task: `TASK-020` (`PLANNED`; Files create/rename)
 Base branch: `main`
-Task branch: none
-Expected baseline: `8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1`
+Task branch: `task/TASK-020-files-create-rename`
+Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
 Pull request: none
 Last accepted task: `TASK-019`
 Last accepted commit: `8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1` (`origin/main` merge of PR #36)
@@ -154,6 +154,11 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
   fresh public installer run and real-release collision negative check passed;
   installed `novim`, normal Neovim config, upstream remote, and unrelated
   paths remained unchanged.
+- `TASK-020` is planned on `task/TASK-020-files-create-rename` from verified
+  `origin/main` `6b8ca013`. It adds bounded Files-pane creation and complete
+  name renaming for regular files and directories through a discoverable
+  context menu plus keyboard shortcuts. `TASK-021` is proposed follow-up
+  scope for copy, paste, and move.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -164,13 +169,16 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
 
 ## Active blockers
 
-- No active product blocker remains. No successor task is issued without an
-  explicit new brief.
+- No active product blocker remains. `TASK-020` is the only actionable task;
+  `TASK-021` remains proposed until the first Files mutation slice is
+  accepted.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Keep the repository idle at the canonical `origin/main` release state until a
-new task brief is explicitly provided.
+Pass `TASK-020` to `$stateless-implementer` on its isolated branch. The
+implementer must stop at a local `READY_FOR_REVIEW` handoff; no
+copy/paste/move, delete, Git remote operation, or public-release action is
+authorized by this task.

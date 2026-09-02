@@ -11,3 +11,4 @@ record per decision and do not treat an unaccepted proposal as product truth.
 - [ADR-004: Source Control graph, selectable comparisons, and local commits](ADR-004-source-control-graph-and-local-commit.md)
 - [ADR-005: Automatic mouse copy and direct Preview exit](ADR-005-auto-copy-and-preview-exit.md)
 - [ADR-006: oh-my-code public identity and release boundary](ADR-006-oh-my-code-public-identity.md)
+- [ADR-007: Files create and rename boundary](ADR-007-files-create-rename-boundary.md)

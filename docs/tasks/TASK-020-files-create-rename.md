@@ -1,16 +1,12 @@
-# Current Task
+# TASK-020: Files Create and Rename
 
-Updated: 2026-09-03
-Task ID: `TASK-020`
-Status: `PLANNED`
-Delivery policy: `LIGHTWEIGHT`
-Base branch: `main`
-Task branch: `task/TASK-020-files-create-rename`
-Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
-Pull request: not opened
-PR target: `origin/main`
-Dependency: `TASK-019` (accepted in PR #36)
-Detailed task record: `docs/tasks/TASK-020-files-create-rename.md`
+- Status: `PLANNED`
+- Delivery policy: `LIGHTWEIGHT`
+- Base branch: `main`
+- Task branch: `task/TASK-020-files-create-rename`
+- Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98` (`origin/main`)
+- Dependency: `TASK-019` (accepted in PR #36)
+- PR target: `origin/main`
 
 ## Outcome
 
