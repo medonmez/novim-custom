@@ -3,6 +3,93 @@
 
 local uv = vim.uv or vim.loop
 
+local ffi_ok, ffi = pcall(require, "ffi")
+if ffi_ok then
+  pcall(function()
+    if ffi.os == "OSX" then
+      ffi.cdef[[
+        int renamex_np(const char *oldpath, const char *newpath, unsigned int flags);
+      ]]
+    elseif ffi.os == "Linux" then
+      ffi.cdef[[
+        int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags);
+      ]]
+    end
+  end)
+end
+
+--- Atomic, fail-closed rename that never replaces an existing destination
+---@param old_path string
+---@param new_path string
+---@param is_dir boolean
+---@return boolean ok
+---@return string? error_msg
+local function atomic_rename_noreplace(old_path, new_path, is_dir)
+  -- 1. Use platform-native atomic no-replace primitive where supported
+  if ffi_ok then
+    if ffi.os == "OSX" then
+      local ok, res = pcall(ffi.C.renamex_np, old_path, new_path, 4) -- RENAME_EXCL = 4
+      if ok then
+        if res == 0 then
+          return true, nil
+        else
+          local err_code = ffi.errno()
+          if err_code == 17 then -- EEXIST
+            return false, "Destination already exists"
+          else
+            return false, "Failed to rename: errno " .. tostring(err_code)
+          end
+        end
+      end
+    elseif ffi.os == "Linux" then
+      local ok, res = pcall(ffi.C.renameat2, -100, old_path, -100, new_path, 1) -- AT_FDCWD = -100, RENAME_NOREPLACE = 1
+      if ok then
+        if res == 0 then
+          return true, nil
+        else
+          local err_code = ffi.errno()
+          if err_code == 17 then -- EEXIST
+            return false, "Destination already exists"
+          else
+            return false, "Failed to rename: errno " .. tostring(err_code)
+          end
+        end
+      end
+    end
+  end
+
+  -- 2. Fallback for regular files: link(old, new) followed by unlink(old)
+  -- POSIX link(2) is atomically guaranteed to fail with EEXIST if new_path exists.
+  if not is_dir then
+    local link_ok, link_err = uv.fs_link(old_path, new_path)
+    if not link_ok then
+      if link_err and (link_err:find("EEXIST") or link_err:find("already exists")) then
+        return false, "Destination already exists"
+      end
+      return false, "Failed to rename: " .. tostring(link_err)
+    end
+    local unlink_ok, unlink_err = uv.fs_unlink(old_path)
+    if not unlink_ok then
+      pcall(uv.fs_unlink, new_path)
+      return false, "Failed to rename: " .. tostring(unlink_err)
+    end
+    return true, nil
+  end
+
+  -- 3. Fallback for directories: verify destination does not exist before rename
+  if uv.fs_lstat(new_path) ~= nil then
+    return false, "Destination already exists"
+  end
+  local ren_ok, ren_err = uv.fs_rename(old_path, new_path)
+  if not ren_ok then
+    if ren_err and (ren_err:find("EEXIST") or ren_err:find("already exists") or ren_err:find("ENOTEMPTY")) then
+      return false, "Destination already exists"
+    end
+    return false, "Failed to rename: " .. tostring(ren_err)
+  end
+  return true, nil
+end
+
 local M = {}
 
 ---@class ProjectEntry
@@ -356,16 +443,20 @@ function M.is_symlink_or_has_symlink_parent(path, root_dir)
   if st_cur and st_cur.type == "link" then
     return true, "Symlinks cannot be created or renamed"
   end
+  local cur_real = uv.fs_realpath(cur)
+  cur_real = cur_real and cur_real:gsub("/+$", "") or nil
+  if cur == norm_root or (cur_real and cur_real == root_real) then
+    return false, nil
+  end
 
   -- 2. Traverse parent directories up to root_dir
   cur = vim.fs.dirname(cur)
   while cur and cur ~= "" and cur ~= "." and cur ~= "/" do
-    local cur_real = uv.fs_realpath(cur)
-    cur_real = cur_real and cur_real:gsub("/+$", "") or nil
-    if cur == norm_root or (cur_real and cur_real == root_real) then
+    local p_real = uv.fs_realpath(cur)
+    p_real = p_real and p_real:gsub("/+$", "") or nil
+    if cur == norm_root or (p_real and p_real == root_real) then
       break
     end
-
     local st = uv.fs_lstat(cur)
     if st and st.type == "link" then
       return true, "Symlinked parent directories are not permitted"
@@ -464,8 +555,12 @@ function M.create_file(target_dir, name, root_dir)
     return false, dest_out_err
   end
 
-  local fd, open_err = uv.fs_open(full_path, "w", 420)
+  local flags = bit.bor(uv.constants.O_CREAT, uv.constants.O_EXCL, uv.constants.O_WRONLY)
+  local fd, open_err = uv.fs_open(full_path, flags, 420)
   if not fd then
+    if open_err and (open_err:find("EEXIST") or open_err:find("already exists")) then
+      return false, "Destination already exists"
+    end
     return false, "Failed to create file: " .. tostring(open_err)
   end
   uv.fs_close(fd)
@@ -513,6 +608,9 @@ function M.create_folder(target_dir, name, root_dir)
 
   local mkdir_ok, mkdir_err = uv.fs_mkdir(full_path, 493)
   if not mkdir_ok then
+    if mkdir_err and (mkdir_err:find("EEXIST") or mkdir_err:find("already exists")) then
+      return false, "Destination already exists"
+    end
     return false, "Failed to create folder: " .. tostring(mkdir_err)
   end
 
@@ -561,6 +659,9 @@ function M.rename_entry(entry, new_name, root_dir)
   if not st_source then
     return false, "Source does not exist", false
   end
+  if st_source.type ~= "file" and st_source.type ~= "directory" then
+    return false, "Only regular files and directories can be renamed", false
+  end
 
   local parent_dir = vim.fs.dirname(entry.full_path)
   local dest_full_path = parent_dir:gsub("/+$", "") .. "/" .. clean_name
@@ -574,9 +675,9 @@ function M.rename_entry(entry, new_name, root_dir)
     return false, dest_out_err, false
   end
 
-  local ren_ok, ren_err = uv.fs_rename(entry.full_path, dest_full_path)
+  local ren_ok, ren_err = atomic_rename_noreplace(entry.full_path, dest_full_path, entry.is_dir)
   if not ren_ok then
-    return false, "Failed to rename: " .. tostring(ren_err), false
+    return false, ren_err, false
   end
 
   return true, dest_full_path, false

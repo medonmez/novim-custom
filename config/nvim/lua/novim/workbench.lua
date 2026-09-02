@@ -1931,6 +1931,7 @@ function M.open_new_folder_input(...)
     target_entry = (state.selected_project_index and state.project_files[state.selected_project_index])
   end
   local target_dir, target_rel = browser.resolve_create_target(target_entry, state.root_dir)
+  local is_sym, sym_err = browser.is_symlink_or_has_symlink_parent(target_dir, state.root_dir)
   if is_sym then
     state.write_notice = { level = "error", text = sym_err }
     M.render_left_pane()
@@ -1970,6 +1971,12 @@ function M.open_rename_input(target_entry)
     M.render_left_pane()
     return false
   end
+  local is_out, out_err = browser.is_path_outside_root(target_entry.full_path, state.root_dir)
+  if is_out then
+    state.write_notice = { level = "error", text = out_err }
+    M.render_left_pane()
+    return false
+  end
 
   local is_sym, sym_err = browser.is_symlink_or_has_symlink_parent(target_entry.full_path, state.root_dir)
   if is_sym then
@@ -1977,9 +1984,15 @@ function M.open_rename_input(target_entry)
     M.render_left_pane()
     return false
   end
-  local is_out, out_err = browser.is_path_outside_root(target_entry.full_path, state.root_dir)
-  if is_out then
-    state.write_notice = { level = "error", text = out_err }
+
+  local st_source = uv.fs_lstat(target_entry.full_path)
+  if not st_source then
+    state.write_notice = { level = "error", text = "Source does not exist" }
+    M.render_left_pane()
+    return false
+  end
+  if st_source.type ~= "file" and st_source.type ~= "directory" then
+    state.write_notice = { level = "error", text = "Only regular files and directories can be renamed" }
     M.render_left_pane()
     return false
   end
@@ -2051,7 +2064,9 @@ function M.open_context_menu(...)
   if target_entry and target_entry.full_path then
     local norm_root = state.root_dir:gsub("/+$", "")
     local norm_entry = target_entry.full_path:gsub("/+$", "")
-    if norm_entry ~= norm_root and target_entry.path ~= "" and target_entry.path ~= "." then
+    local st = uv.fs_lstat(target_entry.full_path)
+    local is_regular_or_dir = st and (st.type == "file" or st.type == "directory")
+    if norm_entry ~= norm_root and target_entry.path ~= "" and target_entry.path ~= "." and is_regular_or_dir then
       table.insert(items, { label = "Rename       (F2)", action = "rename" })
     end
   end
@@ -3214,7 +3229,13 @@ function M.open(opts)
 
     -- Source Control comparison endpoints (TASK-012)
     vim.keymap.set("n", "O", function() M.assign_compare_endpoint("old", "changes") end, opts)
-    vim.keymap.set("n", "N", function() M.assign_compare_endpoint("new", "changes") end, opts)
+    vim.keymap.set("n", "N", function()
+      if state.view_mode == "files" then
+        return M.open_new_folder_input()
+      else
+        return M.assign_compare_endpoint("new", "changes")
+      end
+    end, opts)
     vim.keymap.set("n", "D", M.reset_compare, opts)
     vim.keymap.set("n", "H", function() M.focus_history() end, opts)
 
@@ -3226,7 +3247,6 @@ function M.open(opts)
 
     -- Files view mutations (TASK-020): create file, create folder, rename, context menu
     vim.keymap.set("n", "n", function() return M.open_new_file_input() end, opts)
-    vim.keymap.set("n", "N", function() return M.open_new_folder_input() end, opts)
     vim.keymap.set("n", "<F2>", function() return M.open_rename_input() end, opts)
     vim.keymap.set("n", "m", function() return M.open_context_menu() end, opts)
     vim.keymap.set("n", "<CR>", function()

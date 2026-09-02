@@ -4378,10 +4378,24 @@ function tests.test_task020_context_menu_shortcuts_and_actions()
   st = workbench.get_state()
   assert_true(st.file_input.open, "file input must be open")
   assert_eq(st.file_input.mode, "new_folder", "mode must be new_folder")
+  -- 'N' in Files view opens new folder input
+  assert_true(n_upper_cb(), "N in Files view must open new folder input")
+  st = workbench.get_state()
+  assert_true(st.file_input.open, "file input must be open")
+  assert_eq(st.file_input.mode, "new_folder", "mode must be new_folder")
   esc_fi = buffer_map_callback(st.file_input.buf, "<Esc>")
   esc_fi()
 
-  -- '<F2>' opens rename input
+  -- 'N' in Diff view preserves Source Control new comparison endpoint assignment
+  workbench.set_view("diff")
+  st = workbench.get_state()
+  assert_eq(st.view_mode, "diff", "view mode must be diff")
+  local diff_n_cb = buffer_map_callback(st.buf_left, "N")
+  assert_true(diff_n_cb ~= nil, "buf_left in diff view must have N callback")
+  diff_n_cb()
+  st = workbench.get_state()
+  assert_true(not st.file_input.open, "N in diff view must NOT open new folder modal")
+  workbench.set_view("files")
   workbench.select_file(readme_idx)
   assert_true(f2_cb(), "<F2> must open rename input")
   st = workbench.get_state()
@@ -4678,21 +4692,62 @@ function tests.test_task020_fail_closed_security_boundaries()
   st = workbench.get_state()
   assert_true(st.write_notice.level == "error", "error notice must be produced for symlink")
   assert_true(st.write_notice.text:find("Symlink", 1, true) ~= nil, "error must identify symlink refusal")
-
-  -- 3. Creation inside symlinked parent is rejected
+  -- 3. Creation inside symlinked parent is rejected (both New File and New Folder)
   local symlink_dir = fixture .. "/symlink_dir"
   vim.fn.system(string.format("ln -s %s %s", vim.fn.shellescape(fixture .. "/src"), vim.fn.shellescape(symlink_dir)))
   local sym_dir_entry = { full_path = symlink_dir, path = "symlink_dir", name = "symlink_dir", is_dir = true }
   assert_true(not workbench.open_new_file_input(sym_dir_entry), "new file inside symlinked dir must be refused")
   st = workbench.get_state()
+  assert_true(not st.file_input.open, "modal must not open for symlinked parent")
   assert_true(st.write_notice.level == "error", "error notice must be produced for symlinked parent")
   assert_true(st.write_notice.text:find("Symlink", 1, true) ~= nil, "error must identify symlink refusal")
 
-  -- 4. Target outside project root fails closed
+  -- New Folder symlink preflight
+  assert_true(not workbench.open_new_folder_input(sym_dir_entry), "new folder inside symlinked dir must be refused")
+  st = workbench.get_state()
+  assert_true(not st.file_input.open, "new folder modal must not open for symlinked parent")
+  assert_true(st.write_notice.level == "error")
+  assert_true(st.write_notice.text:find("Symlink", 1, true) ~= nil)
+
+  -- 4. Reject non-regular special files at rename boundary (FIFO)
+  local fifo_path = fixture .. "/test_named_pipe"
+  vim.fn.system("mkfifo " .. vim.fn.shellescape(fifo_path))
+  local fifo_entry = { full_path = fifo_path, path = "test_named_pipe", name = "test_named_pipe", is_dir = false }
+  assert_true(not workbench.open_rename_input(fifo_entry), "special file rename must be refused in workbench")
+  st = workbench.get_state()
+  assert_true(not st.file_input.open, "rename modal must not open for special file")
+  assert_true(st.write_notice.level == "error")
+  assert_true(st.write_notice.text:find("Only regular files and directories can be renamed", 1, true) ~= nil)
+  local ren_fifo_ok, ren_fifo_err = browser.rename_entry(fifo_entry, "renamed_pipe", fixture)
+  assert_true(not ren_fifo_ok, "browser.rename_entry must refuse special files")
+  assert_true(ren_fifo_err:find("Only regular files and directories can be renamed", 1, true) ~= nil)
+
+  -- 5. Target outside project root fails closed
   local ok, out_err = browser.create_file("/tmp", "forbidden.txt", fixture)
   assert_true(not ok, "create_file outside root must fail")
   assert_true(out_err:find("outside project root", 1, true) ~= nil, "error must identify outside root")
 
+  -- 6. Atomic no-overwrite verification for create_file and rename_entry
+  local existing_file = fixture .. "/existing_target.txt"
+  local f_ex = io.open(existing_file, "w"); f_ex:write("DO_NOT_TRUNCATE"); f_ex:close()
+  local create_ok, create_err = browser.create_file(fixture, "existing_target.txt", fixture)
+  assert_true(not create_ok, "create_file must fail when destination already exists")
+  assert_true(create_err:find("already exists", 1, true) ~= nil)
+  assert_eq(table.concat(vim.fn.readfile(existing_file), "\n"), "DO_NOT_TRUNCATE",
+    "existing file must not be truncated on create collision")
+
+  local source_file = fixture .. "/source_to_rename.txt"
+  local f_src = io.open(source_file, "w"); f_src:write("SOURCE_DATA"); f_src:close()
+  local ren_ex_ok, ren_ex_err = browser.rename_entry(
+    { full_path = source_file, path = "source_to_rename.txt", name = "source_to_rename.txt", is_dir = false },
+    "existing_target.txt", fixture
+  )
+  assert_true(not ren_ex_ok, "rename_entry must fail when destination already exists")
+  assert_true(ren_ex_err:find("already exists", 1, true) ~= nil)
+  assert_eq(table.concat(vim.fn.readfile(existing_file), "\n"), "DO_NOT_TRUNCATE",
+    "destination file must not be overwritten or replaced")
+  assert_eq(table.concat(vim.fn.readfile(source_file), "\n"), "SOURCE_DATA",
+    "source file must remain intact after collision refusal")
   workbench.close()
   vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
   cleanup_dir(fixture)

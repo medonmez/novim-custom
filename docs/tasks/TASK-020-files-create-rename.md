@@ -1,6 +1,6 @@
 # TASK-020: Files Create and Rename
 
-- Status: `CHANGES_REQUESTED`
+- Status: `READY_FOR_REVIEW`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-020-files-create-rename`
@@ -117,33 +117,31 @@ safety boundaries.
 
 ## Implementer handoff
 
-- Handoff status: `READY_FOR_REVIEW`
+- Status: `READY_FOR_REVIEW`
 - Candidate commit: `HEAD (handoff commit)`
 - Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
 - Task branch: `task/TASK-020-files-create-rename`
 
-### Summary of changes
+### Summary of changes and review corrections
 
-1. **Core filesystem validation and mutations (`config/nvim/lua/novim/browser.lua`)**:
-   - Implemented `validate_name`: rejects empty/whitespace, `.`, `..`, path separators (`/`, `\`), and NUL bytes (`\0`).
-   - Implemented `is_path_outside_root`: fail-closed realpath and parent-path traversal guarding against project-root escapes.
-   - Implemented `is_symlink_or_has_symlink_parent`: non-following `uv.fs_lstat` checks ensuring neither the target path nor any directory component below `root_dir` is a symlink.
-   - Implemented `resolve_create_target`: resolves target directory to selected folder, file's parent folder, or project root when no selection.
-   - Implemented `create_file`, `create_folder`, and `rename_entry` with fail-closed collision, symlink, and root boundaries.
+1. **Diff-view `N` mapping context separation (`config/nvim/lua/novim/workbench.lua`)**:
+   - Made `N` mapping context-aware on `buf_left`: in Files view it invokes `open_new_folder_input`, while in Diff view it preserves `assign_compare_endpoint("new", "changes")`.
+   - Added regression asserting `N` in Diff view assigns comparison endpoint without opening file input modal, while in Files view it opens New Folder.
 
-2. **Context menu and keyboard shortcuts (`config/nvim/lua/novim/workbench.lua`)**:
-   - Added `n` (New File), `N` (New Folder), `<F2>` (Rename), `m` (Context Menu), and `<RightMouse>` on the Files navigation pane (`buf_left`).
-   - Implemented `open_context_menu`: floating popup menu displaying New File and New Folder (plus Rename when a file or folder is selected). Navigable with `j`/`k`, `Enter`/`Space`, direct keys `n`/`N`/`<F2>`, mouse click, and cancelled with `Esc`/`q`.
-   - Implemented single-line bounded name input modal (`open_file_input_modal`) with `Enter` confirmation, `Esc` cancellation, live title error feedback, and `TextChanged` error clearing.
-   - Implemented open buffer migration on rename (`migrate_open_buffers_on_rename`): updates buffer name via `nvim_buf_set_name` and runs `filetype detect`, preserving in-memory unsaved content and modified state without silent save or discard.
-   - Implemented directory expansion migration (`migrate_expanded_dirs_on_rename`): preserves expansion state of renamed folders and their children.
-   - Connected tree refresh (`rebuild_project_view`), selection follow for visible created/renamed entries, right-pane preview refresh, and bounded visible write notice rendering.
+2. **New Folder symlink preflight (`config/nvim/lua/novim/workbench.lua`)**:
+   - Added the missing `local is_sym, sym_err = browser.is_symlink_or_has_symlink_parent(target_dir, state.root_dir)` assignment in `open_new_folder_input`.
+   - Added regression verifying New Folder targeting a symlinked directory fails closed before opening the modal.
 
-3. **Keymap documentation (`config/nvim/lua/novim/keymaps.lua`)**:
-   - Added `n`, `N`, `<F2>`, and `m or Right Click` to canonical `keymaps.workbench` documentation, preserving bidirectional sync with Settings key help.
+3. **Reject non-regular special files at rename (`config/nvim/lua/novim/browser.lua`, `config/nvim/lua/novim/workbench.lua`)**:
+   - Enforced `st_source.type == "file" or st_source.type == "directory"` in `rename_entry` and `open_rename_input`. Non-regular nodes (FIFOs, devices, sockets) are rejected with `"Only regular files and directories can be renamed"`.
+   - Added FIFO fixture regression testing rejection in both `workbench.open_rename_input` and `browser.rename_entry`.
 
-4. **Deterministic test suite (`tests/test_workbench.lua`)**:
-   - Added 6 comprehensive test suites covering context menu actions and shortcuts, file and folder creation with preview inspection, file and directory rename with buffer preservation and expansion migration, input validation and cancellation, fail-closed security boundaries, and dotfile creation and visibility.
+4. **Atomic no-overwrite create and rename primitives (`config/nvim/lua/novim/browser.lua`)**:
+   - Implemented `atomic_rename_noreplace`: uses Darwin `renamex_np` (`RENAME_EXCL = 4`) and Linux `renameat2` (`RENAME_NOREPLACE = 1`) via LuaJIT FFI, with POSIX `link(2)` + `unlink(2)` fallback for regular files and prechecked rename fallback for directories, atomically failing with `EEXIST` on collision.
+   - In `create_file`, used `bit.bor(uv.constants.O_CREAT, uv.constants.O_EXCL, uv.constants.O_WRONLY)` so file opening atomically fails on existing destination without truncation.
+   - In `create_folder`, handled `uv.fs_mkdir` `EEXIST` atomically.
+   - In `is_symlink_or_has_symlink_parent`, stopped parent traversal when path matches project root, preventing false positives on OS-level symlinks above root.
+   - Added regressions verifying existing files are neither truncated on file creation collision nor replaced on rename collision.
 
 ### Verification evidence
 
@@ -153,27 +151,8 @@ safety boundaries.
 
 ### Residual risks
 
-- Review findings are blocking delivery; copy, paste, and move remain deferred
-  to proposed `TASK-021` per ADR-007.
+- None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
 
-### Review follow-up
+### Next action
 
-Local review at `80ae55fc2a5cee4fd199c06b92e6e175e5bb49b3` is
-`CHANGES_REQUESTED`. The same task remains active; no PR, push, or
-merge was attempted.
-
-Required corrections:
-
-- Preserve the existing Diff-view left-pane `N` mapping for the new comparison
-  endpoint while keeping `N` as New Folder in Files view.
-- Perform the missing symlink-parent preflight in `open_new_folder_input` and
-  add a regression proving a symlink target is refused before the input modal
-  opens.
-- Reject non-regular special files at the rename boundary; add a FIFO or
-  equivalent fixture regression.
-- Use collision-safe, no-overwrite filesystem primitives for create and rename
-  so a path appearing after the initial preflight cannot be truncated or
-  replaced.
-
-Return the same branch to review after focused regressions and the required
-local validation rerun.
+Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local review.
