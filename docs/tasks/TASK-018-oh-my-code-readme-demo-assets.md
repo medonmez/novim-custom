@@ -1,10 +1,15 @@
 # TASK-018 — oh-my-code README and real terminal demo assets
 
-- Status: `PLANNED`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Expected baseline: `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9`
 - Task branch: `task/TASK-018-oh-my-code-readme-demo-assets`
+- Candidate: `3c763ba0e69819989edcb522aacfc4cefd7dc3d7` (review record
+  `ce9b8202cfe98a484e24f7501a766294d336ccc9`)
+- Pull request: `#34 <https://github.com/medonmez/novim-custom/pull/34>`
+  (`MERGED`)
+- Merge commit: `ed5a35937d19982832fa0c770486d7496f93d21b` (`origin/main`)
 - PR target: `origin/main`
 - Dependency: `TASK-017` (accepted in PR #32)
 - Follow-up: `TASK-019` strict release candidate, repository rename, and
@@ -58,23 +63,23 @@ rename or release appear complete.
 
 ## Acceptance criteria
 
-- [ ] The root README presents `oh-my-code` and `ohc` as the public product,
+- [x] The root README presents `oh-my-code` and `ohc` as the public product,
       accurately describes the accepted workflows and requirements, and does
       not leave upstream `novim` branding or the upstream install/update path
       as the product's primary command.
-- [ ] `docs/demo.gif` is a valid, viewable capture from a real `ohc` terminal
+- [x] `docs/demo.gif` is a valid, viewable capture from a real `ohc` terminal
       session in this checkout, visibly demonstrates the public workbench, and
       contains no private data or unsupported hosted/production claims.
-- [ ] The README's Mermaid architecture diagram accurately shows the public
+- [x] The README's Mermaid architecture diagram accurately shows the public
       launcher, isolated config/data/state/cache boundary, package/installer
       boundary, and independent installed `novim` path.
-- [ ] Installation, first-launch, compatibility-alias, splash bypass, local
+- [x] Installation, first-launch, compatibility-alias, splash bypass, local
       Git-write, and privacy boundaries agree with ADR-006,
       `docs/architecture.md`, and `docs/LOCAL_DISTRIBUTION.md`.
-- [ ] All README-relative links and image references resolve, attribution and
+- [x] All README-relative links and image references resolve, attribution and
       license links remain present, and the document does not claim that the
       hosted rename or `v1.0.0` release has already occurred.
-- [ ] README/demo validation, relevant launcher/smoke checks, and
+- [x] README/demo validation, relevant launcher/smoke checks, and
       `git diff --check` pass; no installed `novim`, normal Neovim config,
       `bin/novim`, or upstream synchronization state is changed.
 
@@ -118,3 +123,15 @@ rename or release appear complete.
 The implementer must stop at a local handoff commit on this branch. No push,
 repository rename, tag, GitHub Release, or hosted installer acceptance is
 part of implementation.
+
+## Closure
+
+TASK-018 was locally reviewed `APPROVED` at candidate `3c763ba`; the review
+record is `ce9b820`. PR #34 was merged into `main` at `ed5a359`, and the
+fetched `origin/main` contains the reviewed implementation and review record.
+
+The README link/image, Mermaid, GIF metadata/frame, launcher, package snippet,
+smoke, full-suite, diff, and invariance checks passed. The evidence is local
+or synthetic-fixture evidence and is not hosted, production, recovery, or
+customer-acceptance evidence. Repository rename, `v1.0.0` tag/release, and
+fresh hosted installer verification remain TASK-019 scope.

@@ -1,17 +1,17 @@
 # Project State
 
-Updated: 2026-08-31
+Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-018` (`PLANNED`)
+Current task: `TASK-019` (`PLANNED`)
 Base branch: `main`
-Task branch: `task/TASK-018-oh-my-code-readme-demo-assets`
-Expected baseline: `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9`
+Task branch: `task/TASK-019-oh-my-code-release`
+Expected baseline: `ed5a35937d19982832fa0c770486d7496f93d21b`
 Pull request: not opened
-Last accepted task: `TASK-017`
-Last accepted commit: `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9` (`origin/main` merge of PR #32)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/32`
+Last accepted task: `TASK-018`
+Last accepted commit: `ed5a35937d19982832fa0c770486d7496f93d21b` (`origin/main` merge of PR #34)
+Last merged pull request: `https://github.com/medonmez/novim-custom/pull/34`
 
 ## Current truth
 
@@ -29,8 +29,9 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/32`
 - Public installation is planned for `~/.local/share/oh-my-code` with
   `~/.local/bin/ohc`; these paths do not replace the installed `novim` paths.
 - The one-second interactive-TTY splash is implemented and accepted in
-  TASK-016. Public packaging/installer is accepted in TASK-017; README assets
-  and hosted release are the remaining ordered successor tasks.
+  TASK-016. Public packaging/installer is accepted in TASK-017, and the
+  README/demo assets are accepted in TASK-018; hosted release remains the
+  strict TASK-019 successor.
 - Workflow manifests and durable project records have been bootstrapped under
   `docs/` without removing or duplicating the upstream public documentation.
 - `TASK-001` was locally reviewed (`APPROVED` at candidate `b8512b6`) and
@@ -140,6 +141,12 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/32`
   diagnostics, and non-interactive/test paths. The PTY matrix and full local
   suites passed; installed `novim`, `bin/novim`, and the normal Neovim
   configuration remain independent.
+- `TASK-018` was locally reviewed `APPROVED` at candidate `3c763ba` with
+  review record `ce9b820`, delivered through GitHub PR #34, and verified in
+  merge commit `ed5a359` on `origin/main`. The README is now the public
+  oh-my-code guide, `docs/demo.gif` is a real public-safe `ohc` capture, and
+  the architecture/link/invariance checks passed. Hosted rename and release
+  actions remain outside this accepted local delivery.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -150,15 +157,14 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/32`
 
 ## Active blockers
 
-- TASK-017 is accepted in `origin/main` at `bad06b69` after follow-up PR #32
-  passed the ShellCheck correction check. The review also records and
-  hash-verifies the repaired installed-`novim` incident from the prior fixer
-  probe.
+- TASK-018 is accepted in `origin/main` at `ed5a359` after PR #34 merged and
+  the reviewed head was fetched and verified. Its local and synthetic-fixture
+  evidence remains distinct from hosted release evidence.
 - No hosted, production, recovery, or customer-acceptance claim is made.
 
 ## Next orchestration action
 
-Issue TASK-018 on `task/TASK-018-oh-my-code-readme-demo-assets` from the
-verified `origin/main` baseline. Do not rename the GitHub repository, create
-the `v1.0.0` tag, or publish a GitHub Release; those remain TASK-019's strict
-hosted scope.
+Issue TASK-019 on `task/TASK-019-oh-my-code-release` from the verified
+`origin/main` baseline `ed5a359`. This is the strict hosted release task;
+repository rename, the `v1.0.0` tag, GitHub Release, and fresh hosted installer
+verification are not yet performed.

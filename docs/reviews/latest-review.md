@@ -9,10 +9,12 @@ recorded task baseline `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9` is an
 ancestor)
 Candidate: `3c763ba0e69819989edcb522aacfc4cefd7dc3d7`
 Task branch: `task/TASK-018-oh-my-code-readme-demo-assets`
-Pull request: not opened
-Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `NOT_STARTED`
-Target branch contains reviewed head: `NO`
+Remote checks: `shellcheck SUCCESS` (PR #34)
+Merge status: `MERGED`
+Pull request: `#34 <https://github.com/medonmez/novim-custom/pull/34>`
+  (`MERGED` at `ed5a35937d19982832fa0c770486d7496f93d21b`)
+Delivered PR head: `ce9b8202cfe98a484e24f7501a766294d336ccc9`
+Target branch contains reviewed head: `YES` (`origin/main`)
 
 ## Review result
 
@@ -98,13 +100,12 @@ production, recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`APPROVED` for lightweight delivery. The reviewed implementation remains local
-on `task/TASK-018-oh-my-code-readme-demo-assets`; no push, PR, merge, repository
-rename, tag, GitHub Release, or hosted installer action has occurred.
+`ACCEPTED` after PR #34 was merged and `origin/main` was fetched and verified
+to contain the reviewed implementation and review record. No repository
+rename, tag, GitHub Release, or hosted installer action was performed; those
+remain TASK-019 strict scope.
 
 ## Next action
 
-Commit this review record, push the task branch, open one PR targeting
-`origin/main`, and merge promptly if it is mergeable and no explicit required
-check blocks it. Then verify the remote default branch before reconciling
-TASK-018 as `ACCEPTED`.
+Reconcile the accepted TASK-018 records and issue TASK-019 as the strict
+release-candidate task from the verified `origin/main` merge baseline.

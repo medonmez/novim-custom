@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-018-oh-my-code-readme-demo-assets",
+    "taskBranch": "task/TASK-019-oh-my-code-release",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/novim-custom.git",
@@ -28,13 +28,13 @@
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "TASK-018",
-        "currentTaskStatus": "PLANNED",
-        "pullRequest": null,
+    "currentTask": "TASK-019",
+    "currentTaskStatus": "PLANNED",
+    "pullRequest": null,
     "remoteChecks": "STRICT FOR HOSTED RELEASE; NOT APPLICABLE TO LOCAL PLAN",
-    "lastAcceptedTask": "TASK-017",
-    "lastAcceptedCommit": "bad06b69c1d17879f18a3d4f9cfa537bfba6fba9",
-    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/32"
+    "lastAcceptedTask": "TASK-018",
+    "lastAcceptedCommit": "ed5a35937d19982832fa0c770486d7496f93d21b",
+    "lastMergedPullRequest": "https://github.com/medonmez/novim-custom/pull/34"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
