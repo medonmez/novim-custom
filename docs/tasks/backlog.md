@@ -1,6 +1,6 @@
 # Backlog
 
-Updated: 2026-08-30
+Updated: 2026-09-03
 
 Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 `CHANGES_REQUESTED`, `BLOCKED`, or `ACCEPTED`.
@@ -24,11 +24,11 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 15 | TASK-015 | Rebrand the public product as oh-my-code and add the primary `ohc` launcher with a one-release compatibility alias | ACCEPTED | TASK-014 (accepted) |
 | 16 | TASK-016 | Add a one-second interactive-TTY startup splash with explicit no-animation controls | ACCEPTED | TASK-015 (accepted) |
 | 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | ACCEPTED | TASK-015, TASK-016 (accepted) |
-| 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | PLANNED | TASK-015, TASK-016, TASK-017 (accepted) |
-| 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PROPOSED | TASK-015 through TASK-018 (accepted) |
+| 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
+| 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | PLANNED | TASK-015 through TASK-018 (accepted) |
 
-TASK-001 through TASK-017 are accepted. The public release direction is
-accepted in ADR-006; only TASK-018 is currently actionable.
+TASK-001 through TASK-018 are accepted. The public release direction is
+accepted in ADR-006; only TASK-019 is currently actionable.
 
 ## Accepted task notes
 
@@ -107,6 +107,9 @@ accepted in ADR-006; only TASK-018 is currently actionable.
   remains excluded.
 - `TASK-018` owns the public README, Mermaid/terminal explanation, and a real
   `ohc` terminal demo capture with no private project data.
+- `TASK-018` was accepted after local review at candidate `3c763ba` with review
+  record `ce9b820`; PR #34 merged at `ed5a359` and `origin/main` was verified
+  to contain the reviewed implementation and review record.
 - `TASK-019` is the only task authorized to perform the hosted repository
   rename, tag `v1.0.0`, GitHub Release creation, and fresh installer download
   verification. It uses the strict release gate.
