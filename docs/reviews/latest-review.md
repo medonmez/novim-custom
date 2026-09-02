@@ -5,23 +5,25 @@ Task ID: `TASK-020`
 Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
 Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98` (`origin/main`)
-Candidate: `48c9c642d98b4ac8c98922dbb73dcd2d108540fe`
+Reviewed candidate: `48c9c642d98b4ac8c98922dbb73dcd2d108540fe`
+Review record: `f4f250adbb9bece794758acff0cd88aeb4e3c396`
 Task branch: `task/TASK-020-files-create-rename`
-Pull request: `PENDING LIGHTWEIGHT DELIVERY`
-Remote checks: `OPTIONAL / NOT_RUN`
-Merge status: `NOT_ATTEMPTED`
-Target branch contains change: `NO`
+Pull request: `#38 <https://github.com/medonmez/oh-my-code/pull/38>`
+Remote checks: `shellcheck SUCCESS`
+Merge status: `MERGED`
+Merge commit: `b1de569410682dd1a4fc3ed13dc476e26d69e824`
+Target branch contains change: `YES`
 
 ## Review result
 
-The candidate is on the recorded isolated branch with a clean worktree. Its
-merge base is exactly the fetched `origin/main` baseline, and the complete
-delta is scoped to TASK-020 implementation, tests, and project records. The
-previous four blocking findings are corrected. Directory renames now use the
-native atomic no-replace primitive or fail closed with a bounded error; the
-fallback regression confirms no unsafe directory rename occurs. No unresolved
-correctness, security, data-integrity, regression, public-contract, or scope
-issue remains for local review.
+The candidate was reviewed on the recorded isolated branch with a clean
+worktree. Its merge base was exactly the fetched `origin/main` baseline, and
+the complete delta was scoped to TASK-020 implementation, tests, and project
+records. The previous four blocking findings were corrected. Directory
+renames now use the native atomic no-replace primitive or fail closed with a
+bounded error; the fallback regression confirms no unsafe directory rename
+occurs. No unresolved correctness, security, data-integrity, regression,
+public-contract, or scope issue remained for local review.
 
 ## Findings
 
@@ -51,31 +53,26 @@ and move remain deferred to proposed TASK-021.
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
   task, backlog, prior review, architecture, and ADR-007.
-- Fetched `origin/main` and confirmed it remains
-  `6b8ca01312fcb1052b2fa8021606354636037b98`; confirmed that it is the
-  candidate's merge base. The branch is clean after validation.
-- Inspected the complete candidate diff: 13 changed files, limited to the
-  TASK-020 product code, deterministic tests, ADR/product records, and scoped
-  project records.
+- Fetched `origin/main` and confirmed the reviewed candidate and review record
+  are ancestors of remote merge commit `b1de569`.
+- Inspected the complete TASK-020 delta and confirmed it was scoped to the
+  Files mutation slice, deterministic tests, and durable project records.
 - Reran `git diff --check` and the applicable shell syntax checks.
 - Reran `./tests/run_tests.sh` independently: 65/65 workbench tests passed,
   the offline package/installer suite passed, and the smoke suite passed 9/9.
-- Verified the new deterministic fallback tests: native directory collision
-  refusal, unavailable-native directory fail-closed behavior, regular-file
-  link/unlink fallback, and fallback collision invariance.
+- Verified PR #38 was mergeable, merged into `main`, and its `shellcheck`
+  check completed successfully.
 
-All evidence above is local review evidence. No hosted, production, recovery,
-or customer-acceptance claim is made.
+All local evidence above is local review evidence. The PR merge and CI result
+are repository-provider observations; no production, recovery, or
+customer-acceptance claim is made.
 
 ## Delivery decision
 
-`APPROVED` for lightweight delivery. The implementation is not yet accepted:
-no PR has been opened and the candidate is not on the remote default branch.
-Push the reviewed task branch, open or reuse one PR against `main`, confirm it
-is mergeable without bypassing repository rules, merge promptly, and verify
-`origin/main` before reconciling acceptance records.
+`ACCEPTED` after verified lightweight delivery through PR #38. The remote
+default branch contains the reviewed implementation at merge commit `b1de569`.
 
 ## Next action
 
-Proceed with the lightweight PR delivery workflow for
-`task/TASK-020-files-create-rename`.
+Keep the repository idle until an explicit successor brief is issued. TASK-021
+remains proposed and unissued.

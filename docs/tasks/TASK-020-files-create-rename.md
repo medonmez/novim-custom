@@ -1,12 +1,14 @@
 # TASK-020: Files Create and Rename
 
-- Status: `READY_FOR_REVIEW`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-020-files-create-rename`
 - Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98` (`origin/main`)
 - Dependency: `TASK-019` (accepted in PR #36)
 - PR target: `origin/main`
+- Pull request: `#38 <https://github.com/medonmez/oh-my-code/pull/38>` (`MERGED` at
+  `b1de569410682dd1a4fc3ed13dc476e26d69e824`)
 
 ## Outcome
 
@@ -160,4 +162,19 @@ safety boundaries.
 
 ### Next action
 
-Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local review.
+TASK-020 is accepted. Keep the repository idle until an explicit successor
+brief is issued; TASK-021 remains proposed and unissued.
+
+## Delivery record
+
+Implementer handoff: `48c9c642d98b4ac8c98922dbb73dcd2d108540fe`.
+Local review record `f4f250adbb9bece794758acff0cd88aeb4e3c396` was
+`APPROVED`. PR #38 merged the reviewed implementation into `origin/main` at
+`b1de569410682dd1a4fc3ed13dc476e26d69e824`; the required `shellcheck` check
+passed.
+
+Local validation passed: `./tests/run_tests.sh` reported 65/65 workbench
+tests, the offline package/installer suite passed, and the public `ohc` smoke
+suite passed 9/9, alongside applicable `bash -n` and `git diff --check`.
+These are local or repository-CI observations, not production, recovery, or
+customer-acceptance evidence.

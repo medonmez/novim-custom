@@ -4,14 +4,14 @@ Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-020` (`READY_FOR_REVIEW`; Files create/rename)
+Current task: `NONE` (`IDLE`; TASK-020 accepted)
 Base branch: `main`
-Task branch: `task/TASK-020-files-create-rename`
-Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
+Task branch: none
+Expected baseline: `b1de569410682dd1a4fc3ed13dc476e26d69e824`
 Pull request: none
-Last accepted task: `TASK-019`
-Last accepted commit: `8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1` (`origin/main` merge of PR #36)
-Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
+Last accepted task: `TASK-020`
+Last accepted commit: `b1de569410682dd1a4fc3ed13dc476e26d69e824` (`origin/main` merge of PR #38)
+Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
 
 ## Current truth
 
@@ -154,11 +154,11 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
   fresh public installer run and real-release collision negative check passed;
   installed `novim`, normal Neovim config, upstream remote, and unrelated
   paths remained unchanged.
-- `TASK-020` remains active on `task/TASK-020-files-create-rename` from
-  verified `origin/main` `6b8ca013`. The re-review confirms the four prior
-  corrections, but found one remaining directory-rename fallback that can
-  replace a destination between a precheck and ordinary rename. `TASK-021`
-  is proposed follow-up scope for copy, paste, and move.
+- `TASK-020` was accepted in PR #38 at verified `origin/main` merge commit
+  `b1de569`. It adds bounded Files-pane creation and complete-name rename,
+  with root-contained validation, no-overwrite behavior, symlink/special-file
+  refusals, preview/tree refresh, and open-buffer preservation. `TASK-021`
+  remains proposed follow-up scope for copy, paste, and move.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -169,15 +169,13 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
 
 ## Active blockers
 
-- No active product blocker remains. `TASK-020` is `READY_FOR_REVIEW`
-  following the directory fallback correction. `TASK-021` remains proposed
-  until the first Files mutation slice is accepted.
+- No active product blocker remains. No successor task is issued without an
+  explicit new brief; `TASK-021` remains proposed until its contract is ready.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local
-review and the lightweight delivery workflow; no copy/paste/move, delete, Git
-remote operation, or public-release action is authorized by this task.
+Keep the repository idle at verified `origin/main` merge commit `b1de569`
+until an explicit successor brief is provided.
