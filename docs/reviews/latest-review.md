@@ -1,111 +1,98 @@
 # Latest Review
 
 Updated: 2026-09-03
-Task ID: `TASK-018`
+Task ID: `TASK-019`
 Local verdict: `APPROVED`
-Delivery policy: `LIGHTWEIGHT`
-Baseline: `06440e07d2946ba480ab3c098624b9369dfc8bdf` (`origin/main`; the
-recorded task baseline `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9` is an
-ancestor)
-Candidate: `3c763ba0e69819989edcb522aacfc4cefd7dc3d7`
-Task branch: `task/TASK-018-oh-my-code-readme-demo-assets`
-Remote checks: `shellcheck SUCCESS` (PR #34)
-Merge status: `MERGED`
-Pull request: `#34 <https://github.com/medonmez/novim-custom/pull/34>`
-  (`MERGED` at `ed5a35937d19982832fa0c770486d7496f93d21b`)
-Delivered PR head: `ce9b8202cfe98a484e24f7501a766294d336ccc9`
-Target branch contains reviewed head: `YES` (`origin/main`)
+Delivery policy: `STRICT`
+Baseline: `0c0d0f96fdc0193bc33224ab8507afd55b43265e` (`origin/main`; the
+detailed task record still contains the older `ed5a359` planning baseline)
+Candidate: `25768fd2fb3db7f4ff938e90821e4b115d7809ba`
+Task branch: `task/TASK-019-oh-my-code-release`
+Pull request: pending strict delivery
+Remote checks: pending PR creation; local `shellcheck` and `actionlint` are
+unavailable in this environment
 
 ## Review result
 
-The actual candidate delta `06440e0..3c763ba` was inspected. It contains only
-the expected README rewrite, the replacement terminal GIF, and the current-task
-handoff. No launcher, installer, package allowlist, workbench, Neovim config,
-upstream reference, release workflow, or unrelated product change was added.
+The actual candidate delta from the fetched `origin/main` baseline was
+inspected. It contains only the public `VERSION` bump from `0.1.7` to `1.0.0`
+and the expected TASK-019 handoff/status records. No launcher, package,
+installer, release-workflow, workbench, Neovim configuration, `bin/novim`, or
+unrelated product change was introduced.
 
-The README makes `oh-my-code`/`ohc` the primary public surface, documents the
-accepted workbench and local Git boundaries, and keeps the hosted rename and
-`v1.0.0` release explicitly future work. Its installation, alias, splash
-bypass, isolation, privacy, package, and installer wording is consistent with
-ADR-006, `docs/architecture.md`, and `docs/LOCAL_DISTRIBUTION.md`.
-
-The committed GIF is a valid 1400x700 GIF89a with 464 frames. The handoff
-records its provenance as a vhs 0.11.0 capture of a real interactive PTY
-session using this checkout's `./bin/ohc`, with installed `novim` excluded.
-Independent sampled-frame inspection shows the splash, Files/Preview,
-Source Control, local stage/commit, and Settings flows. Visible fixture paths
-are deliberately synthetic `/tmp/ohc-demo` paths; no credentials, tokens,
-usernames, hostnames, or hosted claims were found.
-
-The Mermaid block was rendered in headless Chrome from the isolated validation
-page and returned `MERMAID_OK` with one SVG. The rendered graph includes the
-public launchers, isolated config/data/state/cache, offline package archive,
-prepared-but-unpublished installer, managed `~/.local` roots, and independent
-installed `novim`/normal Neovim configuration boundaries.
+The release workflow and package contracts already present at the baseline
+accept exactly the `v1.0.0` identity, build the allowlisted
+`oh-my-code-1.0.0.tar.gz`, emit its checksum, and exclude `bin/novim`. The
+candidate version bump is consistent with those contracts. Local validation
+also exercised the hostile archive, collision, checksum, asset-only download,
+and installed-release invariance boundaries.
 
 No unresolved correctness, regression, security, privacy, data-integrity,
-public-contract, or scope issue remains for this local review.
+public-contract, or scope issue remains for the local review. Hosted criteria
+remain intentionally unverified and are strict delivery gates, not local
+review evidence.
 
 ## Findings
 
 None blocking.
 
-Non-blocking observations retained from the handoff:
+Non-blocking record observation:
 
-- The captured Settings title still says `novim-dev Settings & Preferences`.
-  This is the real accepted implementation surface; rebranding
-  `config/nvim/` is outside TASK-018.
-- The GIF starts from a previously persisted isolated palette rather than
-  factory-default Tokyo Night. It visibly demonstrates theme cycling, and
-  the shipped default is covered by the regression suite.
-- vhs/tabby rendering can vary slightly by terminal. The asset is a faithful
-  recording of one real session, not a claim of portable terminal rendering.
+- The top-level expected-baseline field in `docs/tasks/current-task.md` and
+  `docs/tasks/TASK-019-oh-my-code-release.md` still says `ed5a359`, while the
+  fetched `origin/main`, branch parent, and handoff paragraph correctly use
+  `0c0d0f9`. Reconcile this durable-record drift before final acceptance.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| README presents `oh-my-code`/`ohc` as primary product | PASS | Complete README inspection; public title, commands, install boundary, and credits use the derivative identity. The upstream hosted install/update path and upstream logo are not primary. |
-| Real public-safe terminal demo | PASS | `file`/`ffprobe` report GIF89a 1400x700, 464 frames, 18.56 seconds; sampled frames and OCR were visually inspected. Handoff records the real `ohc` PTY capture and fixture provenance. |
-| Mermaid architecture boundary | PASS | README diagram source inspection plus headless Chrome DOM render returned `MERMAID_OK` and one SVG. |
-| Canonical wording and behavior boundaries | PASS | Cross-read against ADR-006, `docs/architecture.md`, and `docs/LOCAL_DISTRIBUTION.md`; the README package snippet was executed successfully in a temporary install root. |
-| Links, images, attribution, hosted honesty | PASS | Rendered Markdown check found 28 anchors, one Mermaid block, and six unique relative targets; all targets resolve. No stale `novim.dev/install`, `ow version`, or equivalent primary update path remains. Attribution, MIT, and third-party license links remain present. |
-| Required checks and invariance | PASS | `./bin/ohc --version`, `./bin/ohc --help`, `./tests/run_smoke_tests.sh` (9/9), `./tests/run_tests.sh` (59/59 plus package and smoke suites), and `git diff --check` passed. `bin/novim` SHA-256 `cb8e8785...`, installed `novim` SHA-256 `5955e1f2...`/version `novim 0.1.7`, normal Neovim config absence, remotes, and clean status remained unchanged. |
+| Fresh baseline and local preflight | PASS locally | `origin/main` fetched at `0c0d0f9`; candidate parent is that commit; `bash -n`, PyYAML workflow parse, package suite, smoke suite, full suite, docs/install comparison, and `git diff --check` passed. |
+| Version, tag identity, archive, checksum, and `bin/novim` boundary | PASS locally | `VERSION=1.0.0`; exact `refs/tags/v1.0.0` match and mismatch rejection passed; archive is 184,979 bytes with SHA-256 `e09ac6c524d507580ef886a6ad3b5a42aa89cd8ec9567c023966e70f0464ffd2`; manifest excludes `bin/novim`; checkout `bin/novim` stayed `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`. |
+| Provider repository rename | PENDING HOSTED | Current provider read-back is still public `medonmez/novim-custom`; `medonmez/oh-my-code` does not yet exist. |
+| Hosted `v1.0.0` release assets | PENDING HOSTED | Neither repository currently has a `v1.0.0` release. This requires the merged head, tag push, workflow completion, and provider read-back. |
+| Fresh public installer run | PENDING HOSTED | Local fixture-server and sandbox installer checks passed; the real public release URL has not yet been exercised. |
+| Invariance and evidence classification | PASS locally; hosted pending | Installed `novim` remained SHA-256 `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, reports `novim 0.1.7`, normal `~/.config/nvim` is absent, and `origin`/`upstream` are unchanged locally. Hosted before/after read-back remains pending. |
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
-  task, backlog, previous review, ADR-006, architecture, product, and local
-  distribution records.
-- Confirmed the task branch is the recorded isolated branch, `origin/main` is
-  the actual candidate baseline through `06440e0`, the working tree was clean,
-  and no PR exists for the branch.
-- Inspected the complete candidate diff `06440e0..3c763ba`; it is limited to
-  `README.md`, `docs/demo.gif`, and `docs/tasks/current-task.md`.
-- Ran the public launcher identity checks and the README's exact offline
-  package/install snippet.
-- Ran `./tests/run_smoke_tests.sh` and `./tests/run_tests.sh`; both completed
-  with zero fixture residue and a clean product source tree.
-- Ran rendered README link/image/TOC checks, GIF metadata and sampled-frame
-  inspection, headless Mermaid rendering, and `git diff --check`.
-- Rechecked invariance after validation: checkout `bin/novim` remains
-  `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`, the
-  installed release remains
-  `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a` and
-  reports `novim 0.1.7`, `~/.config/nvim` remains absent, and `origin` /
-  `upstream` remain unchanged.
+  task, backlog, previous review, ADR-006, architecture, and distribution
+  records.
+- Fetched `origin` and confirmed a clean recorded task branch at candidate
+  `25768fd`; its parent and the fetched `origin/main` are
+  `0c0d0f96fdc0193bc33224ab8507afd55b43265e`.
+- Inspected the complete candidate diff; only `VERSION`,
+  `docs/tasks/current-task.md`, and `docs/tasks/TASK-019-oh-my-code-release.md`
+  changed.
+- Ran `bash -n` for the relevant shell scripts, parsed the workflow with
+  PyYAML, and locally replayed the release workflow's version/tag, manifest,
+  checksum, docs-sync, and `bin/novim` guard steps.
+- Reran `./tests/run_package_tests.sh`: deterministic package SHA-256,
+  source-tree symlink rejection, hostile archive and VERSION checks,
+  collision/failure safety, fixture-server asset-only download, workflow
+  structure, and invariance all passed.
+- Reran `./tests/run_smoke_tests.sh`: 9/9 passed, including the PTY splash
+  duration and all bypass controls.
+- Reran `./tests/run_tests.sh`: 59/59 integration tests, package suite, and
+  smoke suite passed.
+- Confirmed `diff -u install.sh docs/install` is clean and `git diff --check`
+  passes.
 
 All evidence above is local or synthetic-fixture evidence. It is not hosted,
 production, recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`ACCEPTED` after PR #34 was merged and `origin/main` was fetched and verified
-to contain the reviewed implementation and review record. No repository
-rename, tag, GitHub Release, or hosted installer action was performed; those
-remain TASK-019 strict scope.
+`APPROVED` for strict delivery. The implementation is not yet accepted: no PR
+has been opened, the candidate is not on the remote default branch, and no
+repository rename, tag, GitHub Release, or public installer run has occurred.
+The CI ShellCheck check must pass on the PR, followed by strict hosted
+provider/read-back gates.
 
 ## Next action
 
-Reconcile the accepted TASK-018 records and issue TASK-019 as the strict
-release-candidate task from the verified `origin/main` merge baseline.
+Push the reviewed task branch, open one PR against `main`, verify required CI
+and mergeability, merge through GitHub, and then perform the authorized
+repository rename, `v1.0.0` tag/release publication, hosted asset read-back,
+and fresh public installer verification.
