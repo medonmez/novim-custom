@@ -4,34 +4,34 @@ Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-019` (`PLANNED`)
+Current task: `NONE` (`IDLE`; TASK-019 accepted)
 Base branch: `main`
-Task branch: `task/TASK-019-oh-my-code-release`
-Expected baseline: `ed5a35937d19982832fa0c770486d7496f93d21b`
-Pull request: not opened
-Last accepted task: `TASK-018`
-Last accepted commit: `ed5a35937d19982832fa0c770486d7496f93d21b` (`origin/main` merge of PR #34)
-Last merged pull request: `https://github.com/medonmez/novim-custom/pull/34`
+Task branch: none
+Expected baseline: `8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1`
+Pull request: none
+Last accepted task: `TASK-019`
+Last accepted commit: `8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1` (`origin/main` merge of PR #36)
+Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
 
 ## Current truth
 
 - The repository is a local clone of `link2004/novim` at upstream tag `v0.1.7`
   and commit `8e36d447ee9c73d29b75f3dfc50db9452a2addf1`.
-- The clone lives at `/Users/mert/novim-custom`; `origin` points to the
-  personal fork `medonmez/novim-custom` and `upstream` points to the official
+- The clone lives at `/Users/mert/novim-custom`; `origin` points to the public
+  `medonmez/oh-my-code` repository and `upstream` points to the official
   `link2004/novim` repository.
 - The installed `novim` release remains independent and is not being edited.
 - The accepted public product direction is `oh-my-code`, launched with `ohc`;
   `novim-dev` remains a one-release compatibility alias.
-- The current GitHub repository is public as `medonmez/novim-custom` with no
-  release yet. The accepted hosted target is `medonmez/oh-my-code` and the
-  first release target is `v1.0.0`.
+- The GitHub repository is public as `medonmez/oh-my-code`; the former
+  `medonmez/novim-custom` name resolves to it. Public release `v1.0.0` is
+  published with the archive, checksum, and version-pinned installer path.
 - Public installation is planned for `~/.local/share/oh-my-code` with
   `~/.local/bin/ohc`; these paths do not replace the installed `novim` paths.
 - The one-second interactive-TTY splash is implemented and accepted in
-  TASK-016. Public packaging/installer is accepted in TASK-017, and the
-  README/demo assets are accepted in TASK-018; hosted release remains the
-  strict TASK-019 successor.
+  TASK-016. Public packaging/installer is accepted in TASK-017, the README/demo
+  assets are accepted in TASK-018, and the hosted release is accepted in
+  TASK-019.
 - Workflow manifests and durable project records have been bootstrapped under
   `docs/` without removing or duplicating the upstream public documentation.
 - `TASK-001` was locally reviewed (`APPROVED` at candidate `b8512b6`) and
@@ -147,6 +147,13 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/34`
   oh-my-code guide, `docs/demo.gif` is a real public-safe `ohc` capture, and
   the architecture/link/invariance checks passed. Hosted rename and release
   actions remain outside this accepted local delivery.
+- `TASK-019` was locally reviewed `APPROVED`, delivered through PR #36, and
+  verified in merge commit `8f50c01` on `origin/main`. The repository was
+  renamed to `medonmez/oh-my-code`; release workflow run `33686893104` passed
+  and published `v1.0.0` with provider-verified archive/checksum assets. A
+  fresh public installer run and real-release collision negative check passed;
+  installed `novim`, normal Neovim config, upstream remote, and unrelated
+  paths remained unchanged.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -157,14 +164,13 @@ Last merged pull request: `https://github.com/medonmez/novim-custom/pull/34`
 
 ## Active blockers
 
-- TASK-018 is accepted in `origin/main` at `ed5a359` after PR #34 merged and
-  the reviewed head was fetched and verified. Its local and synthetic-fixture
-  evidence remains distinct from hosted release evidence.
-- No hosted, production, recovery, or customer-acceptance claim is made.
+- No active product blocker remains. No successor task is issued without an
+  explicit new brief.
+- No production, recovery, or customer-acceptance claim is made; the hosted
+  evidence is limited to the GitHub repository/release and installer
+  observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Issue TASK-019 on `task/TASK-019-oh-my-code-release` from the verified
-`origin/main` baseline `ed5a359`. This is the strict hosted release task;
-repository rename, the `v1.0.0` tag, GitHub Release, and fresh hosted installer
-verification are not yet performed.
+Keep the repository idle at the canonical `origin/main` release state until a
+new task brief is explicitly provided.

@@ -1,7 +1,7 @@
 # Repository Documentation Contract
 
-Repository: `novim-custom` (public target: `oh-my-code`)
-Updated: 2026-08-29
+Repository: `oh-my-code` (renamed from `novim-custom`)
+Updated: 2026-09-03
 
 This file is the routing manifest for product documentation and the agent
 workflow. Read it before creating or relocating project records.
@@ -47,13 +47,14 @@ created.
 - Runtime and commands: upstream `bin/novim` remains a preserved reference;
   public work launches through `ohc`, with `novim-dev` retained as a
   one-release compatibility alias.
-- Remote delivery: current `origin` is the personal repository
-  `https://github.com/medonmez/novim-custom.git`; the accepted public target is
-  `https://github.com/medonmez/oh-my-code` and the rename is pending the
-  release-delivery task. `upstream` remains the official source repository.
-  Use a task branch and pull request for subsequent remote delivery.
-- Deployment or release notes: the first public release is planned as
-  `v1.0.0`; no hosted release exists yet.
+- Remote delivery: current `origin` is the public repository
+  `https://github.com/medonmez/oh-my-code.git`; the former
+  `medonmez/novim-custom` name redirects to it. `upstream` remains the official
+  source repository. Use a task branch and pull request for subsequent remote
+  delivery.
+- Deployment or release notes: public release `v1.0.0` is published at
+  `https://github.com/medonmez/oh-my-code/releases/tag/v1.0.0`; the version-
+  pinned installer is served from the release tag.
 - Sensitive-data boundaries: source and Git metadata are local. Do not put
   credentials, tokens, private source, or raw user data into repository docs.
   The development command must not perform network actions by default.
@@ -62,4 +63,4 @@ created.
   (synced to `docs/install`) is the networked installer for the declared
   public Release asset. Neither packages `bin/novim`, writes the installed
   `novim` paths, or performs upstream synchronization. Hosted release
-  publication remains TASK-019 scope.
+  publication and hosted verification were completed in TASK-019.

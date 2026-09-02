@@ -1,10 +1,11 @@
 # Local oh-my-code Distribution
-Updated: 2026-08-31
+Updated: 2026-09-03
 
 This is the local packaging and installation path for this checkout. It is
-not a hosted release, a package-manager formula, or an update path for the
-installed upstream `novim` command. Public release publication and hosted
-installer verification belong to the release-delivery task (`TASK-019`).
+not a package-manager formula or an update path for the installed upstream
+`novim` command. The hosted `v1.0.0` release and installer were separately
+verified in the strict release-delivery task (`TASK-019`). Local results in
+this guide remain local evidence.
 
 ## Identity and package contents
 
