@@ -26,9 +26,13 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | ACCEPTED | TASK-015, TASK-016 (accepted) |
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | ACCEPTED | TASK-015 through TASK-018 (accepted) |
+| 20 | TASK-020 | Add Files-pane creation of files/folders and complete-name rename of files/folders | CHANGES_REQUESTED | TASK-019 (accepted) |
+| 21 | TASK-021 | Add bounded Files-pane copy, paste, and move actions | PROPOSED | TASK-020 (accepted) |
 
-TASK-001 through TASK-019 are accepted. The public release direction is
-accepted in ADR-006; no successor task is currently actionable.
+TASK-001 through TASK-019 are accepted. `TASK-020` is the only actionable
+task and remains active on its isolated branch while the review findings are
+corrected. `TASK-021` remains proposed until the create/rename slice is
+accepted and its clipboard/source-target contract is ready.
 
 ## Accepted task notes
 
@@ -117,6 +121,11 @@ accepted in ADR-006; no successor task is currently actionable.
   read-back, successful release workflow run `33686893104`, public asset
   checksum verification, and fresh public installer success plus collision
   failure evidence.
+- `TASK-020` is planned as the first Files mutation slice. It adds a
+  context-menu and keyboard-discoverable create/rename surface for regular
+  files and directories, with bounded single-component names, root-contained
+  fail-closed validation, selection/preview refresh, and open-buffer
+  preservation. `TASK-021` remains proposed for copy/paste/move.
 
 ## Preserved boundaries
 

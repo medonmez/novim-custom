@@ -5,6 +5,123 @@ local uv = vim.uv or vim.loop
 
 local M = {}
 
+local ffi_ok, ffi = pcall(require, "ffi")
+if ffi_ok then
+  pcall(function()
+    if ffi.os == "OSX" then
+      ffi.cdef[[
+        int renamex_np(const char *oldpath, const char *newpath, unsigned int flags);
+      ]]
+    elseif ffi.os == "Linux" then
+      ffi.cdef[[
+        int renameat2(int olddirfd, const char *oldpath, int newdirfd, const char *newpath, unsigned int flags);
+      ]]
+    end
+  end)
+end
+
+--- Internal check for platform-native atomic no-replace primitive availability
+--- Exposed on M so unit tests can deterministically simulate platforms
+--- where native atomic rename is unavailable.
+---@return boolean available
+---@return string? os_name
+function M._native_rename_available()
+  if not ffi_ok then
+    return false, nil
+  end
+  if ffi.os == "OSX" or ffi.os == "Linux" then
+    return true, ffi.os
+  end
+  return false, ffi.os
+end
+
+--- Perform platform-native atomic rename without replace
+--- Exposed on M for testability and platform-boundary verification.
+---@param old_path string
+---@param new_path string
+---@return boolean? ok true on success, false on failure, nil if unavailable
+---@return string? err error message if failed
+function M._native_rename_noreplace(old_path, new_path)
+  local avail, os_name = M._native_rename_available()
+  if not avail then
+    return nil, nil
+  end
+
+  if os_name == "OSX" then
+    local ok, res = pcall(ffi.C.renamex_np, old_path, new_path, 4) -- RENAME_EXCL = 4
+    if ok then
+      if res == 0 then
+        return true, nil
+      else
+        local err_code = ffi.errno()
+        if err_code == 17 then -- EEXIST
+          return false, "Destination already exists"
+        else
+          return false, "Failed to rename: errno " .. tostring(err_code)
+        end
+      end
+    end
+  elseif os_name == "Linux" then
+    local ok, res = pcall(ffi.C.renameat2, -100, old_path, -100, new_path, 1) -- AT_FDCWD = -100, RENAME_NOREPLACE = 1
+    if ok then
+      if res == 0 then
+        return true, nil
+      else
+        local err_code = ffi.errno()
+        if err_code == 17 then -- EEXIST
+          return false, "Destination already exists"
+        else
+          return false, "Failed to rename: errno " .. tostring(err_code)
+        end
+      end
+    end
+  end
+
+  return nil, nil
+end
+
+--- Atomic, fail-closed rename that never replaces an existing destination
+---@param old_path string
+---@param new_path string
+---@param is_dir boolean
+---@return boolean ok
+---@return string? error_msg
+local function atomic_rename_noreplace(old_path, new_path, is_dir)
+  -- 1. Try platform-native atomic no-replace primitive where supported
+  local nat_ok, nat_err = M._native_rename_noreplace(old_path, new_path)
+  if nat_ok ~= nil then
+    return nat_ok, nat_err
+  end
+
+  -- 2. Fallback for regular files: link(old, new) followed by unlink(old)
+  -- POSIX link(2) is atomically guaranteed to fail with EEXIST if new_path exists.
+  if not is_dir then
+    local link_ok, link_err = uv.fs_link(old_path, new_path)
+    if not link_ok then
+      if link_err and (link_err:find("EEXIST") or link_err:find("already exists")) then
+        return false, "Destination already exists"
+      end
+      return false, "Failed to rename: " .. tostring(link_err)
+    end
+    local unlink_ok, unlink_err = uv.fs_unlink(old_path)
+    if not unlink_ok then
+      pcall(uv.fs_unlink, new_path)
+      return false, "Failed to rename: " .. tostring(unlink_err)
+    end
+    return true, nil
+  end
+
+  -- 3. Fallback for directories: fail closed with a bounded error.
+  -- Ordinary uv.fs_rename cannot guarantee no-replace semantics against races or
+  -- empty destination directories without a kernel no-replace primitive.
+  if uv.fs_lstat(new_path) ~= nil then
+    return false, "Destination already exists"
+  end
+  return false, "Atomic directory rename without overwrite is unavailable on this platform"
+end
+
+M._atomic_rename_noreplace = atomic_rename_noreplace
+
 ---@class ProjectEntry
 ---@field path string relative path from project root
 ---@field name string basename of entry
@@ -288,6 +405,312 @@ function M.get_preview(entry, root_dir, show_dotfiles)
   f:close()
 
   return preview_lines, true
+end
+
+-- =========================================================================
+-- Files create and rename operations (TASK-020)
+-- =========================================================================
+
+--- Check whether a path or its realpath is strictly within root_dir
+---@param path string
+---@param root_dir string
+function M.is_path_outside_root(path, root_dir)
+  if not path or path == "" or not root_dir or root_dir == "" then
+    return true, "Invalid path or root directory"
+  end
+
+  local norm_root = root_dir:gsub("/+$", "")
+  local root_real = uv.fs_realpath(norm_root)
+  root_real = (root_real and root_real:gsub("/+$", "")) or norm_root
+
+  local norm_path = path:gsub("/+$", "")
+  local path_real = uv.fs_realpath(norm_path)
+  path_real = path_real and path_real:gsub("/+$", "") or nil
+
+  if path_real then
+    if path_real ~= root_real and path_real:sub(1, #root_real + 1) ~= root_real .. "/" then
+      return true, "Target is outside project root"
+    end
+    return false, nil
+  end
+
+  -- If path does not exist on disk, check its existing parent directory
+  local parent = vim.fs.dirname(norm_path)
+  while parent and parent ~= "" do
+    local parent_real = uv.fs_realpath(parent)
+    if parent_real then
+      parent_real = parent_real:gsub("/+$", "")
+      if parent_real ~= root_real and parent_real:sub(1, #root_real + 1) ~= root_real .. "/" then
+        return true, "Target is outside project root"
+      end
+      break
+    end
+    local next_p = vim.fs.dirname(parent)
+    if not next_p or next_p == parent or next_p == "." or next_p == "/" then break end
+    parent = next_p
+  end
+
+  return false, nil
+end
+
+--- Check if path itself is a symlink or has any symlinked parent directories below root_dir
+---@param path string
+---@param root_dir string
+---@return boolean is_symlink
+---@return string? reason
+function M.is_symlink_or_has_symlink_parent(path, root_dir)
+  if not path or path == "" or not root_dir or root_dir == "" then
+    return true, "Invalid path"
+  end
+
+  local norm_root = root_dir:gsub("/+$", "")
+  local root_real = uv.fs_realpath(norm_root)
+  root_real = (root_real and root_real:gsub("/+$", "")) or norm_root
+
+  local cur = path:gsub("/+$", "")
+  -- 1. Check path itself (lstat non-following)
+  local st_cur = uv.fs_lstat(cur)
+  if st_cur and st_cur.type == "link" then
+    return true, "Symlinks cannot be created or renamed"
+  end
+  local cur_real = uv.fs_realpath(cur)
+  cur_real = cur_real and cur_real:gsub("/+$", "") or nil
+  if cur == norm_root or (cur_real and cur_real == root_real) then
+    return false, nil
+  end
+
+  -- 2. Traverse parent directories up to root_dir
+  cur = vim.fs.dirname(cur)
+  while cur and cur ~= "" and cur ~= "." and cur ~= "/" do
+    local p_real = uv.fs_realpath(cur)
+    p_real = p_real and p_real:gsub("/+$", "") or nil
+    if cur == norm_root or (p_real and p_real == root_real) then
+      break
+    end
+    local st = uv.fs_lstat(cur)
+    if st and st.type == "link" then
+      return true, "Symlinked parent directories are not permitted"
+    end
+
+    local parent = vim.fs.dirname(cur)
+    if not parent or parent == cur then
+      break
+    end
+    cur = parent
+  end
+
+  return false, nil
+end
+
+--- Validate an entered single path component name
+---@param name any
+---@return boolean ok
+---@return string? error_msg
+---@return string? clean_name
+function M.validate_name(name)
+  if name == nil then
+    return false, "Name cannot be empty", nil
+  end
+  local clean = tostring(name):match("^%s*(.-)%s*$")
+  if clean == "" then
+    return false, "Name cannot be empty", nil
+  end
+  if clean == "." or clean == ".." then
+    return false, "Name cannot be '.' or '..'", nil
+  end
+  if clean:find("[/\\]") then
+    return false, "Name cannot contain path separators", nil
+  end
+  if clean:find("%z") then
+    return false, "Name cannot contain NUL characters", nil
+  end
+  return true, nil, clean
+end
+
+--- Resolve target directory and relative path prefix for New File/Folder
+---@param target_entry? ProjectEntry
+---@param root_dir? string
+---@return string target_dir absolute path
+---@return string target_rel relative path prefix ("" for root)
+function M.resolve_create_target(target_entry, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  if not target_entry then
+    return root_dir, ""
+  end
+  if target_entry.is_dir then
+    return target_entry.full_path, target_entry.path
+  else
+    local dir = vim.fs.dirname(target_entry.full_path)
+    local rel = vim.fs.dirname(target_entry.path)
+    if rel == "." then rel = "" end
+    return dir, rel
+  end
+end
+
+--- Create an empty regular file at target_dir with name
+---@param target_dir string
+---@param name string
+---@param root_dir? string
+---@return boolean ok
+---@return string result full path on success or error string on failure
+function M.create_file(target_dir, name, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  local ok, err, clean_name = M.validate_name(name)
+  if not ok then
+    return false, err
+  end
+
+  local is_out, out_err = M.is_path_outside_root(target_dir, root_dir)
+  if is_out then
+    return false, out_err
+  end
+
+  local is_sym, sym_err = M.is_symlink_or_has_symlink_parent(target_dir, root_dir)
+  if is_sym then
+    return false, sym_err
+  end
+
+  local st_target = uv.fs_lstat(target_dir)
+  if not st_target or st_target.type ~= "directory" then
+    return false, "Target directory does not exist or is not a directory"
+  end
+
+  local full_path = target_dir:gsub("/+$", "") .. "/" .. clean_name
+  if uv.fs_lstat(full_path) ~= nil then
+    return false, "Destination already exists"
+  end
+
+  local is_dest_out, dest_out_err = M.is_path_outside_root(full_path, root_dir)
+  if is_dest_out then
+    return false, dest_out_err
+  end
+
+  local flags = bit.bor(uv.constants.O_CREAT, uv.constants.O_EXCL, uv.constants.O_WRONLY)
+  local fd, open_err = uv.fs_open(full_path, flags, 420)
+  if not fd then
+    if open_err and (open_err:find("EEXIST") or open_err:find("already exists")) then
+      return false, "Destination already exists"
+    end
+    return false, "Failed to create file: " .. tostring(open_err)
+  end
+  uv.fs_close(fd)
+
+  return true, full_path
+end
+
+--- Create a directory at target_dir with name
+---@param target_dir string
+---@param name string
+---@param root_dir? string
+---@return boolean ok
+---@return string result full path on success or error string on failure
+function M.create_folder(target_dir, name, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  local ok, err, clean_name = M.validate_name(name)
+  if not ok then
+    return false, err
+  end
+
+  local is_out, out_err = M.is_path_outside_root(target_dir, root_dir)
+  if is_out then
+    return false, out_err
+  end
+
+  local is_sym, sym_err = M.is_symlink_or_has_symlink_parent(target_dir, root_dir)
+  if is_sym then
+    return false, sym_err
+  end
+
+  local st_target = uv.fs_lstat(target_dir)
+  if not st_target or st_target.type ~= "directory" then
+    return false, "Target directory does not exist or is not a directory"
+  end
+
+  local full_path = target_dir:gsub("/+$", "") .. "/" .. clean_name
+  if uv.fs_lstat(full_path) ~= nil then
+    return false, "Destination already exists"
+  end
+
+  local is_dest_out, dest_out_err = M.is_path_outside_root(full_path, root_dir)
+  if is_dest_out then
+    return false, dest_out_err
+  end
+
+  local mkdir_ok, mkdir_err = uv.fs_mkdir(full_path, 493)
+  if not mkdir_ok then
+    if mkdir_err and (mkdir_err:find("EEXIST") or mkdir_err:find("already exists")) then
+      return false, "Destination already exists"
+    end
+    return false, "Failed to create folder: " .. tostring(mkdir_err)
+  end
+
+  return true, full_path
+end
+
+--- Rename a file or directory to new_name
+---@param entry ProjectEntry
+---@param new_name string
+---@param root_dir? string
+---@return boolean ok
+---@return string result new full path on success or error string on failure
+---@return boolean unchanged true if name was identical and no mutation occurred
+function M.rename_entry(entry, new_name, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  if not entry or not entry.full_path then
+    return false, "No file or folder selected to rename", false
+  end
+
+  local norm_root = root_dir:gsub("/+$", "")
+  local norm_entry = entry.full_path:gsub("/+$", "")
+  if norm_entry == norm_root or entry.path == "" or entry.path == "." then
+    return false, "Cannot rename the project root", false
+  end
+
+  local ok, err, clean_name = M.validate_name(new_name)
+  if not ok then
+    return false, err, false
+  end
+
+  if clean_name == entry.name then
+    return true, entry.full_path, true
+  end
+
+  local is_out, out_err = M.is_path_outside_root(entry.full_path, root_dir)
+  if is_out then
+    return false, out_err, false
+  end
+
+  local is_sym, sym_err = M.is_symlink_or_has_symlink_parent(entry.full_path, root_dir)
+  if is_sym then
+    return false, sym_err, false
+  end
+
+  local st_source = uv.fs_lstat(entry.full_path)
+  if not st_source then
+    return false, "Source does not exist", false
+  end
+  if st_source.type ~= "file" and st_source.type ~= "directory" then
+    return false, "Only regular files and directories can be renamed", false
+  end
+
+  local parent_dir = vim.fs.dirname(entry.full_path)
+  local dest_full_path = parent_dir:gsub("/+$", "") .. "/" .. clean_name
+
+  if uv.fs_lstat(dest_full_path) ~= nil then
+    return false, "Destination already exists", false
+  end
+
+  local is_dest_out, dest_out_err = M.is_path_outside_root(dest_full_path, root_dir)
+  if is_dest_out then
+    return false, dest_out_err, false
+  end
+
+  local ren_ok, ren_err = atomic_rename_noreplace(entry.full_path, dest_full_path, entry.is_dir)
+  if not ren_ok then
+    return false, ren_err, false
+  end
+
+  return true, dest_full_path, false
 end
 
 return M

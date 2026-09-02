@@ -166,3 +166,35 @@ workbench, Files/Preview and Source Control flows, standard shortcuts,
 installation boundaries, and local-only behavior using a real terminal demo
 GIF and a compact architecture graphic. It must keep upstream and third-party
 attribution and distinguish local validation from hosted release evidence.
+
+## Files mutation brief (TASK-020/TASK-021, accepted 2026-09-03)
+
+The Files view will evolve from a browser and preview surface into a bounded
+local project panel in two stages. `TASK-020` adds creation of regular files
+and directories plus complete-name renaming of files and directories.
+`TASK-021` is proposed follow-up scope for copy, paste, and move after the
+first mutation slice is accepted.
+
+The actions are discoverable through a Files-pane context menu and through
+these context-aware shortcuts: `n` creates a file, `N` creates a folder, and
+`F2` renames the selected item. The existing `r` refresh shortcut remains
+unchanged. Name entry is bounded: `Enter` confirms and `Esc` cancels.
+
+Creation targets the selected directory, the containing directory of a
+selected file, or the project root when no usable selection exists. Rename
+edits one complete name component, so changing a file extension is supported.
+Dot-prefixed names are allowed explicitly and continue to follow the existing
+dot-file visibility setting.
+
+All current-stage mutations remain local and fail closed. Absolute paths,
+parent traversal, path separators, NUL characters, symlinked sources or
+parents, project-root rename, outside-root resolution, and existing targets
+are rejected without overwrite. Successful operations refresh the visible
+lazy tree and preview, keep unaffected expansion state, and follow the new
+selection. An open renamed file preserves its in-memory buffer and unsaved
+content under the new path; it is never silently saved or discarded.
+
+Deletion, duplication, bulk actions, recursive transformations, Git writes,
+remote operations, and network access are not part of this brief. Copy,
+paste, and move require their own source/target and clipboard safety contract
+before `TASK-021` becomes actionable.
