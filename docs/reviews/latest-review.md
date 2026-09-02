@@ -5,7 +5,7 @@ Task ID: `TASK-020`
 Local verdict: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
 Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98` (`origin/main`)
-Candidate: `80ae55fc2a5cee4fd199c06b92e6e175e5bb49b3`
+Candidate: `fc1ccad215b4646e7e36f3eefb37d28d10cac0ec`
 Task branch: `task/TASK-020-files-create-rename`
 Pull request: `NOT_OPEN`
 Remote checks: `OPTIONAL / NOT_RUN`
@@ -16,100 +16,61 @@ Target branch contains change: `NO`
 
 The candidate is on the recorded isolated branch with a clean worktree. Its
 merge base is exactly the fetched `origin/main` baseline, and the complete
-delta is scoped to TASK-020 implementation, tests, and workflow records. The
-full local runner passes, but the real diff contains regressions and missing
-filesystem-boundary checks. Delivery is not approved until the same branch is
-corrected and returned for review.
+delta is scoped to TASK-020 implementation, tests, and project records. The
+three behavioral corrections pass the focused/full local coverage, and the
+supported macOS no-replace path is exercised. Delivery is not approved because
+the directory fallback still violates the task's fail-closed no-overwrite
+contract.
 
 ## Findings
 
-### High — preserve the Diff-view left-pane `N` mapping
+### High — directory rename fallback is still check-then-rename
 
-`config/nvim/lua/novim/workbench.lua:3215-3218` maps `N` to the existing
-Source Control new-comparison endpoint, but `:3227-3231` then installs the
-Files New Folder mapping on the same left buffer without a Files-view guard.
-This overrides the accepted Diff-view mapping. A focused headless probe found
-`DIFF_N_FOLDER_CALLED=true COMPARE_CALLED=false`; in Diff view the new-folder
-handler then returns false, so `N` silently stops assigning the new comparison
-endpoint.
+`config/nvim/lua/novim/browser.lua:79-90` handles the directory case after the
+Darwin/Linux FFI path by checking `uv.fs_lstat(new_path)` and then calling
+`uv.fs_rename(old_path, new_path)`. Ordinary `uv.fs_rename` may replace a
+destination that appears after the check, so this reachable fallback is not an
+atomic no-replace operation. The same function is documented as an atomic,
+fail-closed rename primitive, while the task guardrail says never overwrite an
+existing path.
 
-Required change: make the mapping context-aware so Files view invokes New
-Folder and Diff view preserves the existing comparison action. Add a real
-buffer-map behavior regression.
-
-### High — preflight symlinked New Folder targets
-
-`config/nvim/lua/novim/workbench.lua:1933-1944` references `is_sym` and
-`sym_err` without assigning them. Consequently `open_new_folder_input` skips
-the symlink-parent preflight and opens its modal for a symlinked target. A
-focused probe returned `NEW_FOLDER_SYMLINK_PREFLIGHT=true` for a selected
-symlink directory. The lower-level `create_folder` check still prevents the
-normal confirm from mutating that path, but the UI boundary does not fail
-closed at target resolution as required by ADR-007.
-
-Required change: perform the same `browser.is_symlink_or_has_symlink_parent`
-check used by New File before opening the New Folder modal, report the bounded
-error, and cover the refusal through the Files callback.
-
-### High — reject non-regular special files at rename
-
-`config/nvim/lua/novim/browser.lua:560-563` checks only that the source
-`lstat` succeeds. The browser represents non-directory entries as files,
-so a FIFO or other special node can reach `rename_entry` and be renamed. A
-focused probe successfully renamed a temporary FIFO
-(`SPECIAL_FILE_RENAME=true`). This violates the task's regular-file-or-
-directory scope and expands the mutation surface to special filesystem nodes.
-
-Required change: require the source metadata type to be a regular file or
-directory, reject other types with a bounded error, and add a special-file
-fixture regression.
-
-### High — make collision handling genuinely no-overwrite
-
-`config/nvim/lua/novim/browser.lua:458-471` performs an `lstat` precheck and
-then opens the path with `"w"`, which truncates an existing path if it appears
-between those operations. Similarly, `:568-577` prechecks the rename
-destination and then calls `uv.fs_rename`, whose normal POSIX behavior
-replaces a destination that appears after the check. The sequential collision
-tests pass, but these are not atomic no-overwrite mutations and violate the
-explicit collision/overwrite guardrail under a local race.
-
-Required change: use exclusive/no-follow-safe creation and a platform-safe
-no-replace rename strategy, or otherwise prove an equivalent fail-closed
-primitive. Add focused coverage for the no-overwrite contract where the
-platform permits deterministic simulation.
+Required change: use a genuinely no-replace directory primitive on every
+supported execution path, or fail closed with a bounded error when such a
+primitive is unavailable. Do not fall back to prechecked `uv.fs_rename` for a
+directory. Add or retain a regression that proves the fallback cannot replace
+a destination when the platform-native primitive is unavailable.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Files context menu, shortcuts, and key-help documentation | PARTIAL | The Files context menu and new actions pass the focused suite, but the Diff-view left-pane `N` mapping is overridden. |
-| Create file/folder at resolved root, directory, and file-parent targets | PASS for sequential paths | `test_task020_new_file_and_folder_creation_and_preview` passes; New Folder symlink preflight is missing. |
-| Complete-name file/directory rename | PARTIAL | File, extension, directory, expansion, and buffer-preservation tests pass; special-file rename is not rejected. |
-| Validation, cancellation, collisions, and visible errors | PARTIAL | Input/cancellation/sequential collision tests pass; race-safe no-overwrite and New Folder preflight are incomplete. |
-| Symlink, root, and outside-root fail-closed boundaries | PARTIAL | Covered file/symlink/root/outside cases pass; New Folder target preflight is missing. |
-| Dot-prefixed visibility behavior | PASS | `test_task020_dotfile_creation_and_visibility` passes. |
-| Refresh, preview, expansion, and visible selection | PASS for covered operations | Create/rename refresh and expansion assertions pass in the focused suite. |
-| Open-buffer and unsaved-content preservation | PASS | `test_task020_rename_file_and_directory_and_buffer_preservation` passes. |
-| Failure invariance and existing-suite compatibility | PARTIAL | Existing sequential failures and invariance pass; the special-file and race boundary are not covered. |
-| Focused/full local validation | PASS | `./tests/run_tests.sh` passed 65/65 workbench tests, the offline package suite, and 9/9 smoke tests; shell syntax and `git diff --check` passed. |
+| Files context menu, shortcuts, and key-help documentation | PASS locally | Context-menu and mapping regressions pass; Diff-view `N` keeps the comparison action and Files-view `N` opens New Folder. |
+| Create file/folder at resolved root, directory, and file-parent targets | PASS locally | Real Files-pane input tests pass, including root, nested directory, and file-parent targeting. |
+| Complete-name file/directory rename | PASS locally | File, extension, directory, expansion, and open-buffer preservation tests pass; FIFO rename is rejected. |
+| Validation, cancellation, collisions, and visible errors | PASS for covered paths | Input, cancellation, invalid names, symlink preflight, sequential collisions, and exclusive file creation pass. Directory fallback race remains blocking. |
+| Symlink, root, and outside-root fail-closed boundaries | PASS locally | Symlinked New Folder targets, symlink sources/parents, project-root rename, and outside-root attempts are covered. |
+| Dot-prefixed visibility behavior | PASS locally | `test_task020_dotfile_creation_and_visibility` passes. |
+| Refresh, preview, expansion, and visible selection | PASS locally | Create/rename refresh and selection-follow behavior pass in the focused suite. |
+| Open-buffer and unsaved-content preservation | PASS locally | `test_task020_rename_file_and_directory_and_buffer_preservation` passes. |
+| Failure invariance and existing-suite compatibility | PARTIAL | Existing local suites pass, but the directory fallback does not meet the no-overwrite race contract. |
+| Focused/full local validation | PASS | `./tests/run_tests.sh` passed 65/65 workbench tests, the offline package/installer suite, and 9/9 smoke tests; shell syntax and `git diff --check` passed. |
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
-  task, backlog, previous review, architecture, and ADR-007.
+  task, backlog, prior review, architecture, and ADR-007.
 - Fetched `origin/main` and confirmed it remains
   `6b8ca01312fcb1052b2fa8021606354636037b98`; confirmed that it is the
   candidate's merge base. The branch is clean after validation.
-- Inspected the complete candidate diff: 12 changed files, limited to the
-  TASK-020 product code, deterministic tests, and scoped project records.
+- Inspected the complete candidate diff: 13 changed files, limited to the
+  TASK-020 product code, deterministic tests, ADR/product records, and scoped
+  project records.
 - Reran `git diff --check` and the applicable shell syntax checks.
 - Reran `./tests/run_tests.sh` independently: 65/65 workbench tests passed,
   the offline package/installer suite passed, and the smoke suite passed 9/9.
-- Ran focused local headless probes for the New Folder symlink preflight, the
-  Diff-view `N` mapping, and special-file rename. These are temporary local
-  fixtures only; they are not hosted, production, recovery, or
-  customer-acceptance evidence.
+- Independently confirmed the checkout's macOS FFI `renamex_np` symbol is
+  available and that the focused collision regressions pass. The fallback
+  code path was reviewed statically because it is not active on this checkout.
 
 All evidence above is local review evidence. No hosted, production, recovery,
 or customer-acceptance claim is made.
@@ -118,12 +79,11 @@ or customer-acceptance claim is made.
 
 `CHANGES_REQUESTED`. No PR, push, merge, repository rename, tag, release, or
 other remote delivery action was attempted. Keep TASK-020 active on the same
-branch and return it to `$stateless-implementer` for the four findings above.
+branch and return it to `$stateless-implementer` for the directory fallback
+correction.
 
 ## Next action
 
-Revise TASK-020 on `task/TASK-020-files-create-rename`: preserve the Diff-view
-`N` action, restore New Folder symlink preflight, reject special-file rename,
-and implement no-overwrite create/rename semantics with focused regressions.
-Rerun `./tests/run_tests.sh` and the required local checks, then request a new
-review of the same task.
+Revise `atomic_rename_noreplace` so directory renames never use a prechecked
+ordinary rename as a no-overwrite fallback. Rerun `./tests/run_tests.sh` and
+the required local checks, then request a new review of the same task.

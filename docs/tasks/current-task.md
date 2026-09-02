@@ -2,7 +2,7 @@
 
 Updated: 2026-09-03
 Task ID: `TASK-020`
-- Status: `READY_FOR_REVIEW`
+- Status: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-020-files-create-rename`
@@ -155,8 +155,19 @@ safety boundaries.
 
 ### Residual risks
 
-- None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
+- Review found one blocking portability boundary: the directory fallback in
+  `atomic_rename_noreplace` still performs a destination `lstat` followed by
+  ordinary `uv.fs_rename`, which can replace a destination created between
+  those operations. Copy, paste, and move remain deferred to proposed
+  `TASK-021` per ADR-007.
 
-### Next action
+### Review follow-up
 
-Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local review.
+Local re-review at `fc1ccad215b4646e7e36f3eefb37d28d10cac0ec` is
+`CHANGES_REQUESTED`. The same task remains active; no PR, push, or merge was
+attempted.
+
+Required correction: remove the prechecked ordinary directory rename fallback
+from `atomic_rename_noreplace`; use a genuinely no-replace primitive or fail
+closed when it is unavailable. Return the same branch to review after the
+focused regression and required local validation rerun.
