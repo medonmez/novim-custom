@@ -13,8 +13,10 @@ local M = {}
 local on_left_click
 local on_left_drag
 local on_left_release
+local on_right_click
 local install_diff_middle_maps
 local install_editor_maps
+local rebuild_project_view
 
 -- State
 local state = {
@@ -68,6 +70,10 @@ local state = {
   -- Both are session-only and never persisted.
   copy_notice = nil,    -- { level = "ok" | "error", text = string }
   preview_return = nil, -- { buf, win, prev_win }
+
+  -- Files create/rename and context menu state (TASK-020)
+  file_input = nil,   -- { buf, win, prev_win, mode = "new_file"|"new_folder"|"rename", target, error, config }
+  context_menu = nil, -- { buf, win, prev_win, selected, items, target }
 
   header_line_count = 4,
   buf_left = nil,
@@ -300,6 +306,13 @@ function M.render_left_pane()
     local summary_text = string.format(" Files: %d, Dirs: %d (%s)", state.project_stats.file_count, state.project_stats.dir_count, dot_status)
     table.insert(lines, summary_text)
     table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchSummary" })
+
+    -- Bounded, visible notice about the last attempted Files write action (TASK-020).
+    if state.write_notice then
+      local is_error = (state.write_notice.level == "error")
+      table.insert(lines, (is_error and " ! " or " ✓ ") .. tostring(state.write_notice.text))
+      table.insert(highlights, { #lines - 1, 0, -1, is_error and "WorkbenchError" or "WorkbenchClean" })
+    end
 
     table.insert(lines, " " .. string.rep("─", 44))
     table.insert(highlights, { #lines - 1, 0, -1, "WorkbenchDivider" })
@@ -1568,6 +1581,638 @@ function M.commit_staged(message)
   return true
 end
 
+-- =========================================================================
+-- Files local mutations (TASK-020): create file/folder, rename, context menu
+-- =========================================================================
+
+--- Whether the bounded file input modal is currently open.
+---@return boolean
+function M.file_input_open()
+  return state.file_input ~= nil and state.file_input.win ~= nil
+    and vim.api.nvim_win_is_valid(state.file_input.win)
+end
+
+--- Whether the Files context menu is currently open.
+---@return boolean
+function M.context_menu_open()
+  return state.context_menu ~= nil and state.context_menu.win ~= nil
+    and vim.api.nvim_win_is_valid(state.context_menu.win)
+end
+
+--- Close the file input modal without filesystem mutation and restore focus.
+local function close_file_input()
+  local fi = state.file_input
+  if not fi then return end
+  state.file_input = nil
+  if fi.win and vim.api.nvim_win_is_valid(fi.win) then
+    pcall(vim.api.nvim_win_hide, fi.win)
+  end
+  if fi.buf and vim.api.nvim_buf_is_valid(fi.buf) then
+    pcall(vim.api.nvim_buf_delete, fi.buf, { force = true })
+  end
+  if fi.prev_win and vim.api.nvim_win_is_valid(fi.prev_win) then
+    pcall(vim.api.nvim_set_current_win, fi.prev_win)
+  end
+end
+
+--- Close the Files context menu and restore focus.
+local function close_context_menu()
+  local cm = state.context_menu
+  if not cm then return end
+  state.context_menu = nil
+  if cm.win and vim.api.nvim_win_is_valid(cm.win) then
+    pcall(vim.api.nvim_win_hide, cm.win)
+  end
+  if cm.buf and vim.api.nvim_buf_is_valid(cm.buf) then
+    pcall(vim.api.nvim_buf_delete, cm.buf, { force = true })
+  end
+  if cm.prev_win and vim.api.nvim_win_is_valid(cm.prev_win) then
+    pcall(vim.api.nvim_set_current_win, cm.prev_win)
+  end
+end
+
+--- Update the title of the active file input modal float.
+local function set_file_input_title(title)
+  local fi = state.file_input
+  if fi and fi.config and fi.win and vim.api.nvim_win_is_valid(fi.win) then
+    local cfg = vim.deepcopy(fi.config)
+    cfg.title = title
+    pcall(vim.api.nvim_win_set_config, fi.win, cfg)
+  end
+end
+
+--- Update in-memory buffers when a file or directory is renamed so open buffers follow the new path.
+local function migrate_open_buffers_on_rename(old_full, new_full, is_dir)
+  old_full = old_full:gsub("/+$", "")
+  new_full = new_full:gsub("/+$", "")
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      local b_name = vim.api.nvim_buf_get_name(buf):gsub("/+$", "")
+      if not is_dir and b_name == old_full then
+        pcall(vim.api.nvim_buf_set_name, buf, new_full)
+        pcall(function()
+          vim.api.nvim_buf_call(buf, function()
+            vim.cmd("filetype detect")
+          end)
+        end)
+      elseif is_dir and (b_name == old_full or b_name:sub(1, #old_full + 1) == old_full .. "/") then
+        local rest = b_name:sub(#old_full + 1)
+        local updated_name = new_full .. rest
+        pcall(vim.api.nvim_buf_set_name, buf, updated_name)
+        pcall(function()
+          vim.api.nvim_buf_call(buf, function()
+            vim.cmd("filetype detect")
+          end)
+        end)
+      end
+    end
+  end
+end
+
+--- Migrate expansion state when a directory is renamed so unaffected folders stay expanded.
+local function migrate_expanded_dirs_on_rename(old_rel, new_rel)
+  local updated = {}
+  for path, v in pairs(state.expanded_dirs) do
+    if path == old_rel then
+      updated[new_rel] = v
+    elseif path:sub(1, #old_rel + 1) == old_rel .. "/" then
+      updated[new_rel .. path:sub(#old_rel + 1)] = v
+    else
+      updated[path] = v
+    end
+  end
+  state.expanded_dirs = updated
+end
+
+--- Confirm the entered name in file_input.
+local function confirm_file_input()
+  local fi = state.file_input
+  if not fi or not fi.buf or not vim.api.nvim_buf_is_valid(fi.buf) then
+    return false
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(fi.buf, 0, 1, false)
+  local raw_name = lines[1] or ""
+  local ok_name, err_name, clean_name = browser.validate_name(raw_name)
+  if not ok_name then
+    fi.error = err_name
+    set_file_input_title(" ! " .. err_name .. " ")
+    return false
+  end
+
+  local show_dots = settings.get("show_dotfiles")
+
+  if fi.mode == "new_file" then
+    local ok, res = browser.create_file(fi.target_dir, clean_name, state.root_dir)
+    if not ok then
+      fi.error = res
+      set_file_input_title(" ! " .. res .. " ")
+      return false
+    end
+    local target_rel = (fi.target_rel ~= "" and (fi.target_rel .. "/") or "") .. clean_name
+    close_file_input()
+    state.write_notice = { level = "ok", text = "Created file: " .. target_rel }
+    rebuild_project_view(show_dots)
+    M.render_left_pane()
+    local found_idx = nil
+    for idx, e in ipairs(state.project_files) do
+      if e.full_path == res then
+        found_idx = idx
+        break
+      end
+    end
+    if found_idx then
+      M.select_file(found_idx)
+    else
+      M.render_right_pane()
+    end
+    return true
+
+  elseif fi.mode == "new_folder" then
+    local ok, res = browser.create_folder(fi.target_dir, clean_name, state.root_dir)
+    if not ok then
+      fi.error = res
+      set_file_input_title(" ! " .. res .. " ")
+      return false
+    end
+    local target_rel = (fi.target_rel ~= "" and (fi.target_rel .. "/") or "") .. clean_name
+    close_file_input()
+    state.write_notice = { level = "ok", text = "Created folder: " .. target_rel }
+    rebuild_project_view(show_dots)
+    M.render_left_pane()
+    local found_idx = nil
+    for idx, e in ipairs(state.project_files) do
+      if e.full_path == res then
+        found_idx = idx
+        break
+      end
+    end
+    if found_idx then
+      M.select_file(found_idx)
+    else
+      M.render_right_pane()
+    end
+    return true
+
+  elseif fi.mode == "rename" then
+    local entry = fi.entry
+    local ok, res, unchanged = browser.rename_entry(entry, clean_name, state.root_dir)
+    if not ok then
+      fi.error = res
+      set_file_input_title(" ! " .. res .. " ")
+      return false
+    end
+    if unchanged then
+      close_file_input()
+      return true
+    end
+
+    local old_full = entry.full_path
+    local old_rel = entry.path
+    local new_full = res
+    local is_dir = entry.is_dir
+    local parent_rel = vim.fs.dirname(old_rel)
+    local new_rel = (parent_rel ~= "" and parent_rel ~= "." and (parent_rel .. "/") or "") .. clean_name
+
+    migrate_open_buffers_on_rename(old_full, new_full, is_dir)
+    if is_dir then
+      migrate_expanded_dirs_on_rename(old_rel, new_rel)
+    end
+
+    close_file_input()
+    state.write_notice = { level = "ok", text = "Renamed: " .. entry.name .. " -> " .. clean_name }
+    rebuild_project_view(show_dots)
+    M.render_left_pane()
+    local found_idx = nil
+    for idx, e in ipairs(state.project_files) do
+      if e.full_path == new_full then
+        found_idx = idx
+        break
+      end
+    end
+    if found_idx then
+      M.select_file(found_idx)
+    else
+      M.render_right_pane()
+    end
+    return true
+  end
+
+  return false
+end
+
+--- Open the bounded single-line input float for New File, New Folder, or Rename.
+local function open_file_input_modal(mode, default_title, initial_text, data)
+  if M.file_input_open() then
+    vim.api.nvim_set_current_win(state.file_input.win)
+    return true
+  end
+
+  local prev_win = vim.api.nvim_get_current_win()
+  local width = math.max(30, math.min(64, vim.o.columns - 8))
+  local height = 1
+  local row = math.max(1, math.floor((vim.o.lines - 8) / 2))
+  local col = math.max(1, math.floor((vim.o.columns - width) / 2))
+
+  local buf = fresh_buffer("[Workbench - File Input]")
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buflisted = false
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { initial_text or "" })
+
+  local input_config = {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = default_title,
+    title_pos = "center",
+  }
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, input_config)
+  if not ok or not win then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    return false
+  end
+
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].spell = false
+
+  state.file_input = {
+    buf = buf,
+    win = win,
+    prev_win = prev_win,
+    mode = mode,
+    target_dir = data.target_dir,
+    target_rel = data.target_rel,
+    entry = data.entry,
+    default_title = default_title,
+    config = input_config,
+    error = nil,
+  }
+
+  local opts = { buffer = buf, silent = true, noremap = true }
+  vim.keymap.set("n", "<CR>", function() return confirm_file_input() end, opts)
+  vim.keymap.set("n", "<Esc>", function()
+    close_file_input()
+    return true
+  end, opts)
+  vim.keymap.set("i", "<CR>", function()
+    vim.cmd("stopinsert")
+    return confirm_file_input()
+  end, opts)
+  vim.keymap.set("i", "<Esc>", function()
+    vim.cmd("stopinsert")
+    close_file_input()
+    return true
+  end, opts)
+
+  vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+    buffer = buf,
+    callback = function()
+      local fi = state.file_input
+      if fi and fi.error then
+        fi.error = nil
+        set_file_input_title(fi.default_title)
+      end
+    end,
+  })
+
+  vim.cmd("startinsert!")
+  return true
+end
+
+--- Open New File input modal for selected entry or project root.
+---@param target_entry? ProjectEntry
+---@return boolean success
+function M.open_new_file_input(...)
+  local target_entry = ...
+  local num_args = select("#", ...)
+  if state.view_mode ~= "files" then return false end
+  close_context_menu()
+  if num_args == 0 then
+    target_entry = (state.selected_project_index and state.project_files[state.selected_project_index])
+  end
+  local target_dir, target_rel = browser.resolve_create_target(target_entry, state.root_dir)
+  local is_sym, sym_err = browser.is_symlink_or_has_symlink_parent(target_dir, state.root_dir)
+  if is_sym then
+    state.write_notice = { level = "error", text = sym_err }
+    M.render_left_pane()
+    return false
+  end
+  local is_out, out_err = browser.is_path_outside_root(target_dir, state.root_dir)
+  if is_out then
+    state.write_notice = { level = "error", text = out_err }
+    M.render_left_pane()
+    return false
+  end
+
+  local title = " New File — Enter: create, Esc: cancel "
+  return open_file_input_modal("new_file", title, "", {
+    target_dir = target_dir,
+    target_rel = target_rel,
+  })
+end
+
+--- Open New Folder input modal for selected entry or project root.
+---@param target_entry? ProjectEntry
+---@return boolean success
+function M.open_new_folder_input(...)
+  local target_entry = ...
+  local num_args = select("#", ...)
+  if state.view_mode ~= "files" then return false end
+  close_context_menu()
+  if num_args == 0 then
+    target_entry = (state.selected_project_index and state.project_files[state.selected_project_index])
+  end
+  local target_dir, target_rel = browser.resolve_create_target(target_entry, state.root_dir)
+  if is_sym then
+    state.write_notice = { level = "error", text = sym_err }
+    M.render_left_pane()
+    return false
+  end
+  local is_out, out_err = browser.is_path_outside_root(target_dir, state.root_dir)
+  if is_out then
+    state.write_notice = { level = "error", text = out_err }
+    M.render_left_pane()
+    return false
+  end
+
+  local title = " New Folder — Enter: create, Esc: cancel "
+  return open_file_input_modal("new_folder", title, "", {
+    target_dir = target_dir,
+    target_rel = target_rel,
+  })
+end
+
+--- Open Rename input modal for selected entry.
+---@param target_entry? ProjectEntry
+---@return boolean success
+function M.open_rename_input(target_entry)
+  if state.view_mode ~= "files" then return false end
+  close_context_menu()
+  target_entry = target_entry or (state.selected_project_index and state.project_files[state.selected_project_index])
+  if not target_entry or not target_entry.full_path then
+    state.write_notice = { level = "error", text = "No file or folder selected to rename" }
+    M.render_left_pane()
+    return false
+  end
+
+  local norm_root = state.root_dir:gsub("/+$", "")
+  local norm_entry = target_entry.full_path:gsub("/+$", "")
+  if norm_entry == norm_root or target_entry.path == "" or target_entry.path == "." then
+    state.write_notice = { level = "error", text = "Cannot rename the project root" }
+    M.render_left_pane()
+    return false
+  end
+
+  local is_sym, sym_err = browser.is_symlink_or_has_symlink_parent(target_entry.full_path, state.root_dir)
+  if is_sym then
+    state.write_notice = { level = "error", text = sym_err }
+    M.render_left_pane()
+    return false
+  end
+  local is_out, out_err = browser.is_path_outside_root(target_entry.full_path, state.root_dir)
+  if is_out then
+    state.write_notice = { level = "error", text = out_err }
+    M.render_left_pane()
+    return false
+  end
+
+  local title = " Rename — Enter: confirm, Esc: cancel "
+  return open_file_input_modal("rename", title, target_entry.name, {
+    entry = target_entry,
+  })
+end
+
+--- Render the context menu buffer lines and highlights.
+local function render_context_menu()
+  local cm = state.context_menu
+  if not cm or not cm.buf or not vim.api.nvim_buf_is_valid(cm.buf) then
+    return
+  end
+  vim.bo[cm.buf].modifiable = true
+  local lines = {}
+  for idx, item in ipairs(cm.items) do
+    local marker = (idx == cm.selected) and "▶" or " "
+    table.insert(lines, string.format(" %s %s", marker, item.label))
+  end
+  vim.api.nvim_buf_set_lines(cm.buf, 0, -1, false, lines)
+  vim.bo[cm.buf].modifiable = false
+
+  pcall(vim.api.nvim_buf_clear_namespace, cm.buf, state.ns_id, 0, -1)
+  if cm.selected and cm.selected >= 1 and cm.selected <= #cm.items then
+    pcall(vim.api.nvim_buf_add_highlight, cm.buf, state.ns_id, "PmenuSel", cm.selected - 1, 0, -1)
+  end
+end
+
+--- Confirm the active context menu item.
+local function confirm_context_menu()
+  local cm = state.context_menu
+  if not cm then return false end
+  local item = cm.items[cm.selected]
+  local target = cm.target
+  close_context_menu()
+  if not item then return false end
+  if item.action == "new_file" then
+    return M.open_new_file_input(target)
+  elseif item.action == "new_folder" then
+    return M.open_new_folder_input(target)
+  elseif item.action == "rename" then
+    return M.open_rename_input(target)
+  end
+  return false
+end
+
+--- Open the Files context menu.
+---@param target_entry? ProjectEntry
+---@param pos? { screenrow?: integer, screencol?: integer }
+---@return boolean success
+function M.open_context_menu(...)
+  local target_entry, pos = ...
+  local num_args = select("#", ...)
+  if state.view_mode ~= "files" then return false end
+  if M.context_menu_open() then
+    close_context_menu()
+  end
+
+  if num_args == 0 then
+    target_entry = (state.selected_project_index and state.project_files[state.selected_project_index])
+  end
+
+  local items = {}
+  table.insert(items, { label = "New File     (n)", action = "new_file" })
+  table.insert(items, { label = "New Folder   (N)", action = "new_folder" })
+  if target_entry and target_entry.full_path then
+    local norm_root = state.root_dir:gsub("/+$", "")
+    local norm_entry = target_entry.full_path:gsub("/+$", "")
+    if norm_entry ~= norm_root and target_entry.path ~= "" and target_entry.path ~= "." then
+      table.insert(items, { label = "Rename       (F2)", action = "rename" })
+    end
+  end
+
+  local width = 24
+  local height = #items
+  local row, col
+
+  if pos and pos.screenrow and pos.screencol then
+    row = math.min(vim.o.lines - height - 2, math.max(1, pos.screenrow))
+    col = math.min(vim.o.columns - width - 2, math.max(1, pos.screencol))
+  elseif state.win_left and vim.api.nvim_win_is_valid(state.win_left) then
+    local win_pos = vim.api.nvim_win_get_position(state.win_left)
+    local cursor = vim.api.nvim_win_get_cursor(state.win_left)
+    row = math.min(vim.o.lines - height - 2, math.max(1, win_pos[1] + cursor[1]))
+    col = math.min(vim.o.columns - width - 2, math.max(1, win_pos[2] + 4))
+  else
+    row = math.max(1, math.floor((vim.o.lines - height) / 2))
+    col = math.max(1, math.floor((vim.o.columns - width) / 2))
+  end
+
+  local prev_win = vim.api.nvim_get_current_win()
+  local buf = fresh_buffer("[Workbench - Context Menu]")
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].buflisted = false
+
+  local win_config = {
+    relative = "editor",
+    width = width,
+    height = height,
+    row = row,
+    col = col,
+    style = "minimal",
+    border = "rounded",
+    title = " Files ",
+    title_pos = "center",
+  }
+  local ok, win = pcall(vim.api.nvim_open_win, buf, true, win_config)
+  if not ok or not win then
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    return false
+  end
+
+  vim.wo[win].number = false
+  vim.wo[win].relativenumber = false
+  vim.wo[win].signcolumn = "no"
+  vim.wo[win].spell = false
+  vim.wo[win].cursorline = false
+
+  state.context_menu = {
+    buf = buf,
+    win = win,
+    prev_win = prev_win,
+    selected = 1,
+    items = items,
+    target = target_entry,
+  }
+
+  render_context_menu()
+
+  local opts = { buffer = buf, silent = true, noremap = true }
+  vim.keymap.set("n", "j", function()
+    local cm = state.context_menu
+    if cm then
+      cm.selected = (cm.selected % #cm.items) + 1
+      render_context_menu()
+    end
+  end, opts)
+  vim.keymap.set("n", "<Down>", function()
+    local cm = state.context_menu
+    if cm then
+      cm.selected = (cm.selected % #cm.items) + 1
+      render_context_menu()
+    end
+  end, opts)
+  vim.keymap.set("n", "k", function()
+    local cm = state.context_menu
+    if cm then
+      cm.selected = (cm.selected - 2 + #cm.items) % #cm.items + 1
+      render_context_menu()
+    end
+  end, opts)
+  vim.keymap.set("n", "<Up>", function()
+    local cm = state.context_menu
+    if cm then
+      cm.selected = (cm.selected - 2 + #cm.items) % #cm.items + 1
+      render_context_menu()
+    end
+  end, opts)
+  vim.keymap.set("n", "<CR>", confirm_context_menu, opts)
+  vim.keymap.set("n", "<Space>", confirm_context_menu, opts)
+  vim.keymap.set("n", "<Esc>", function()
+    close_context_menu()
+    return true
+  end, opts)
+  vim.keymap.set("n", "q", function()
+    close_context_menu()
+    return true
+  end, opts)
+  vim.keymap.set("n", "n", function()
+    local target = state.context_menu and state.context_menu.target or nil
+    close_context_menu()
+    return M.open_new_file_input(target)
+  end, opts)
+  vim.keymap.set("n", "N", function()
+    local target = state.context_menu and state.context_menu.target or nil
+    close_context_menu()
+    return M.open_new_folder_input(target)
+  end, opts)
+  vim.keymap.set("n", "<F2>", function()
+    local cm = state.context_menu
+    local has_rename = false
+    if cm then
+      for _, it in ipairs(cm.items) do
+        if it.action == "rename" then has_rename = true end
+      end
+    end
+    local target = cm and cm.target or nil
+    close_context_menu()
+    if has_rename then
+      return M.open_rename_input(target)
+    end
+    return false
+  end, opts)
+  vim.keymap.set("n", "<LeftMouse>", function()
+    local mouse = vim.fn.getmousepos()
+    local cm = state.context_menu
+    if cm and mouse.winid == cm.win then
+      local idx = mouse.line
+      if cm.items[idx] then
+        cm.selected = idx
+        confirm_context_menu()
+      end
+    else
+      close_context_menu()
+    end
+  end, opts)
+
+  return true
+end
+
+--- Handle right click mouse event in workbench
+on_right_click = function()
+  if state.view_mode ~= "files" then return end
+  local mouse = vim.fn.getmousepos()
+  if mouse.winid == state.win_left then
+    local p_idx = state.line_to_project_index[mouse.line]
+    if p_idx then
+      state.selected_project_index = p_idx
+      M.render_left_pane()
+      M.render_right_pane()
+    end
+    M.open_context_menu(p_idx and state.project_files[p_idx] or nil, {
+      screenrow = mouse.screenrow,
+      screencol = mouse.screencol,
+    })
+  end
+end
+
 
 --- Install the history pane buffer maps. j/k/Up/Down and the mouse move the
 --- selection; O/N assign the old/new comparison endpoint from the selected
@@ -1781,7 +2426,7 @@ end
 --- Scans only the root directory plus currently expanded folders, so the
 --- workbench never performs a recursive traversal of the whole tree.
 ---@param show_dots boolean
-local function rebuild_project_view(show_dots)
+rebuild_project_view = function(show_dots)
   local visible = {}
   local seen_dirs = {}
 
@@ -2319,6 +2964,8 @@ function M.close(opts)
   -- Git mutation. Layout persistence is unaffected.
   close_commit_input()
   close_preview_return_confirm()
+  close_file_input()
+  close_context_menu()
   state.write_notice = nil
   state.copy_notice = nil
   -- Persist the effective layout before any teardown path runs.
@@ -2576,6 +3223,12 @@ function M.open(opts)
     vim.keymap.set("n", "a", function() return M.stage_selected_file() end, opts)
     vim.keymap.set("n", "u", function() return M.unstage_selected_file() end, opts)
     vim.keymap.set("n", "c", function() return M.open_commit_input() end, opts)
+
+    -- Files view mutations (TASK-020): create file, create folder, rename, context menu
+    vim.keymap.set("n", "n", function() return M.open_new_file_input() end, opts)
+    vim.keymap.set("n", "N", function() return M.open_new_folder_input() end, opts)
+    vim.keymap.set("n", "<F2>", function() return M.open_rename_input() end, opts)
+    vim.keymap.set("n", "m", function() return M.open_context_menu() end, opts)
     vim.keymap.set("n", "<CR>", function()
       local cursor = vim.api.nvim_win_get_cursor(0)
       if state.view_mode == "files" then
@@ -2629,6 +3282,7 @@ function M.open(opts)
 
     -- Mouse navigation
     vim.keymap.set("n", "<LeftMouse>", on_left_click, opts)
+    vim.keymap.set("n", "<RightMouse>", on_right_click, opts)
     vim.keymap.set("n", "<2-LeftMouse>", function()
       local mouse = vim.fn.getmousepos()
       if mouse.winid ~= state.win_left then
@@ -2793,6 +3447,8 @@ function M.open(opts)
   state.copy_notice = nil
 
   -- Populate data
+  state.file_input = nil
+  state.context_menu = nil
   M.refresh()
 end
 
@@ -2849,6 +3505,20 @@ function M.get_state()
       old = vim.deepcopy(state.compare.old),
       new = vim.deepcopy(state.compare.new),
       error = state.compare.error,
+    },
+    file_input = {
+      open = M.file_input_open(),
+      buf = state.file_input and state.file_input.buf or nil,
+      win = state.file_input and state.file_input.win or nil,
+      mode = state.file_input and state.file_input.mode or nil,
+      error = state.file_input and state.file_input.error or nil,
+    },
+    context_menu = {
+      open = M.context_menu_open(),
+      buf = state.context_menu and state.context_menu.buf or nil,
+      win = state.context_menu and state.context_menu.win or nil,
+      selected = state.context_menu and state.context_menu.selected or nil,
+      items = state.context_menu and vim.deepcopy(state.context_menu.items) or nil,
     },
     history_header_line_count = state.history_header_line_count,
     line_to_history_index = state.line_to_history_index,

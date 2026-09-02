@@ -4,7 +4,7 @@ Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-020` (`PLANNED`; Files create/rename)
+Current task: `TASK-020` (`READY_FOR_REVIEW`; Files create/rename)
 Base branch: `main`
 Task branch: `task/TASK-020-files-create-rename`
 Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`

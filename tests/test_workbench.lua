@@ -4294,6 +4294,476 @@ function tests.test_task014_editor_keymap_docs_match_real_mappings()
 end
 
 -- =========================================================================
+-- TASK-020: Files Create, Rename, Context Menu & Buffer Preservation Tests
+-- =========================================================================
+
+local function find_entry_in_files(project_files, path)
+  for idx, entry in ipairs(project_files) do
+    if entry.path == path or entry.name == path then
+      return entry, idx
+    end
+  end
+  return nil, nil
+end
+
+function tests.test_task020_context_menu_shortcuts_and_actions()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Context menu on selected regular file exposes New File, New Folder, Rename
+  local readme_entry, readme_idx = find_entry_in_files(st.project_files, "README.md")
+  assert_true(readme_entry ~= nil, "fixture must contain README.md")
+  workbench.select_file(readme_idx)
+
+  assert_true(workbench.open_context_menu(), "open_context_menu must succeed")
+  st = workbench.get_state()
+  assert_true(st.context_menu.open, "context menu must be open")
+  assert_eq(#st.context_menu.items, 3, "selected file must have 3 context menu items")
+  assert_eq(st.context_menu.selected, 1, "default selection is item 1")
+
+  -- Keyboard navigation: j moves down, k moves up
+  local j_cb = buffer_map_callback(st.context_menu.buf, "j")
+  local k_cb = buffer_map_callback(st.context_menu.buf, "k")
+  j_cb()
+  st = workbench.get_state()
+  assert_eq(st.context_menu.selected, 2, "j must move selection to item 2")
+  j_cb()
+  st = workbench.get_state()
+  assert_eq(st.context_menu.selected, 3, "j must move selection to item 3")
+  k_cb()
+  st = workbench.get_state()
+  assert_eq(st.context_menu.selected, 2, "k must move selection back to item 2")
+
+  -- Esc cancels context menu without action
+  local esc_menu = buffer_map_callback(st.context_menu.buf, "<Esc>")
+  assert_true(esc_menu(), "Esc must close context menu")
+  st = workbench.get_state()
+  assert_true(not st.context_menu.open, "context menu must be closed")
+
+  -- 2. Context menu when no entry or root is targeted has no Rename item
+  assert_true(workbench.open_context_menu(nil), "open_context_menu on root must succeed")
+  st = workbench.get_state()
+  assert_true(st.context_menu.open, "context menu must be open")
+  assert_eq(#st.context_menu.items, 2, "root context menu must have exactly 2 items (no Rename)")
+  esc_menu = buffer_map_callback(st.context_menu.buf, "<Esc>")
+  esc_menu()
+
+  -- 3. Direct shortcuts from buf_left: n, N, F2
+  local n_cb = buffer_map_callback(st.buf_left, "n")
+  local n_upper_cb = buffer_map_callback(st.buf_left, "N")
+  local f2_cb = buffer_map_callback(st.buf_left, "<F2>")
+  local m_cb = buffer_map_callback(st.buf_left, "m")
+  local rclick_cb = buffer_map_callback(st.buf_left, "<RightMouse>")
+  assert_true(n_cb ~= nil and n_upper_cb ~= nil and f2_cb ~= nil and m_cb ~= nil and rclick_cb ~= nil,
+    "buf_left must map n, N, <F2>, m, <RightMouse>")
+
+  -- 'n' opens new file input
+  assert_true(n_cb(), "n must open new file input")
+  st = workbench.get_state()
+  assert_true(st.file_input.open, "file input must be open")
+  assert_eq(st.file_input.mode, "new_file", "mode must be new_file")
+  local esc_fi = buffer_map_callback(st.file_input.buf, "<Esc>")
+  esc_fi()
+
+  -- 'N' opens new folder input
+  assert_true(n_upper_cb(), "N must open new folder input")
+  st = workbench.get_state()
+  assert_true(st.file_input.open, "file input must be open")
+  assert_eq(st.file_input.mode, "new_folder", "mode must be new_folder")
+  esc_fi = buffer_map_callback(st.file_input.buf, "<Esc>")
+  esc_fi()
+
+  -- '<F2>' opens rename input
+  workbench.select_file(readme_idx)
+  assert_true(f2_cb(), "<F2> must open rename input")
+  st = workbench.get_state()
+  assert_true(st.file_input.open, "file input must be open")
+  assert_eq(st.file_input.mode, "rename", "mode must be rename")
+  esc_fi = buffer_map_callback(st.file_input.buf, "<Esc>")
+  esc_fi()
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task020_new_file_and_folder_creation_and_preview()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Create regular file at project root
+  assert_true(workbench.open_new_file_input(nil), "must open new file input at root")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "created_root.txt" })
+  local cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming new file must succeed")
+
+  -- Check file on disk
+  local created_file_path = fixture .. "/created_root.txt"
+  assert_true(vim.fn.filereadable(created_file_path) == 1, "created_root.txt must exist on disk")
+  assert_eq(vim.fn.getfsize(created_file_path), 0, "new file must be empty (0 bytes)")
+
+  -- Check refreshed tree and preview
+  st = workbench.get_state()
+  local selected = st.project_files[st.selected_project_index]
+  assert_eq(selected.name, "created_root.txt", "created file must be selected in visible tree")
+  local preview_lines = vim.api.nvim_buf_get_lines(st.buf_right, 0, -1, false)
+  local preview_text = table.concat(preview_lines, "\n")
+  assert_true(preview_text:find("# (Empty file)", 1, true) ~= nil, "preview must render empty file note")
+
+  -- 2. Create directory at project root
+  assert_true(workbench.open_new_folder_input(nil), "must open new folder input at root")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "created_dir" })
+  cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming new folder must succeed")
+
+  local created_dir_path = fixture .. "/created_dir"
+  assert_true(vim.fn.isdirectory(created_dir_path) == 1, "created_dir must exist as directory on disk")
+
+  st = workbench.get_state()
+  selected = st.project_files[st.selected_project_index]
+  assert_eq(selected.name, "created_dir", "created directory must be selected")
+  preview_lines = vim.api.nvim_buf_get_lines(st.buf_right, 0, -1, false)
+  preview_text = table.concat(preview_lines, "\n")
+  assert_true(preview_text:find("#   (Empty directory)", 1, true) ~= nil, "preview must render empty directory note")
+
+  -- 3. Create file inside selected directory
+  assert_true(workbench.open_new_file_input(selected), "must open new file input targeting created_dir")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "child.lua" })
+  cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming child file must succeed")
+  assert_true(vim.fn.filereadable(created_dir_path .. "/child.lua") == 1, "child.lua must exist inside created_dir")
+
+  -- 4. Create file when a regular file is selected (target must be file's parent)
+  local f_entry = find_entry_in_files(st.project_files, "README.md")
+  assert_true(f_entry ~= nil, "README.md must be visible")
+  assert_true(workbench.open_new_file_input(f_entry), "open new file targeting README.md parent")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "sibling_at_root.md" })
+  cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming sibling file must succeed")
+  assert_true(vim.fn.filereadable(fixture .. "/sibling_at_root.md") == 1, "sibling file must be created in parent root")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task020_rename_file_and_directory_and_buffer_preservation()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Open main.lua for editing and add unsaved modifications
+  local main_entry = find_entry_in_files(st.project_files, "main.lua")
+  assert_true(main_entry ~= nil, "main.lua must exist")
+  workbench.open_file(main_entry)
+  st = workbench.get_state()
+  local edit_buf = vim.api.nvim_win_get_buf(st.win_right)
+  vim.api.nvim_buf_set_lines(edit_buf, 0, 0, false, { "UNSAVED_MODIFICATION_123" })
+  assert_true(vim.bo[edit_buf].modified, "edit buffer must have modified flag set")
+
+  -- Switch back to left navigation pane and rename main.lua -> app_runner.py
+  vim.api.nvim_set_current_win(st.win_left)
+  assert_true(workbench.open_rename_input(main_entry), "open rename input on main.lua")
+  st = workbench.get_state()
+  assert_eq(vim.api.nvim_buf_get_lines(st.file_input.buf, 0, 1, false)[1], "main.lua",
+    "input must be pre-filled with current name")
+
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "app_runner.py" })
+  local cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming rename must succeed")
+
+  -- Disk state: old file gone, new file present
+  assert_true(vim.fn.filereadable(fixture .. "/main.lua") == 0, "main.lua must no longer exist")
+  assert_true(vim.fn.filereadable(fixture .. "/app_runner.py") == 1, "app_runner.py must exist")
+
+  -- No silent save to disk: disk file should have original content, not unsaved edits
+  local on_disk = table.concat(vim.fn.readfile(fixture .. "/app_runner.py"), "\n")
+  assert_true(on_disk:find("UNSAVED_MODIFICATION_123", 1, true) == nil,
+    "rename must not silently save in-memory modifications to disk")
+
+  -- Buffer migration: buffer name follows new path and unsaved changes remain intact
+  local real_fixture = vim.uv.fs_realpath(fixture) or fixture
+  local edit_buf_name = vim.api.nvim_buf_get_name(edit_buf)
+  assert_true(edit_buf_name == fixture .. "/app_runner.py" or edit_buf_name == real_fixture .. "/app_runner.py",
+    "buffer name must update to new path")
+  assert_true(vim.bo[edit_buf].modified, "buffer must remain modified")
+  assert_eq(vim.api.nvim_buf_get_lines(edit_buf, 0, 1, false)[1], "UNSAVED_MODIFICATION_123",
+    "unsaved buffer content must remain intact")
+
+  -- Reopening app_runner.py in workbench returns the exact same in-memory buffer
+  st = workbench.get_state()
+  local renamed_entry = find_entry_in_files(st.project_files, "app_runner.py")
+  assert_true(renamed_entry ~= nil, "app_runner.py must appear in refreshed tree")
+  workbench.open_file(renamed_entry)
+  st = workbench.get_state()
+  assert_eq(vim.api.nvim_win_get_buf(st.win_right), edit_buf,
+    "reopening renamed file must reconnect to the unsaved in-memory buffer")
+
+  -- 2. Rename directory and preserve nested open buffer
+  vim.api.nvim_set_current_win(st.win_left)
+  local docs_entry = find_entry_in_files(st.project_files, "docs")
+  assert_true(docs_entry ~= nil, "docs folder must exist")
+  workbench.toggle_dir_expansion(docs_entry)
+  st = workbench.get_state()
+  assert_true(st.expanded_dirs["docs"], "docs must be expanded")
+
+  local guide_entry = find_entry_in_files(st.project_files, "docs/guide.md")
+  assert_true(guide_entry ~= nil, "guide.md must be visible")
+  workbench.open_file(guide_entry)
+  st = workbench.get_state()
+  local guide_buf = vim.api.nvim_win_get_buf(st.win_right)
+  vim.api.nvim_buf_set_lines(guide_buf, 0, 0, false, { "DOCS_UNSAVED_CHANGE" })
+  assert_true(vim.bo[guide_buf].modified, "guide_buf must have modified flag")
+
+  -- Rename directory docs -> documentation
+  vim.api.nvim_set_current_win(st.win_left)
+  assert_true(workbench.open_rename_input(docs_entry), "open rename input on docs")
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "documentation" })
+  cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming folder rename must succeed")
+
+  -- Disk state
+  assert_true(vim.fn.isdirectory(fixture .. "/docs") == 0, "old docs directory must be gone")
+  assert_true(vim.fn.isdirectory(fixture .. "/documentation") == 1, "documentation directory must exist")
+  assert_true(vim.fn.filereadable(fixture .. "/documentation/guide.md") == 1, "nested guide.md must exist in new folder")
+
+  -- Expansion state migrated
+  st = workbench.get_state()
+  assert_true(st.expanded_dirs["documentation"], "renamed directory must keep expanded state")
+
+  -- Nested open buffer path migrated
+  local guide_buf_name = vim.api.nvim_buf_get_name(guide_buf)
+  assert_true(guide_buf_name == fixture .. "/documentation/guide.md" or guide_buf_name == real_fixture .. "/documentation/guide.md",
+    "open buffer path must follow renamed containing directory")
+  assert_true(vim.bo[guide_buf].modified, "nested buffer must remain modified")
+  assert_eq(vim.api.nvim_buf_get_lines(guide_buf, 0, 1, false)[1], "DOCS_UNSAVED_CHANGE",
+    "nested buffer unsaved content must be intact")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task020_input_validation_cancellation_and_error_handling()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Cancellation with Esc leaves filesystem and selection unchanged
+  assert_true(workbench.open_new_file_input(nil))
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "cancelled_file.txt" })
+  local esc_cb = buffer_map_callback(st.file_input.buf, "<Esc>")
+  assert_true(esc_cb(), "Esc must close input")
+  st = workbench.get_state()
+  assert_true(not st.file_input.open, "file input must be closed")
+  assert_true(vim.fn.filereadable(fixture .. "/cancelled_file.txt") == 0, "file must not be created")
+
+  -- 2. Empty and whitespace-only names are rejected visibly, modal stays open
+  assert_true(workbench.open_new_file_input(nil))
+  st = workbench.get_state()
+  local cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "" })
+  assert_true(not cr_cb(), "empty name must be rejected")
+  st = workbench.get_state()
+  assert_true(st.file_input.open, "modal must stay open")
+  assert_true(st.file_input.error ~= nil, "error must be set")
+  local title = window_title_text(st.file_input.win)
+  assert_true(title:find("cannot be empty", 1, true) ~= nil, "title must show cannot be empty")
+
+  -- Whitespace-only name
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "   \t  " })
+  assert_true(not cr_cb(), "whitespace-only name must be rejected")
+  st = workbench.get_state()
+  assert_true(st.file_input.open, "modal must stay open")
+
+  -- 3. Reject '.' and '..'
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "." })
+  assert_true(not cr_cb(), "'.' must be rejected")
+  title = window_title_text(st.file_input.win)
+  assert_true(title:find("cannot be '.' or '..'", 1, true) ~= nil, "title must show '.' rejection")
+
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { ".." })
+  assert_true(not cr_cb(), "'..' must be rejected")
+
+  -- 4. Reject path separators
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "dir/file.txt" })
+  assert_true(not cr_cb(), "slash must be rejected")
+  title = window_title_text(st.file_input.win)
+  assert_true(title:find("path separators", 1, true) ~= nil, "title must show path separators rejection")
+
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "dir\\file.txt" })
+  assert_true(not cr_cb(), "backslash must be rejected")
+
+  -- 5. Reject NUL characters
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "bad\0name.txt" })
+  assert_true(not cr_cb(), "NUL character must be rejected")
+
+  -- 6. Reject collisions
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { "README.md" })
+  assert_true(not cr_cb(), "collision with existing README.md must be rejected")
+  title = window_title_text(st.file_input.win)
+  assert_true(title:find("already exists", 1, true) ~= nil, "title must show collision error")
+
+  esc_cb = buffer_map_callback(st.file_input.buf, "<Esc>")
+  esc_cb()
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task020_fail_closed_security_boundaries()
+  local workbench = require("novim.workbench")
+  local browser = require("novim.browser")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Project root rename attempt is rejected
+  local root_entry = { full_path = fixture, path = "", name = "fixture", is_dir = true }
+  assert_true(not workbench.open_rename_input(root_entry), "root rename attempt must be refused")
+  st = workbench.get_state()
+  assert_true(not st.file_input.open, "file input must not open for root rename")
+  assert_true(st.write_notice ~= nil and st.write_notice.level == "error", "error notice must be produced")
+  assert_true(st.write_notice.text:find("Cannot rename the project root", 1, true) ~= nil,
+    "error must identify project root rename refusal")
+
+  -- 2. Symlink source rename attempt is rejected
+  local symlink_file = fixture .. "/symlink_file.txt"
+  vim.fn.system(string.format("ln -s %s %s", vim.fn.shellescape(fixture .. "/README.md"), vim.fn.shellescape(symlink_file)))
+  local sym_entry = { full_path = symlink_file, path = "symlink_file.txt", name = "symlink_file.txt", is_dir = false }
+  assert_true(not workbench.open_rename_input(sym_entry), "symlink rename must be refused")
+  st = workbench.get_state()
+  assert_true(st.write_notice.level == "error", "error notice must be produced for symlink")
+  assert_true(st.write_notice.text:find("Symlink", 1, true) ~= nil, "error must identify symlink refusal")
+
+  -- 3. Creation inside symlinked parent is rejected
+  local symlink_dir = fixture .. "/symlink_dir"
+  vim.fn.system(string.format("ln -s %s %s", vim.fn.shellescape(fixture .. "/src"), vim.fn.shellescape(symlink_dir)))
+  local sym_dir_entry = { full_path = symlink_dir, path = "symlink_dir", name = "symlink_dir", is_dir = true }
+  assert_true(not workbench.open_new_file_input(sym_dir_entry), "new file inside symlinked dir must be refused")
+  st = workbench.get_state()
+  assert_true(st.write_notice.level == "error", "error notice must be produced for symlinked parent")
+  assert_true(st.write_notice.text:find("Symlink", 1, true) ~= nil, "error must identify symlink refusal")
+
+  -- 4. Target outside project root fails closed
+  local ok, out_err = browser.create_file("/tmp", "forbidden.txt", fixture)
+  assert_true(not ok, "create_file outside root must fail")
+  assert_true(out_err:find("outside project root", 1, true) ~= nil, "error must identify outside root")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task020_dotfile_creation_and_visibility()
+  local workbench = require("novim.workbench")
+  local settings = require("novim.settings")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  -- Ensure dotfiles are hidden initially
+  if settings.get("show_dotfiles") then
+    settings.toggle_dotfiles()
+  end
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Create .env_custom when show_dotfiles is false
+  assert_true(workbench.open_new_file_input(nil))
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { ".env_custom" })
+  local cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming dotfile creation must succeed")
+
+  assert_true(vim.fn.filereadable(fixture .. "/.env_custom") == 1, ".env_custom must exist on disk")
+
+  -- In visible tree, .env_custom is hidden because show_dotfiles is false
+  st = workbench.get_state()
+  local hidden_entry = find_entry_in_files(st.project_files, ".env_custom")
+  assert_true(hidden_entry == nil, ".env_custom must be hidden when show_dotfiles is false")
+  assert_true(st.selected_project_index >= 1 and st.selected_project_index <= #st.project_files,
+    "selection index must remain valid and bounded")
+
+  -- 2. Toggle show_dotfiles to reveal .env_custom
+  settings.toggle_dotfiles()
+  workbench.refresh()
+  st = workbench.get_state()
+  local revealed_entry, revealed_idx = find_entry_in_files(st.project_files, ".env_custom")
+  assert_true(revealed_entry ~= nil, ".env_custom must be visible after dotfile toggle")
+
+  -- 3. Rename .env_custom -> .env_renamed
+  workbench.select_file(revealed_idx)
+  assert_true(workbench.open_rename_input(revealed_entry))
+  st = workbench.get_state()
+  vim.api.nvim_buf_set_lines(st.file_input.buf, 0, -1, false, { ".env_renamed" })
+  cr_cb = buffer_map_callback(st.file_input.buf, "<CR>")
+  assert_true(cr_cb(), "confirming dotfile rename must succeed")
+
+  assert_true(vim.fn.filereadable(fixture .. "/.env_custom") == 0, ".env_custom must no longer exist")
+  assert_true(vim.fn.filereadable(fixture .. "/.env_renamed") == 1, ".env_renamed must exist on disk")
+  st = workbench.get_state()
+  local renamed_dot = find_entry_in_files(st.project_files, ".env_renamed")
+  assert_true(renamed_dot ~= nil, ".env_renamed must be visible in tree")
+
+  -- Restore dotfiles setting
+  if settings.get("show_dotfiles") then
+    settings.toggle_dotfiles()
+  end
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+-- =========================================================================
 -- Run all tests
 -- =========================================================================
 

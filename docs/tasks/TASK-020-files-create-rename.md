@@ -1,6 +1,6 @@
 # TASK-020: Files Create and Rename
 
-- Status: `PLANNED`
+- Status: `READY_FOR_REVIEW`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-020-files-create-rename`
@@ -46,30 +46,30 @@ safety boundaries.
 
 ## Acceptance criteria
 
-- [ ] Files-pane context menu exposes New File, New Folder, and Rename for the
+- [x] Files-pane context menu exposes New File, New Folder, and Rename for the
       appropriate selection, and keyboard shortcuts invoke the same actions.
-- [ ] New File creates an empty regular file at the selected directory, the
+- [x] New File creates an empty regular file at the selected directory, the
       selected file's parent, or the project root; New Folder creates a
       directory at the same resolved target.
-- [ ] Rename changes a file's complete basename, including its extension, and
+- [x] Rename changes a file's complete basename, including its extension, and
       changes a directory's name without changing its contents.
-- [ ] `Enter` confirms a valid name and `Esc` cancels without filesystem or
+- [x] `Enter` confirms a valid name and `Esc` cancels without filesystem or
       selection mutation; empty names, `.`/`..`, separators, NULs, absolute
       paths, invalid targets, and existing-name collisions are rejected.
-- [ ] Symlinked sources or parents, project-root rename attempts, and any
+- [x] Symlinked sources or parents, project-root rename attempts, and any
       resolved target outside the project root fail closed before mutation.
-- [ ] Dot-prefixed names can be created or renamed explicitly and obey the
+- [x] Dot-prefixed names can be created or renamed explicitly and obey the
       existing show-dotfiles setting in the refreshed tree.
-- [ ] A successful operation refreshes the visible tree and preview, keeps
+- [x] A successful operation refreshes the visible tree and preview, keeps
       unaffected expansion state, and selects the created or renamed entry when
       it is visible.
-- [ ] If a renamed file is open for editing, its buffer and unsaved in-memory
+- [x] If a renamed file is open for editing, its buffer and unsaved in-memory
       content remain intact and follow the new path; no silent save or discard
       occurs.
-- [ ] Failed operations produce a bounded visible error and leave the source,
+- [x] Failed operations produce a bounded visible error and leave the source,
       target, open buffers, Git state, unrelated paths, installed `novim`, and
       normal Neovim configuration unchanged.
-- [ ] Existing workbench, package, smoke, and full local test suites remain
+- [x] Existing workbench, package, smoke, and full local test suites remain
       passing; new behavior is covered by deterministic headless fixture tests.
 
 ## Guardrails
@@ -117,9 +117,44 @@ safety boundaries.
 
 ## Implementer handoff
 
-Implement exactly this task on the recorded isolated branch. Start by reading
-`AGENTS.md`, `docs/repository.md`, `project-state.md`, this task, the latest
-review, ADR-003, ADR-005, and ADR-007. Preserve existing Files navigation and
-preview contracts. Stop at a local handoff commit with status
-`READY_FOR_REVIEW`; do not push, open a PR, merge, publish a release, or issue
-`TASK-021`.
+- Status: `READY_FOR_REVIEW`
+- Candidate commit: `HEAD (handoff commit)`
+- Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
+- Task branch: `task/TASK-020-files-create-rename`
+
+### Summary of changes
+
+1. **Core filesystem validation and mutations (`config/nvim/lua/novim/browser.lua`)**:
+   - Implemented `validate_name`: rejects empty/whitespace, `.`, `..`, path separators (`/`, `\`), and NUL bytes (`\0`).
+   - Implemented `is_path_outside_root`: fail-closed realpath and parent-path traversal guarding against project-root escapes.
+   - Implemented `is_symlink_or_has_symlink_parent`: non-following `uv.fs_lstat` checks ensuring neither the target path nor any directory component below `root_dir` is a symlink.
+   - Implemented `resolve_create_target`: resolves target directory to selected folder, file's parent folder, or project root when no selection.
+   - Implemented `create_file`, `create_folder`, and `rename_entry` with fail-closed collision, symlink, and root boundaries.
+
+2. **Context menu and keyboard shortcuts (`config/nvim/lua/novim/workbench.lua`)**:
+   - Added `n` (New File), `N` (New Folder), `<F2>` (Rename), `m` (Context Menu), and `<RightMouse>` on the Files navigation pane (`buf_left`).
+   - Implemented `open_context_menu`: floating popup menu displaying New File and New Folder (plus Rename when a file or folder is selected). Navigable with `j`/`k`, `Enter`/`Space`, direct keys `n`/`N`/`<F2>`, mouse click, and cancelled with `Esc`/`q`.
+   - Implemented single-line bounded name input modal (`open_file_input_modal`) with `Enter` confirmation, `Esc` cancellation, live title error feedback, and `TextChanged` error clearing.
+   - Implemented open buffer migration on rename (`migrate_open_buffers_on_rename`): updates buffer name via `nvim_buf_set_name` and runs `filetype detect`, preserving in-memory unsaved content and modified state without silent save or discard.
+   - Implemented directory expansion migration (`migrate_expanded_dirs_on_rename`): preserves expansion state of renamed folders and their children.
+   - Connected tree refresh (`rebuild_project_view`), selection follow for visible created/renamed entries, right-pane preview refresh, and bounded visible write notice rendering.
+
+3. **Keymap documentation (`config/nvim/lua/novim/keymaps.lua`)**:
+   - Added `n`, `N`, `<F2>`, and `m or Right Click` to canonical `keymaps.workbench` documentation, preserving bidirectional sync with Settings key help.
+
+4. **Deterministic test suite (`tests/test_workbench.lua`)**:
+   - Added 6 comprehensive test suites covering context menu actions and shortcuts, file and folder creation with preview inspection, file and directory rename with buffer preservation and expansion migration, input validation and cancellation, fail-closed security boundaries, and dotfile creation and visibility.
+
+### Verification evidence
+
+- `git diff --check`: PASS (clean diff, no whitespace errors).
+- `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/run_smoke_tests.sh tests/run_package_tests.sh`: PASS.
+- `./tests/run_tests.sh`: PASS (65/65 unit/integration tests in test_workbench.lua, all package/installer suite tests, and 9/9 regression smoke tests under public ohc launcher).
+
+### Residual risks
+
+- None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
+
+### Next action
+
+Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local review.
