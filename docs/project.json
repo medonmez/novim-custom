@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-020-files-create-rename",
+    "taskBranch": null,
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/oh-my-code.git",
@@ -28,13 +28,13 @@
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "TASK-020",
-    "currentTaskStatus": "READY_FOR_REVIEW",
+    "currentTask": "NONE",
+    "currentTaskStatus": "IDLE",
     "pullRequest": null,
-    "remoteChecks": "TASK-019 STRICT HOSTED RELEASE COMPLETED",
-    "lastAcceptedTask": "TASK-019",
-    "lastAcceptedCommit": "8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1",
-    "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/36"
+    "remoteChecks": "TASK-020 LIGHTWEIGHT DELIVERY COMPLETED; PR #38 shellcheck PASSED",
+    "lastAcceptedTask": "TASK-020",
+    "lastAcceptedCommit": "b1de569410682dd1a4fc3ed13dc476e26d69e824",
+    "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/38"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",
