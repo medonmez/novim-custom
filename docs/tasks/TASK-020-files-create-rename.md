@@ -1,6 +1,6 @@
 # TASK-020: Files Create and Rename
 
-- Status: `READY_FOR_REVIEW`
+- Status: `CHANGES_REQUESTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-020-files-create-rename`
@@ -155,6 +155,24 @@ safety boundaries.
 
 - None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
 
-### Next action
+### Review follow-up
 
-Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local review.
+Local review at `80ae55fc2a5cee4fd199c06b92e6e175e5bb49b3` is
+`CHANGES_REQUESTED`. The same task remains active; no PR, push, or
+merge was attempted.
+
+Required corrections:
+
+- Preserve the existing Diff-view left-pane `N` mapping for the new comparison
+  endpoint while keeping `N` as New Folder in Files view.
+- Perform the missing symlink-parent preflight in `open_new_folder_input` and
+  add a regression proving a symlink target is refused before the input modal
+  opens.
+- Reject non-regular special files at the rename boundary; add a FIFO or
+  equivalent fixture regression.
+- Use collision-safe, no-overwrite filesystem primitives for create and rename
+  so a path appearing after the initial preflight cannot be truncated or
+  replaced.
+
+Return the same branch to review after focused regressions and the required
+local validation rerun.

@@ -26,13 +26,13 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 17 | TASK-017 | Package oh-my-code, add the safe public installer, and generate GitHub Release assets | ACCEPTED | TASK-015, TASK-016 (accepted) |
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | ACCEPTED | TASK-015 through TASK-018 (accepted) |
-| 20 | TASK-020 | Add Files-pane creation of files/folders and complete-name rename of files/folders | PLANNED | TASK-019 (accepted) |
+| 20 | TASK-020 | Add Files-pane creation of files/folders and complete-name rename of files/folders | CHANGES_REQUESTED | TASK-019 (accepted) |
 | 21 | TASK-021 | Add bounded Files-pane copy, paste, and move actions | PROPOSED | TASK-020 (accepted) |
 
 TASK-001 through TASK-019 are accepted. `TASK-020` is the only actionable
-successor and is planned on its isolated branch. `TASK-021` remains proposed
-until the create/rename slice is accepted and its clipboard/source-target
-contract is ready.
+task and remains active on its isolated branch while the review findings are
+corrected. `TASK-021` remains proposed until the create/rename slice is
+accepted and its clipboard/source-target contract is ready.
 
 ## Accepted task notes
 

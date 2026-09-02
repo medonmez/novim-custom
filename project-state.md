@@ -4,7 +4,7 @@ Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-020` (`READY_FOR_REVIEW`; Files create/rename)
+Current task: `TASK-020` (`CHANGES_REQUESTED`; Files create/rename)
 Base branch: `main`
 Task branch: `task/TASK-020-files-create-rename`
 Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
@@ -154,10 +154,11 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
   fresh public installer run and real-release collision negative check passed;
   installed `novim`, normal Neovim config, upstream remote, and unrelated
   paths remained unchanged.
-- `TASK-020` is planned on `task/TASK-020-files-create-rename` from verified
-  `origin/main` `6b8ca013`. It adds bounded Files-pane creation and complete
-  name renaming for regular files and directories through a discoverable
-  context menu plus keyboard shortcuts. `TASK-021` is proposed follow-up
+- `TASK-020` remains active on `task/TASK-020-files-create-rename` from
+  verified `origin/main` `6b8ca013`. Its local implementation review found
+  four corrections required before delivery: preserve the Diff-view `N`
+  mapping, preflight symlinked New Folder targets, reject special-file rename,
+  and make create/rename collision-safe. `TASK-021` is proposed follow-up
   scope for copy, paste, and move.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
@@ -169,16 +170,16 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
 
 ## Active blockers
 
-- No active product blocker remains. `TASK-020` is the only actionable task;
-  `TASK-021` remains proposed until the first Files mutation slice is
-  accepted.
+- `TASK-020` is the only actionable task and is `CHANGES_REQUESTED` pending
+  the recorded local corrections. `TASK-021` remains proposed until the
+  first Files mutation slice is accepted.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Pass `TASK-020` to `$stateless-implementer` on its isolated branch. The
-implementer must stop at a local `READY_FOR_REVIEW` handoff; no
-copy/paste/move, delete, Git remote operation, or public-release action is
-authorized by this task.
+Return `TASK-020` to `$stateless-implementer` on the same isolated branch for
+the recorded corrections. The implementer must stop at a local
+`READY_FOR_REVIEW` handoff; no copy/paste/move, delete, Git remote operation,
+or public-release action is authorized by this task.

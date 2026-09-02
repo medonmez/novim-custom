@@ -1,97 +1,129 @@
 # Latest Review
 
 Updated: 2026-09-03
-Task ID: `TASK-019`
-Local verdict: `APPROVED`
-Hosted delivery verdict: `ACCEPTED`
-Delivery policy: `STRICT`
-Baseline: `0c0d0f96fdc0193bc33224ab8507afd55b43265e` (`origin/main`)
-Implementation candidate: `25768fd2fb3db7f4ff938e90821e4b115d7809ba`
-Reviewed record head: `260cf29c1bcc8cd3577f3c60a8e086738990e591`
-Task branch: `task/TASK-019-oh-my-code-release`
-Pull request: `#36 <https://github.com/medonmez/oh-my-code/pull/36>` (`MERGED` at
-`8f50c01c0f1480e04b4b3b8031d23c461a7d0fc1`)
-Remote checks: `shellcheck SUCCESS` (PR #36); release workflow `SUCCESS`
-(`33686893104`)
+Task ID: `TASK-020`
+Local verdict: `CHANGES_REQUESTED`
+Delivery policy: `LIGHTWEIGHT`
+Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98` (`origin/main`)
+Candidate: `80ae55fc2a5cee4fd199c06b92e6e175e5bb49b3`
+Task branch: `task/TASK-020-files-create-rename`
+Pull request: `NOT_OPEN`
+Remote checks: `OPTIONAL / NOT_RUN`
+Merge status: `NOT_ATTEMPTED`
+Target branch contains change: `NO`
 
 ## Review result
 
-The actual candidate delta from the fetched `origin/main` baseline was
-inspected. It contains only the public `VERSION` bump from `0.1.7` to `1.0.0`
-and the expected TASK-019 handoff/status records. No launcher, package,
-installer, release-workflow, workbench, Neovim configuration, `bin/novim`, or
-unrelated product change was introduced.
-
-The local review passed all proportionate checks. The required PR ShellCheck
-job passed before merge. After merge, the repository rename, tag-triggered
-release workflow, provider release assets, public installer, collision
-negative, and before/after invariance checks were all observed. The hosted
-criteria are supported by provider read-back, not by local or synthetic
-fixtures.
-
-No unresolved correctness, regression, security, privacy, data-integrity,
-public-contract, or scope issue remains. The macOS-local package digest differs
-from the Ubuntu workflow digest because the package was generated on different
-platforms; the local suite's repeated macOS runs are deterministic, and the
-hosted asset is validated against the checksum emitted by the actual Ubuntu
-workflow.
+The candidate is on the recorded isolated branch with a clean worktree. Its
+merge base is exactly the fetched `origin/main` baseline, and the complete
+delta is scoped to TASK-020 implementation, tests, and workflow records. The
+full local runner passes, but the real diff contains regressions and missing
+filesystem-boundary checks. Delivery is not approved until the same branch is
+corrected and returned for review.
 
 ## Findings
 
-None blocking.
+### High — preserve the Diff-view left-pane `N` mapping
+
+`config/nvim/lua/novim/workbench.lua:3215-3218` maps `N` to the existing
+Source Control new-comparison endpoint, but `:3227-3231` then installs the
+Files New Folder mapping on the same left buffer without a Files-view guard.
+This overrides the accepted Diff-view mapping. A focused headless probe found
+`DIFF_N_FOLDER_CALLED=true COMPARE_CALLED=false`; in Diff view the new-folder
+handler then returns false, so `N` silently stops assigning the new comparison
+endpoint.
+
+Required change: make the mapping context-aware so Files view invokes New
+Folder and Diff view preserves the existing comparison action. Add a real
+buffer-map behavior regression.
+
+### High — preflight symlinked New Folder targets
+
+`config/nvim/lua/novim/workbench.lua:1933-1944` references `is_sym` and
+`sym_err` without assigning them. Consequently `open_new_folder_input` skips
+the symlink-parent preflight and opens its modal for a symlinked target. A
+focused probe returned `NEW_FOLDER_SYMLINK_PREFLIGHT=true` for a selected
+symlink directory. The lower-level `create_folder` check still prevents the
+normal confirm from mutating that path, but the UI boundary does not fail
+closed at target resolution as required by ADR-007.
+
+Required change: perform the same `browser.is_symlink_or_has_symlink_parent`
+check used by New File before opening the New Folder modal, report the bounded
+error, and cover the refusal through the Files callback.
+
+### High — reject non-regular special files at rename
+
+`config/nvim/lua/novim/browser.lua:560-563` checks only that the source
+`lstat` succeeds. The browser represents non-directory entries as files,
+so a FIFO or other special node can reach `rename_entry` and be renamed. A
+focused probe successfully renamed a temporary FIFO
+(`SPECIAL_FILE_RENAME=true`). This violates the task's regular-file-or-
+directory scope and expands the mutation surface to special filesystem nodes.
+
+Required change: require the source metadata type to be a regular file or
+directory, reject other types with a bounded error, and add a special-file
+fixture regression.
+
+### High — make collision handling genuinely no-overwrite
+
+`config/nvim/lua/novim/browser.lua:458-471` performs an `lstat` precheck and
+then opens the path with `"w"`, which truncates an existing path if it appears
+between those operations. Similarly, `:568-577` prechecks the rename
+destination and then calls `uv.fs_rename`, whose normal POSIX behavior
+replaces a destination that appears after the check. The sequential collision
+tests pass, but these are not atomic no-overwrite mutations and violate the
+explicit collision/overwrite guardrail under a local race.
+
+Required change: use exclusive/no-follow-safe creation and a platform-safe
+no-replace rename strategy, or otherwise prove an equivalent fail-closed
+primitive. Add focused coverage for the no-overwrite contract where the
+platform permits deterministic simulation.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Fresh baseline and local preflight | PASS | Candidate parent and fetched `origin/main` were `0c0d0f9`; shell syntax, PyYAML workflow parse, release dry-run, package suite, smoke suite (9/9), full suite (59/59 plus package and smoke), docs/install sync, and `git diff --check` passed. |
-| Version, tag identity, archive, checksum, and `bin/novim` boundary | PASS | `VERSION=1.0.0`; tag `v1.0.0` points to merged commit `8f50c01`; release workflow run `33686893104` passed tag/manifest/guard/checksum steps and emitted archive digest `b4958e2fe42ac599eb39dbac26d65def8da5ef00f368de353ab39d4c849d224d`. |
-| Provider repository rename | PASS HOSTED | Provider read-back reports public `medonmez/oh-my-code`, default branch `main`; the former name resolves to the renamed repository. |
-| Hosted `v1.0.0` release assets | PASS HOSTED | Release `https://github.com/medonmez/oh-my-code/releases/tag/v1.0.0` is published. The archive is 184,780 bytes with provider SHA-256 `b4958e2fe42ac599eb39dbac26d65def8da5ef00f368de353ab39d4c849d224d`; the 90-byte checksum asset has provider SHA-256 `9b0ce73fdbf8d83ca2ad29fbe3a73448a13a1e8db568ba8a65da38a39ec32687`; downloaded content matches the workflow checksum. |
-| Fresh public installer and negative boundaries | PASS HOSTED | The exact version-pinned `curl -fsSL https://raw.githubusercontent.com/medonmez/oh-my-code/v1.0.0/install.sh | bash -s -- v1.0.0` path in a fresh physical temporary HOME with Neovim 0.12.5 downloaded only the declared archive and checksum, verified/validated them, created only the managed root and `ohc`/`novim-dev` links, and reported both identities. A real-release unrelated `ohc` collision failed after validation without creating the root or replacing its marker. |
-| Invariance and evidence classification | PASS | Installed `novim` remained SHA-256 `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a` and `novim 0.1.7`; checkout `bin/novim` remained `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`; normal `~/.config/nvim` stayed absent; upstream remained `https://github.com/link2004/novim.git`; unrelated fixture paths were preserved. |
+| Files context menu, shortcuts, and key-help documentation | PARTIAL | The Files context menu and new actions pass the focused suite, but the Diff-view left-pane `N` mapping is overridden. |
+| Create file/folder at resolved root, directory, and file-parent targets | PASS for sequential paths | `test_task020_new_file_and_folder_creation_and_preview` passes; New Folder symlink preflight is missing. |
+| Complete-name file/directory rename | PARTIAL | File, extension, directory, expansion, and buffer-preservation tests pass; special-file rename is not rejected. |
+| Validation, cancellation, collisions, and visible errors | PARTIAL | Input/cancellation/sequential collision tests pass; race-safe no-overwrite and New Folder preflight are incomplete. |
+| Symlink, root, and outside-root fail-closed boundaries | PARTIAL | Covered file/symlink/root/outside cases pass; New Folder target preflight is missing. |
+| Dot-prefixed visibility behavior | PASS | `test_task020_dotfile_creation_and_visibility` passes. |
+| Refresh, preview, expansion, and visible selection | PASS for covered operations | Create/rename refresh and expansion assertions pass in the focused suite. |
+| Open-buffer and unsaved-content preservation | PASS | `test_task020_rename_file_and_directory_and_buffer_preservation` passes. |
+| Failure invariance and existing-suite compatibility | PARTIAL | Existing sequential failures and invariance pass; the special-file and race boundary are not covered. |
+| Focused/full local validation | PASS | `./tests/run_tests.sh` passed 65/65 workbench tests, the offline package suite, and 9/9 smoke tests; shell syntax and `git diff --check` passed. |
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
-  task, backlog, prior review, ADR-006, architecture, and distribution
-  records.
-- Fetched `origin`, inspected the complete candidate diff, and recorded local
-  review `APPROVED` at `260cf29`.
-- Reran `./tests/run_package_tests.sh`, `./tests/run_smoke_tests.sh`, and
-  `./tests/run_tests.sh`; all passed with the counts above. Replayed the
-  release workflow's version/tag, allowlist, checksum, docs-sync, and
-  `bin/novim` guard steps locally.
-- Pushed the task branch, opened PR #36, observed the required ShellCheck
-  success, merged through GitHub, and verified `origin/main` contains the
-  reviewed head at merge commit `8f50c01`.
-- Renamed the provider repository and read back its canonical name, public
-  visibility, default branch, and old-name redirect behavior.
-- Created and pushed annotated tag `v1.0.0`; observed release workflow run
-  `33686893104` complete successfully. Queried provider release metadata and
-  downloaded both assets for size/digest/checksum verification.
-- Ran the exact version-pinned public `curl | bash` installer in a fresh
-  physical temporary HOME with existing Neovim and ran a real-release
-  unrelated-link collision negative. Corrected a preliminary runtime
-  assertion harness to fail fast before accepting the final hosted runtime
-  result; the corrected isolated config/command probe passed.
-- Rechecked installed `novim`, checkout `bin/novim`, normal config, upstream
-  remote, unrelated fixture marker, local remotes, and clean Git state.
+  task, backlog, previous review, architecture, and ADR-007.
+- Fetched `origin/main` and confirmed it remains
+  `6b8ca01312fcb1052b2fa8021606354636037b98`; confirmed that it is the
+  candidate's merge base. The branch is clean after validation.
+- Inspected the complete candidate diff: 12 changed files, limited to the
+  TASK-020 product code, deterministic tests, and scoped project records.
+- Reran `git diff --check` and the applicable shell syntax checks.
+- Reran `./tests/run_tests.sh` independently: 65/65 workbench tests passed,
+  the offline package/installer suite passed, and the smoke suite passed 9/9.
+- Ran focused local headless probes for the New Folder symlink preflight, the
+  Diff-view `N` mapping, and special-file rename. These are temporary local
+  fixtures only; they are not hosted, production, recovery, or
+  customer-acceptance evidence.
 
-Local and hosted evidence above is distinct from production, recovery, and
-customer-acceptance evidence. No production, recovery, or customer-acceptance
-claim is made.
+All evidence above is local review evidence. No hosted, production, recovery,
+or customer-acceptance claim is made.
 
 ## Delivery decision
 
-`ACCEPTED` after PR #36 merged, the reviewed head was verified in `origin/main`,
-the repository rename was read back, tag-triggered release workflow
-`33686893104` succeeded, the public assets matched the workflow checksum, and
-the fresh public installer and collision negative passed. The canonical
-repository remote now points to `https://github.com/medonmez/oh-my-code.git`;
-`upstream` remains unchanged.
+`CHANGES_REQUESTED`. No PR, push, merge, repository rename, tag, release, or
+other remote delivery action was attempted. Keep TASK-020 active on the same
+branch and return it to `$stateless-implementer` for the four findings above.
 
 ## Next action
 
-Keep the repository idle at the accepted `v1.0.0` release state. Do not issue a
-successor task until an explicit new brief is provided.
+Revise TASK-020 on `task/TASK-020-files-create-rename`: preserve the Diff-view
+`N` action, restore New Folder symlink preflight, reject special-file rename,
+and implement no-overwrite create/rename semantics with focused regressions.
+Rerun `./tests/run_tests.sh` and the required local checks, then request a new
+review of the same task.
