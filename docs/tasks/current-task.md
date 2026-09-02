@@ -2,7 +2,7 @@
 
 Updated: 2026-09-03
 Task ID: `TASK-019`
-Status: `PLANNED`
+Status: `READY_FOR_REVIEW`
 Delivery policy: `STRICT`
 Base branch: `main`
 Task branch: `task/TASK-019-oh-my-code-release`
@@ -117,3 +117,60 @@ independent installed upstream `novim` boundary.
 Implementation must stop at a local handoff commit on this branch. Hosted
 rename, tag, GitHub Release, and fresh installer verification require the
 strict review and delivery gates for this task.
+
+## Implementation handoff
+
+Status: `READY_FOR_REVIEW`
+Handoff commit: HEAD (handoff commit) on
+`task/TASK-019-oh-my-code-release` (baseline `0c0d0f96fdc0193bc33224ab8507afd55b43265e` on
+`origin/main`). No push, PR, repository rename, tag, or GitHub Release was
+performed.
+
+Implementer: `$stateless-implementer` (fresh context).
+
+### Changes
+
+- `VERSION`: updated from `0.1.7` to `1.0.0` for the public `v1.0.0` release
+  candidate.
+- `docs/tasks/current-task.md`: updated status to `READY_FOR_REVIEW` and
+  recorded implementation handoff.
+- `docs/tasks/TASK-019-oh-my-code-release.md`: updated status to
+  `READY_FOR_REVIEW`.
+
+### Validation (all local evidence; no hosted/production/recovery/customer-acceptance claim)
+
+| Check | Command | Result |
+|---|---|---|
+| Installed `novim` BEFORE edits | `shasum -a 256 ~/.local/bin/novim` + `--version` | `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, prints `novim 0.1.7` — matches record; also `bin/novim` `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321` |
+| Installed `novim` AFTER changes | same | identical hashes and version; unchanged |
+| Normal Neovim config | `ls ~/.config/nvim` before and after | absent at both points; unchanged |
+| Script syntax | `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh docs/install tests/run_tests.sh tests/run_package_tests.sh tests/run_smoke_tests.sh` | PASS (clean) |
+| Release workflow dry-run | local execution of `.github/workflows/release.yml` steps | PASS: VERSION matches `1.0.0`, tag refs `refs/tags/v1.0.0` accepted, bad tag rejected, `bin/novim` protected, package built, manifest verified, SHA-256 emitted, `docs/install` synced |
+| Package tests | `./tests/run_package_tests.sh` | PASS: deterministic package SHA-256 `e09ac6c524d507580ef886a6ad3b5a42aa89cd8ec9567c023966e70f0464ffd2`, hostile fixtures rejected, offline install verified, network install simulated, invariance preserved |
+| Smoke tests | `./tests/run_smoke_tests.sh` | 9/9 passed: `ohc 1.0.0-dev` CLI/help, `novim-dev 1.0.0-dev` alias, splash PTY/duration/bypasses, 9 headless smoke tests, zero residue |
+| Full suite | `./tests/run_tests.sh` | PASS: 59/59 workbench/git/settings integration tests, package tests PASS, smoke 9/9 PASS |
+| Docs/install sync | `diff -u install.sh docs/install` | PASS (byte-for-byte identical) |
+| Whitespace / git check | `git diff --check` | PASS (clean) |
+| Remote invariance | `git remote -v` | origin `medonmez/novim-custom.git`, upstream `link2004/novim.git` unchanged |
+
+### Acceptance-criterion evidence
+
+- Strict local preflight: clean baseline `0c0d0f9` verified on `origin/main`;
+  full test suites (59/59 integration, package suite, 9/9 smoke), script syntax,
+  and invariance checks passed.
+- `VERSION` is `1.0.0`: package helper builds `oh-my-code-1.0.0.tar.gz` with
+  stable SHA-256 `e09ac6c524d507580ef886a6ad3b5a42aa89cd8ec9567c023966e70f0464ffd2`;
+  release workflow simulation confirms exact `v1.0.0` match, allowlisted
+  archive root, checksum generation, and `bin/novim` immutability.
+- Repository rename, hosted `v1.0.0` release creation, and fresh public
+  installer verification are deferred to the `$project-orchestrator` strict
+  delivery gate in accordance with the task specification.
+
+### Residual risks / known gaps
+
+- The GitHub repository rename to `medonmez/oh-my-code`, the `v1.0.0` release tag
+  push, GitHub Release asset publishing, and public networked installer run
+  against the live release URL remain to be executed by `$project-orchestrator`
+  during the strict delivery gate.
+- Installed `novim` (`~/.local/bin/novim`) and checkout `bin/novim` remained
+  strictly untouched during candidate generation and local validation.

@@ -1,6 +1,6 @@
 # TASK-019 — strict oh-my-code release candidate and `v1.0.0` publication
 
-- Status: `PLANNED`
+- Status: `READY_FOR_REVIEW`
 - Delivery policy: `STRICT`
 - Base branch: `main`
 - Expected baseline: `ed5a35937d19982832fa0c770486d7496f93d21b`
