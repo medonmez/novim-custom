@@ -1,117 +1,110 @@
 # Latest Review
 
-Updated: 2026-08-31
-Task ID: `TASK-017`
+Updated: 2026-09-03
+Task ID: `TASK-018`
 Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
-Implementation baseline: `8c1617c` (post-merge CI failure record; the
-recorded expected baseline `9904324ba79c666be46e6efe92e932eb1ea8e2d4` is an
+Baseline: `06440e07d2946ba480ab3c098624b9369dfc8bdf` (`origin/main`; the
+recorded task baseline `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9` is an
 ancestor)
-Reviewed head: `369dedbda70b551fa3dbfa84e46bb8f45c8856ed`
-Implementation candidate: `369dedbda70b551fa3dbfa84e46bb8f45c8856ed`
-Task branch: `task/TASK-017-oh-my-code-package-installer`
-Previous pull request: `https://github.com/medonmez/novim-custom/pull/31`
-(`MERGED` at `f070a7446f6fe93d2e1ba32e15d2e0fe45f27ff8`)
-Follow-up pull request: `https://github.com/medonmez/novim-custom/pull/32`
-(`MERGED` at `bad06b69c1d17879f18a3d4f9cfa537bfba6fba9`)
-Target branch contains reviewed head: `YES`
+Candidate: `3c763ba0e69819989edcb522aacfc4cefd7dc3d7`
+Task branch: `task/TASK-018-oh-my-code-readme-demo-assets`
+Pull request: not opened
+Remote checks: `OPTIONAL / NOT_RUN`
+Merge status: `NOT_STARTED`
+Target branch contains reviewed head: `NO`
 
 ## Review result
 
-The actual follow-up diff was inspected. It changes only the three
-backslash-manifest checks, the focused hostile-archive fixture coverage, and
-the current-task handoff. The new `grep -qF "\\"` pattern is a one-character
-fixed-string search. A direct probe gave the same results as the former
-`grep -q '\\'` BRE: a manifest entry containing a backslash is rejected and
-a clean manifest is accepted.
+The actual candidate delta `06440e0..3c763ba` was inspected. It contains only
+the expected README rewrite, the replacement terminal GIF, and the current-task
+handoff. No launcher, installer, package allowlist, workbench, Neovim config,
+upstream reference, release workflow, or unrelated product change was added.
 
-The previously reported CI failure was corrected without weakening archive
-validation. The local review was approved for delivery, the follow-up PR #32
-was opened and merged, and its ShellCheck job completed successfully. The
-remote default branch now contains the reviewed head and merge result.
+The README makes `oh-my-code`/`ohc` the primary public surface, documents the
+accepted workbench and local Git boundaries, and keeps the hosted rename and
+`v1.0.0` release explicitly future work. Its installation, alias, splash
+bypass, isolation, privacy, package, and installer wording is consistent with
+ADR-006, `docs/architecture.md`, and `docs/LOCAL_DISTRIBUTION.md`.
+
+The committed GIF is a valid 1400x700 GIF89a with 464 frames. The handoff
+records its provenance as a vhs 0.11.0 capture of a real interactive PTY
+session using this checkout's `./bin/ohc`, with installed `novim` excluded.
+Independent sampled-frame inspection shows the splash, Files/Preview,
+Source Control, local stage/commit, and Settings flows. Visible fixture paths
+are deliberately synthetic `/tmp/ohc-demo` paths; no credentials, tokens,
+usernames, hostnames, or hosted claims were found.
+
+The Mermaid block was rendered in headless Chrome from the isolated validation
+page and returned `MERMAID_OK` with one SVG. The rendered graph includes the
+public launchers, isolated config/data/state/cache, offline package archive,
+prepared-but-unpublished installer, managed `~/.local` roots, and independent
+installed `novim`/normal Neovim configuration boundaries.
+
+No unresolved correctness, regression, security, privacy, data-integrity,
+public-contract, or scope issue remains for this local review.
 
 ## Findings
 
-No remaining code-level finding in the reviewed follow-up diff.
+None blocking.
 
-## Resolved prior findings
+Non-blocking observations retained from the handoff:
 
-- The source-symlink leak remains resolved by `validate_source_tree` in
-  `bin/oh-my-code-package:95-127`, before copying or archive creation.
-- The offline VERSION identity gap remains resolved by
-  `bin/oh-my-code-package:298-307`, before any target mutation.
-- The post-merge CI `SC1003` regression at `install.sh:171` is corrected at
-  `install.sh:171`, `docs/install:171`, and
-  `bin/oh-my-code-package:226` with equivalent fixed-string matching.
+- The captured Settings title still says `novim-dev Settings & Preferences`.
+  This is the real accepted implementation surface; rebranding
+  `config/nvim/` is outside TASK-018.
+- The GIF starts from a previously persisted isolated palette rather than
+  factory-default Tokyo Night. It visibly demonstrates theme cycling, and
+  the shipped default is covered by the regression suite.
+- vhs/tabby rendering can vary slightly by terminal. The asset is a faithful
+  recording of one real session, not a claim of portable terminal rendering.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Byte-identical package and overwrite refusal | PASS | Guarded package suite; SHA-256 `7b9062c70e462289e16f9db1f8ea4b0cb276d169f11693f678b31bf28a1b9a7e` remained stable. |
-| Allowlisted archive and source fail-closed boundary | PASS | Manifest assertions and source symlink/non-regular validation pass. |
-| Public installer validation, root, and links | PASS | Local happy paths pass; fixture server observes exactly the archive and checksum GETs. |
-| Collision and failure safety | PASS | Collision, malformed, traversal, absolute, backslash, symlink, allowlist, VERSION, checksum, 404, and unreachable-host cases fail closed with unchanged targets. |
-| Launcher identity, isolation, and installed `novim` boundary | PASS | Package, smoke, and full suites pass; installed `novim` guard remains unchanged. |
-| Release workflow and `bin/novim` boundary | PASS | Workflow structure validation passes; no tag/release was run; checkout `bin/novim` hash is unchanged. |
-| Required validation including the prior ShellCheck regression | PASS | `bash -n`, YAML structure, package, smoke, full suite, installer-copy comparison, direct pattern-equivalence probe, and `git diff --check` pass; follow-up PR #32 CI run `33399937834` passed its Ubuntu ShellCheck job. Local ShellCheck was unavailable, so the remote job is the authoritative ShellCheck result for delivery. |
+| README presents `oh-my-code`/`ohc` as primary product | PASS | Complete README inspection; public title, commands, install boundary, and credits use the derivative identity. The upstream hosted install/update path and upstream logo are not primary. |
+| Real public-safe terminal demo | PASS | `file`/`ffprobe` report GIF89a 1400x700, 464 frames, 18.56 seconds; sampled frames and OCR were visually inspected. Handoff records the real `ohc` PTY capture and fixture provenance. |
+| Mermaid architecture boundary | PASS | README diagram source inspection plus headless Chrome DOM render returned `MERMAID_OK` and one SVG. |
+| Canonical wording and behavior boundaries | PASS | Cross-read against ADR-006, `docs/architecture.md`, and `docs/LOCAL_DISTRIBUTION.md`; the README package snippet was executed successfully in a temporary install root. |
+| Links, images, attribution, hosted honesty | PASS | Rendered Markdown check found 28 anchors, one Mermaid block, and six unique relative targets; all targets resolve. No stale `novim.dev/install`, `ow version`, or equivalent primary update path remains. Attribution, MIT, and third-party license links remain present. |
+| Required checks and invariance | PASS | `./bin/ohc --version`, `./bin/ohc --help`, `./tests/run_smoke_tests.sh` (9/9), `./tests/run_tests.sh` (59/59 plus package and smoke suites), and `git diff --check` passed. `bin/novim` SHA-256 `cb8e8785...`, installed `novim` SHA-256 `5955e1f2...`/version `novim 0.1.7`, normal Neovim config absence, remotes, and clean status remained unchanged. |
 
 ## Validation performed
 
-- Inspected `AGENTS.md`, the repository routing contract, project state,
-  current task, backlog, ADR-006, and the prior CI-failure review.
-- Confirmed the implementation branch at `369dedb` plus review record
-  `5ef96a7`, with no unrelated changes. The prior PR #31 and follow-up PR #32
-  are merged; `origin/main` contains the follow-up head at merge commit
-  `bad06b69`.
-- Reran `./tests/run_package_tests.sh`: deterministic archive, source-tree
-  symlink rejection, hostile `backslash-entry` rejection in the offline
-  helper, installer collision/failure checks, fixture-server download and
-  checksum checks, workflow structure, and invariance all passed.
-- Reran `./tests/run_smoke_tests.sh`: 9/9 passed.
-- Reran `./tests/run_tests.sh`: 59/59 integration tests plus package and smoke
-  runners passed.
-- Ran `bash -n` through the relevant scripts, verified
-  `cmp -s install.sh docs/install`, verified the direct old/new grep behavior,
-  and confirmed `git diff --check` is clean.
-- Read-only invariance guards before and after the suites confirmed checkout
-  `bin/novim` SHA-256
-  `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321` and the
-  installed release target SHA-256
-  `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`, mode
-  755, reporting `novim 0.1.7`. The working-tree status also remained
-  unchanged.
+- Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
+  task, backlog, previous review, ADR-006, architecture, product, and local
+  distribution records.
+- Confirmed the task branch is the recorded isolated branch, `origin/main` is
+  the actual candidate baseline through `06440e0`, the working tree was clean,
+  and no PR exists for the branch.
+- Inspected the complete candidate diff `06440e0..3c763ba`; it is limited to
+  `README.md`, `docs/demo.gif`, and `docs/tasks/current-task.md`.
+- Ran the public launcher identity checks and the README's exact offline
+  package/install snippet.
+- Ran `./tests/run_smoke_tests.sh` and `./tests/run_tests.sh`; both completed
+  with zero fixture residue and a clean product source tree.
+- Ran rendered README link/image/TOC checks, GIF metadata and sampled-frame
+  inspection, headless Mermaid rendering, and `git diff --check`.
+- Rechecked invariance after validation: checkout `bin/novim` remains
+  `cb8e878515cc1874eb792693b03b3803e7f823c8e6af71dfab89fa3bff048321`, the
+  installed release remains
+  `5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a` and
+  reports `novim 0.1.7`, `~/.config/nvim` remains absent, and `origin` /
+  `upstream` remain unchanged.
 
-All evidence above is local or synthetic fixture evidence. It is not hosted,
-production, recovery-service, or customer-acceptance evidence.
-
-## Incident and recovery record
-
-During the earlier fixer investigation, a temporary probe wrote checkout
-`bin/novim` bytes through the `~/.local/bin/novim` symlink onto the installed
-`~/.local/share/novim/bin/novim` target. The resulting `novim 0.1.0` output was
-incorrectly treated as unchanged because the post-mutation measurement used
-the damaged file and provenance was inferred from README/LICENSE/VERSION
-instead of the binary.
-
-The target was restored only after the upstream `link2004/novim` v0.1.7
-release asset matched the recorded binary hash
-`5955e1f2c223d13b024e263dca412f1acb96b69d4168b26b3fa3f7b14c1de26a`. This
-review performed no write to the installed release. The guarded validation
-reruns preserved that hash and version. `bin/novim` and the normal Neovim
-configuration were also read-only checked and remained unchanged.
-
-The incident is recorded here as a local repository review and recovery
-record. It is not a hosted, production, recovery-service, or
-customer-acceptance claim.
+All evidence above is local or synthetic-fixture evidence. It is not hosted,
+production, recovery, or customer-acceptance evidence.
 
 ## Delivery decision
 
-`ACCEPTED` after PR #32 was merged and `origin/main` was verified to contain
-the reviewed head. No tag, release, or hosted repository rename was created;
-those remain TASK-019 scope.
+`APPROVED` for lightweight delivery. The reviewed implementation remains local
+on `task/TASK-018-oh-my-code-readme-demo-assets`; no push, PR, merge, repository
+rename, tag, GitHub Release, or hosted installer action has occurred.
 
 ## Next action
 
-Reconcile the accepted TASK-017 records and issue TASK-018 for the public
-README and real terminal demo assets.
+Commit this review record, push the task branch, open one PR targeting
+`origin/main`, and merge promptly if it is mergeable and no explicit required
+check blocks it. Then verify the remote default branch before reconciling
+TASK-018 as `ACCEPTED`.
