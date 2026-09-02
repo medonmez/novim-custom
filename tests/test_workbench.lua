@@ -4748,6 +4748,85 @@ function tests.test_task020_fail_closed_security_boundaries()
     "destination file must not be overwritten or replaced")
   assert_eq(table.concat(vim.fn.readfile(source_file), "\n"), "SOURCE_DATA",
     "source file must remain intact after collision refusal")
+
+  -- 7. Directory collision refuses overwrite under native primitive
+  local dir_target = fixture .. "/existing_target_dir"
+  vim.fn.mkdir(dir_target, "p")
+  local f_target = io.open(dir_target .. "/target_file.txt", "w")
+  f_target:write("TARGET_DIR_CONTENT"); f_target:close()
+  local dir_source = fixture .. "/source_to_rename_dir"
+  vim.fn.mkdir(dir_source, "p")
+  local f_dir_src = io.open(dir_source .. "/source_file.txt", "w")
+  f_dir_src:write("SOURCE_DIR_CONTENT"); f_dir_src:close()
+
+  local dir_col_ok, dir_col_err = browser.rename_entry(
+    { full_path = dir_source, path = "source_to_rename_dir", name = "source_to_rename_dir", is_dir = true },
+    "existing_target_dir", fixture
+  )
+  assert_true(not dir_col_ok, "directory rename must fail when destination already exists")
+  assert_true(dir_col_err:find("already exists", 1, true) ~= nil)
+  assert_true(vim.fn.filereadable(dir_target .. "/target_file.txt") == 1,
+    "destination directory contents must not be overwritten or removed")
+  assert_true(vim.fn.filereadable(dir_source .. "/source_file.txt") == 1,
+    "source directory contents must remain intact")
+
+  -- 8. Fallback when platform-native primitive is unavailable:
+  -- Genuinely fails closed without ever invoking unsafe uv.fs_rename on directories
+  local original_native_check = browser._native_rename_available
+  browser._native_rename_available = function() return false, nil end
+
+  -- 8a. Directory rename to existing directory fails without replacing destination
+  local fb_dir_col_ok, fb_dir_col_err = browser.rename_entry(
+    { full_path = dir_source, path = "source_to_rename_dir", name = "source_to_rename_dir", is_dir = true },
+    "existing_target_dir", fixture
+  )
+  assert_true(not fb_dir_col_ok, "directory rename fallback must fail on collision")
+  assert_true(fb_dir_col_err:find("already exists", 1, true) ~= nil)
+  assert_true(vim.fn.filereadable(dir_target .. "/target_file.txt") == 1,
+    "destination directory contents must remain intact in fallback")
+  assert_true(vim.fn.filereadable(dir_source .. "/source_file.txt") == 1,
+    "source directory contents must remain intact in fallback")
+
+  -- 8b. Directory rename to non-existent destination fails closed with bounded error
+  local fb_dir_nonexist_ok, fb_dir_nonexist_err = browser.rename_entry(
+    { full_path = dir_source, path = "source_to_rename_dir", name = "source_to_rename_dir", is_dir = true },
+    "new_dir_when_unavailable", fixture
+  )
+  assert_true(not fb_dir_nonexist_ok, "directory rename fallback must fail closed when native primitive unavailable")
+  assert_true(fb_dir_nonexist_err:find("unavailable", 1, true) ~= nil,
+    "error must report atomic directory rename is unavailable on this platform")
+  assert_true(vim.fn.isdirectory(fixture .. "/new_dir_when_unavailable") == 0,
+    "destination directory must not be created by unsafe fallback")
+  assert_true(vim.fn.isdirectory(dir_source) == 1,
+    "source directory must remain untouched")
+
+  -- 8c. Regular files continue to rename atomically via link+unlink fallback
+  local fb_file_src = fixture .. "/fb_file_src.txt"
+  local fb_file_dst = fixture .. "/fb_file_dst.txt"
+  local f_fb = io.open(fb_file_src, "w"); f_fb:write("FALLBACK_LINK_UNLINK"); f_fb:close()
+  local fb_file_ok, fb_file_err = browser.rename_entry(
+    { full_path = fb_file_src, path = "fb_file_src.txt", name = "fb_file_src.txt", is_dir = false },
+    "fb_file_dst.txt", fixture
+  )
+  assert_true(fb_file_ok, "file rename fallback via link+unlink must succeed: " .. tostring(fb_file_err))
+  assert_true(vim.fn.filereadable(fb_file_dst) == 1, "destination file must exist")
+  assert_eq(table.concat(vim.fn.readfile(fb_file_dst), "\n"), "FALLBACK_LINK_UNLINK")
+  assert_true(vim.fn.filereadable(fb_file_src) == 0, "source file must be unlinked")
+
+  -- 8d. Regular file collision under fallback fails without overwriting
+  local fb_file_col_src = fixture .. "/fb_file_col_src.txt"
+  local f_col_src = io.open(fb_file_col_src, "w"); f_col_src:write("SRC_COLLISION_DATA"); f_col_src:close()
+  local fb_file_col_ok, fb_file_col_err = browser.rename_entry(
+    { full_path = fb_file_col_src, path = "fb_file_col_src.txt", name = "fb_file_col_src.txt", is_dir = false },
+    "fb_file_dst.txt", fixture
+  )
+  assert_true(not fb_file_col_ok, "file rename fallback must fail on collision")
+  assert_true(fb_file_col_err:find("already exists", 1, true) ~= nil)
+  assert_eq(table.concat(vim.fn.readfile(fb_file_dst), "\n"), "FALLBACK_LINK_UNLINK",
+    "existing destination file must not be overwritten or truncated in fallback")
+  assert_true(vim.fn.filereadable(fb_file_col_src) == 1, "source file must remain intact")
+
+  browser._native_rename_available = original_native_check
   workbench.close()
   vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
   cleanup_dir(fixture)

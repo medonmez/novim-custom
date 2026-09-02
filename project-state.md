@@ -4,7 +4,7 @@ Updated: 2026-09-03
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-020` (`CHANGES_REQUESTED`; Files create/rename)
+Current task: `TASK-020` (`READY_FOR_REVIEW`; Files create/rename)
 Base branch: `main`
 Task branch: `task/TASK-020-files-create-rename`
 Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
@@ -169,8 +169,8 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
 
 ## Active blockers
 
-- `TASK-020` is the only actionable task and is `CHANGES_REQUESTED` pending
-  the recorded directory fallback correction. `TASK-021` remains proposed
+- No active product blocker remains. `TASK-020` is `READY_FOR_REVIEW`
+  following the directory fallback correction. `TASK-021` remains proposed
   until the first Files mutation slice is accepted.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
@@ -178,7 +178,6 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/36`
 
 ## Next orchestration action
 
-Return `TASK-020` to `$stateless-implementer` on the same isolated branch for
-the recorded directory fallback correction. The implementer must stop at a local
-`READY_FOR_REVIEW` handoff; no copy/paste/move, delete, Git remote operation,
-or public-release action is authorized by this task.
+Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local
+review and the lightweight delivery workflow; no copy/paste/move, delete, Git
+remote operation, or public-release action is authorized by this task.

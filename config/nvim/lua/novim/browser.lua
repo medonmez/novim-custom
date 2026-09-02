@@ -3,6 +3,8 @@
 
 local uv = vim.uv or vim.loop
 
+local M = {}
+
 local ffi_ok, ffi = pcall(require, "ffi")
 if ffi_ok then
   pcall(function()
@@ -18,6 +20,66 @@ if ffi_ok then
   end)
 end
 
+--- Internal check for platform-native atomic no-replace primitive availability
+--- Exposed on M so unit tests can deterministically simulate platforms
+--- where native atomic rename is unavailable.
+---@return boolean available
+---@return string? os_name
+function M._native_rename_available()
+  if not ffi_ok then
+    return false, nil
+  end
+  if ffi.os == "OSX" or ffi.os == "Linux" then
+    return true, ffi.os
+  end
+  return false, ffi.os
+end
+
+--- Perform platform-native atomic rename without replace
+--- Exposed on M for testability and platform-boundary verification.
+---@param old_path string
+---@param new_path string
+---@return boolean? ok true on success, false on failure, nil if unavailable
+---@return string? err error message if failed
+function M._native_rename_noreplace(old_path, new_path)
+  local avail, os_name = M._native_rename_available()
+  if not avail then
+    return nil, nil
+  end
+
+  if os_name == "OSX" then
+    local ok, res = pcall(ffi.C.renamex_np, old_path, new_path, 4) -- RENAME_EXCL = 4
+    if ok then
+      if res == 0 then
+        return true, nil
+      else
+        local err_code = ffi.errno()
+        if err_code == 17 then -- EEXIST
+          return false, "Destination already exists"
+        else
+          return false, "Failed to rename: errno " .. tostring(err_code)
+        end
+      end
+    end
+  elseif os_name == "Linux" then
+    local ok, res = pcall(ffi.C.renameat2, -100, old_path, -100, new_path, 1) -- AT_FDCWD = -100, RENAME_NOREPLACE = 1
+    if ok then
+      if res == 0 then
+        return true, nil
+      else
+        local err_code = ffi.errno()
+        if err_code == 17 then -- EEXIST
+          return false, "Destination already exists"
+        else
+          return false, "Failed to rename: errno " .. tostring(err_code)
+        end
+      end
+    end
+  end
+
+  return nil, nil
+end
+
 --- Atomic, fail-closed rename that never replaces an existing destination
 ---@param old_path string
 ---@param new_path string
@@ -25,37 +87,10 @@ end
 ---@return boolean ok
 ---@return string? error_msg
 local function atomic_rename_noreplace(old_path, new_path, is_dir)
-  -- 1. Use platform-native atomic no-replace primitive where supported
-  if ffi_ok then
-    if ffi.os == "OSX" then
-      local ok, res = pcall(ffi.C.renamex_np, old_path, new_path, 4) -- RENAME_EXCL = 4
-      if ok then
-        if res == 0 then
-          return true, nil
-        else
-          local err_code = ffi.errno()
-          if err_code == 17 then -- EEXIST
-            return false, "Destination already exists"
-          else
-            return false, "Failed to rename: errno " .. tostring(err_code)
-          end
-        end
-      end
-    elseif ffi.os == "Linux" then
-      local ok, res = pcall(ffi.C.renameat2, -100, old_path, -100, new_path, 1) -- AT_FDCWD = -100, RENAME_NOREPLACE = 1
-      if ok then
-        if res == 0 then
-          return true, nil
-        else
-          local err_code = ffi.errno()
-          if err_code == 17 then -- EEXIST
-            return false, "Destination already exists"
-          else
-            return false, "Failed to rename: errno " .. tostring(err_code)
-          end
-        end
-      end
-    end
+  -- 1. Try platform-native atomic no-replace primitive where supported
+  local nat_ok, nat_err = M._native_rename_noreplace(old_path, new_path)
+  if nat_ok ~= nil then
+    return nat_ok, nat_err
   end
 
   -- 2. Fallback for regular files: link(old, new) followed by unlink(old)
@@ -76,21 +111,16 @@ local function atomic_rename_noreplace(old_path, new_path, is_dir)
     return true, nil
   end
 
-  -- 3. Fallback for directories: verify destination does not exist before rename
+  -- 3. Fallback for directories: fail closed with a bounded error.
+  -- Ordinary uv.fs_rename cannot guarantee no-replace semantics against races or
+  -- empty destination directories without a kernel no-replace primitive.
   if uv.fs_lstat(new_path) ~= nil then
     return false, "Destination already exists"
   end
-  local ren_ok, ren_err = uv.fs_rename(old_path, new_path)
-  if not ren_ok then
-    if ren_err and (ren_err:find("EEXIST") or ren_err:find("already exists") or ren_err:find("ENOTEMPTY")) then
-      return false, "Destination already exists"
-    end
-    return false, "Failed to rename: " .. tostring(ren_err)
-  end
-  return true, nil
+  return false, "Atomic directory rename without overwrite is unavailable on this platform"
 end
 
-local M = {}
+M._atomic_rename_noreplace = atomic_rename_noreplace
 
 ---@class ProjectEntry
 ---@field path string relative path from project root

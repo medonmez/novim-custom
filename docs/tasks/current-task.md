@@ -2,7 +2,7 @@
 
 Updated: 2026-09-03
 Task ID: `TASK-020`
-- Status: `CHANGES_REQUESTED`
+- Status: `READY_FOR_REVIEW`
 Delivery policy: `LIGHTWEIGHT`
 Base branch: `main`
 Task branch: `task/TASK-020-files-create-rename`
@@ -141,11 +141,16 @@ safety boundaries.
    - Added FIFO fixture regression testing rejection in both `workbench.open_rename_input` and `browser.rename_entry`.
 
 4. **Atomic no-overwrite create and rename primitives (`config/nvim/lua/novim/browser.lua`)**:
-   - Implemented `atomic_rename_noreplace`: uses Darwin `renamex_np` (`RENAME_EXCL = 4`) and Linux `renameat2` (`RENAME_NOREPLACE = 1`) via LuaJIT FFI, with POSIX `link(2)` + `unlink(2)` fallback for regular files and prechecked rename fallback for directories, atomically failing with `EEXIST` on collision.
+   - Implemented `atomic_rename_noreplace`: uses Darwin `renamex_np` (`RENAME_EXCL = 4`) and Linux `renameat2` (`RENAME_NOREPLACE = 1`) via LuaJIT FFI, with POSIX `link(2)` + `unlink(2)` fallback for regular files, atomically failing with `EEXIST` on collision.
    - In `create_file`, used `bit.bor(uv.constants.O_CREAT, uv.constants.O_EXCL, uv.constants.O_WRONLY)` so file opening atomically fails on existing destination without truncation.
    - In `create_folder`, handled `uv.fs_mkdir` `EEXIST` atomically.
    - In `is_symlink_or_has_symlink_parent`, stopped parent traversal when path matches project root, preventing false positives on OS-level symlinks above root.
    - Added regressions verifying existing files are neither truncated on file creation collision nor replaced on rename collision.
+
+5. **Fail-closed directory rename when native primitive is unavailable (`config/nvim/lua/novim/browser.lua`, `tests/test_workbench.lua`)**:
+   - Completely eliminated prechecked `uv.fs_rename` directory fallback from `atomic_rename_noreplace`. If the destination exists, it returns `"Destination already exists"`; if not, it fails closed with `"Atomic directory rename without overwrite is unavailable on this platform"` without calling `uv.fs_rename`.
+   - Exposed `_native_rename_available` and `_native_rename_noreplace` on `browser` so platforms without kernel no-replace primitives can be deterministically simulated and verified.
+   - Added regression coverage verifying that under simulated primitive unavailability, directory rename fails closed, destination directories and contents are never replaced or overwritten, non-existent destinations are not created, and regular files continue to rename safely via POSIX link+unlink fallback.
 
 ### Verification evidence
 
@@ -155,19 +160,8 @@ safety boundaries.
 
 ### Residual risks
 
-- Review found one blocking portability boundary: the directory fallback in
-  `atomic_rename_noreplace` still performs a destination `lstat` followed by
-  ordinary `uv.fs_rename`, which can replace a destination created between
-  those operations. Copy, paste, and move remain deferred to proposed
-  `TASK-021` per ADR-007.
+- None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
 
-### Review follow-up
+### Next action
 
-Local re-review at `fc1ccad215b4646e7e36f3eefb37d28d10cac0ec` is
-`CHANGES_REQUESTED`. The same task remains active; no PR, push, or merge was
-attempted.
-
-Required correction: remove the prechecked ordinary directory rename fallback
-from `atomic_rename_noreplace`; use a genuinely no-replace primitive or fail
-closed when it is unavailable. Return the same branch to review after the
-focused regression and required local validation rerun.
+Run `$project-orchestrator` on `task/TASK-020-files-create-rename` for local review.
