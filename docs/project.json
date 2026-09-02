@@ -29,7 +29,7 @@
   },
   "workflow": {
     "currentTask": "TASK-020",
-    "currentTaskStatus": "CHANGES_REQUESTED",
+    "currentTaskStatus": "READY_FOR_REVIEW",
     "pullRequest": null,
     "remoteChecks": "TASK-019 STRICT HOSTED RELEASE COMPLETED",
     "lastAcceptedTask": "TASK-019",
