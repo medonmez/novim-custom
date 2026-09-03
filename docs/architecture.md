@@ -240,6 +240,13 @@ required for the first workbench slice.
   returning without saving. The bottom editor statusline will explain these
   controls. Preview/Diff read-only panes, keyboard-only auto-copy, auto-save,
   and remote clipboard synchronization remain outside this slice.
+- `TASK-021` extends the Files pane with a session-local single-source
+  clipboard for bounded regular-file/directory copy, paste, and atomic
+  no-replace move. Its bottom statusline guidance is context-aware: it follows
+  Files selection and focus, keeps Preview/editor and Diff/history mappings
+  separate, and exposes context-menu/input confirmation keys. System clipboard
+  use, overwrite, symlink/special-file copying, bulk operations, and unsafe
+  cross-device move fallbacks remain outside the slice.
 
 ## Preserved contracts
 

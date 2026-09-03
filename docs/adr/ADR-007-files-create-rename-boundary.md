@@ -2,14 +2,15 @@
 
 - Status: `ACCEPTED FOR IMPLEMENTATION`
 - Date: 2026-09-03
-- Scope: `TASK-020` Files create/rename slice
+- Scope: `TASK-020` and `TASK-021` bounded Files mutation slices
 
 ## Decision
 
 1. The Files view becomes a bounded local filesystem surface in two stages.
    `TASK-020` adds creation of regular files and directories plus renaming of
-   regular files and directories. Copy, paste, and move are deferred to
-   `TASK-021` and are not part of the current implementation task.
+   regular files and directories. `TASK-021` adds bounded copy, paste, and move
+   for regular files and directories under the separate source/target and
+   clipboard contract recorded in its task handoff.
 2. The same actions are discoverable from a Files-pane context menu and from
    keyboard shortcuts. The planned shortcuts are `n` for New File, `N` for
    New Folder, and `F2` for Rename; the existing `r` refresh action remains
@@ -32,6 +33,19 @@
    entry where it remains visible. An open file buffer keeps its in-memory
    content and follows the new file path; no unsaved content is silently
    saved, discarded, or replaced.
+7. Files operations are context-discoverable in the bottom statusline. The
+   Files navigation pane shows only its active create, rename, copy, paste,
+   move, menu, and refresh mappings; Preview/editor, Diff/history,
+   context-menu, and bounded input contexts show their own real mappings and
+   confirmation behavior. Hints and notices are bounded for narrow terminals,
+   and errors or confirmation prompts take precedence over ordinary hints.
+8. TASK-021 uses a session-local single-source clipboard, not the operating
+   system clipboard. Copy retains the source for repeated paste; successful
+   move clears the moved record. Copy/move never overwrite, truncate, merge,
+   or replace an existing path. Recursive copies preflight regular-file and
+   directory descendants, reject symlinks and special files, stage temporary
+   output below the destination parent, and remove partial output on failure.
+   Moves use atomic no-replace primitives and fail closed when unsupported.
 
 ## Rationale
 
@@ -39,8 +53,10 @@ The current Files view already owns project-root discovery, lazy expansion,
 selection, preview rendering, and isolated local runtime state. Adding a small
 and explicit create/rename surface makes it more useful for everyday project
 work without importing a plugin or exposing broad filesystem operations.
-Separating copy/paste/move keeps the first mutation slice reviewable and gives
-the later clipboard semantics their own safety contract.
+Separating copy/paste/move kept the first mutation slice reviewable and gave
+the clipboard semantics their own safety contract. Keeping operation hints in
+the statusline makes the new mutation surface discoverable without adding a
+permanent overlay or changing the established workbench layout.
 
 ## Consequences
 
@@ -51,6 +67,7 @@ the later clipboard semantics their own safety contract.
   `novim` boundaries.
 - Failure paths must leave the project tree, open buffers, and unrelated paths
   unchanged apart from an explicit bounded notice.
-- `TASK-021` remains proposed future scope for copy, paste, and move; its
-  source/target selection, overwrite, and clipboard behavior must be defined
-  before implementation.
+- `TASK-021` is now planned future scope for copy, paste, move, and contextual
+  statusline guidance. Its source/target selection, overwrite, clipboard,
+  recursive-copy, and atomic-move behavior is defined in the task record before
+  implementation.

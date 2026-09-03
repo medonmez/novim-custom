@@ -172,8 +172,8 @@ attribution and distinguish local validation from hosted release evidence.
 The Files view will evolve from a browser and preview surface into a bounded
 local project panel in two stages. `TASK-020` adds creation of regular files
 and directories plus complete-name renaming of files and directories.
-`TASK-021` is proposed follow-up scope for copy, paste, and move after the
-first mutation slice is accepted.
+`TASK-021` adds bounded copy, paste, and move now that the first mutation slice
+is accepted, together with contextual bottom-bar guidance for file operations.
 
 The actions are discoverable through a Files-pane context menu and through
 these context-aware shortcuts: `n` creates a file, `N` creates a folder, and
@@ -188,13 +188,23 @@ dot-file visibility setting.
 
 All current-stage mutations remain local and fail closed. Absolute paths,
 parent traversal, path separators, NUL characters, symlinked sources or
-parents, project-root rename, outside-root resolution, and existing targets
-are rejected without overwrite. Successful operations refresh the visible
-lazy tree and preview, keep unaffected expansion state, and follow the new
-selection. An open renamed file preserves its in-memory buffer and unsaved
-content under the new path; it is never silently saved or discarded.
+parents, project-root mutation, outside-root resolution, special files, and
+existing targets are rejected without overwrite. TASK-021 keeps one copied
+source in a session-local clipboard, supports regular files and directories,
+and uses atomic no-replace moves; it does not use the operating-system
+clipboard. Successful operations refresh the visible lazy tree and preview,
+keep unaffected expansion state, and follow the new selection. An open moved
+file preserves its in-memory buffer and unsaved content under the new path; it
+is never silently saved or discarded.
 
-Deletion, duplication, bulk actions, recursive transformations, Git writes,
-remote operations, and network access are not part of this brief. Copy,
-paste, and move require their own source/target and clipboard safety contract
-before `TASK-021` becomes actionable.
+The bottom statusline is context-aware. The Files navigation pane displays the
+actual valid create, rename, copy, paste, move, menu, and refresh shortcuts;
+Preview/editor and Diff/history panes display their own mappings; context menus
+and name inputs display navigation and confirmation/cancellation keys. Text
+and notices remain bounded at narrow terminal widths, with errors and
+confirmation states taking priority over ordinary hints.
+
+Deletion, overwrite, duplication-with-suffix, bulk actions, drag-and-drop, Git
+writes, remote operations, system-clipboard integration, and network access are
+not part of this brief. Recursive directory copy is limited to regular-file
+and directory descendants with preflight and cleanup on failure.
