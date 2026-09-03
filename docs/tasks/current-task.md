@@ -2,7 +2,7 @@
 
 Updated: 2026-09-03
 Task ID: `TASK-021`
-- Status: `PLANNED`
+- Status: `READY_FOR_REVIEW`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -76,11 +76,32 @@ record. No product implementation has been started by this planning handoff.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_IMPLEMENTATION`
-- Candidate commit: none; planning handoff only
+- Status: `READY_FOR_REVIEW`
+- Candidate commit: `HEAD (handoff commit)`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
-- Next action: read `docs/tasks/TASK-021-files-copy-paste-move.md`, the
-  repository instructions, and the latest accepted review, then implement only
-  TASK-021 and return a local `READY_FOR_REVIEW` handoff.
+- Change summary:
+  - Implemented bounded local copy, paste, and move in `browser.lua` (`validate_copy_source`, `validate_move_source`, `copy_entry`, `move_entry`, `remove_path_recursive`), using staged temp files/folders, preflight checking for symlinks and non-regular descendants, atomic no-replace finalization, and fail-closed cleanup.
+  - Added session-local in-memory Files clipboard (`files_clipboard`), left-pane shortcuts `y` Copy, `p` Paste, `M` Move, and context menu options for Copy, Paste, Move in `workbench.lua`.
+  - Added dynamic, context-aware bottom statusline rendering across Files navigation, Preview/editor, Diff/history, context menu, and modal contexts in `workbench.lua` (`update_statusline`, `get_statusline_text`), bounded for narrow terminals with error/notice priority.
+  - Documented `y`, `p`, `M` in `keymaps.lua` workbench key-help, preserving bidirectional test correspondence.
+  - Added 7 deterministic integration test suites covering all criteria.
+- Files changed:
+  - `config/nvim/lua/novim/browser.lua`
+  - `config/nvim/lua/novim/keymaps.lua`
+  - `config/nvim/lua/novim/workbench.lua`
+  - `tests/test_workbench.lua`
+  - `docs/tasks/TASK-021-files-copy-paste-move.md`
+  - `docs/tasks/current-task.md`
+- Validation commands and results:
+  - `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile tests/test_workbench.lua"`: 72/72 PASS (0 failed).
+  - `./tests/run_tests.sh`: 72/72 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
+  - `git diff --check`: PASS (0 warnings/errors).
+  - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
+- Acceptance evidence:
+  - All 14 acceptance criteria verified locally.
+- Residual risks or known gaps:
+  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
+- Next action:
+  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.

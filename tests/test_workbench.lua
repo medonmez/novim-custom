@@ -4326,7 +4326,7 @@ function tests.test_task020_context_menu_shortcuts_and_actions()
   assert_true(workbench.open_context_menu(), "open_context_menu must succeed")
   st = workbench.get_state()
   assert_true(st.context_menu.open, "context menu must be open")
-  assert_eq(#st.context_menu.items, 3, "selected file must have 3 context menu items")
+  assert_eq(#st.context_menu.items, 4, "selected file must have 4 context menu items (New File, New Folder, Rename, Copy)")
   assert_eq(st.context_menu.selected, 1, "default selection is item 1")
 
   -- Keyboard navigation: j moves down, k moves up
@@ -4891,6 +4891,564 @@ function tests.test_task020_dotfile_creation_and_visibility()
   if settings.get("show_dotfiles") then
     settings.toggle_dotfiles()
   end
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+-- =========================================================================
+-- TASK-021: Files Copy, Paste, Move, and Contextual Statusline Help
+-- =========================================================================
+
+function tests.test_task021_copy_paste_files_and_directories_and_repeated_paste()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Copy a regular file (README.md)
+  local readme_entry, readme_idx = find_entry_in_files(st.project_files, "README.md")
+  assert_true(readme_entry ~= nil, "fixture must contain README.md")
+  workbench.select_file(readme_idx)
+
+  local y_cb = buffer_map_callback(st.buf_left, "y")
+  assert_true(y_cb ~= nil, "buf_left must map y for Copy")
+  assert_true(y_cb(), "y must copy selected file")
+
+  local clip = workbench.get_files_clipboard()
+  assert_true(clip ~= nil, "clipboard must be populated")
+  assert_eq(clip.name, "README.md", "clipboard item name must be README.md")
+  assert_eq(clip.is_dir, false, "clipboard item must not be a directory")
+
+  -- 2. Paste into 'docs' directory
+  local docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  assert_true(docs_entry ~= nil, "fixture must contain docs folder")
+  workbench.select_file(docs_idx)
+
+  local p_cb = buffer_map_callback(st.buf_left, "p")
+  assert_true(p_cb ~= nil, "buf_left must map p for Paste")
+  assert_true(p_cb(), "p must paste copied file into docs")
+
+  assert_true(vim.fn.filereadable(fixture .. "/docs/README.md") == 1, "docs/README.md must exist on disk")
+  local src_content = table.concat(vim.fn.readfile(fixture .. "/README.md"), "\n")
+  local dst_content = table.concat(vim.fn.readfile(fixture .. "/docs/README.md"), "\n")
+  assert_eq(dst_content, src_content, "pasted file content must match source")
+
+  -- 3. Repeated paste: clipboard remains populated and can be pasted again into 'src'
+  assert_true(workbench.get_files_clipboard() ~= nil, "clipboard must remain populated after paste")
+  st = workbench.get_state()
+  local src_entry, src_idx = find_entry_in_files(st.project_files, "src")
+  assert_true(src_entry ~= nil, "fixture must contain src folder")
+  workbench.select_file(src_idx)
+
+  assert_true(p_cb(), "p must allow repeated paste into src")
+  assert_true(vim.fn.filereadable(fixture .. "/src/README.md") == 1, "src/README.md must exist on disk")
+
+  -- 4. Recursive directory copy: copy 'src' (which contains utils.lua, nested/deep.lua, README.md) into 'docs'
+  st = workbench.get_state()
+  src_entry, src_idx = find_entry_in_files(st.project_files, "src")
+  workbench.select_file(src_idx)
+  assert_true(y_cb(), "copying src directory must succeed")
+  clip = workbench.get_files_clipboard()
+  assert_true(clip ~= nil and clip.is_dir, "clipboard must hold a directory record")
+
+  docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  workbench.select_file(docs_idx)
+  assert_true(p_cb(), "pasting src directory into docs must succeed")
+
+  assert_true(vim.fn.isdirectory(fixture .. "/docs/src") == 1, "docs/src must exist on disk")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/src/utils.lua") == 1, "docs/src/utils.lua must exist")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/src/nested/deep.lua") == 1, "docs/src/nested/deep.lua must exist")
+
+  -- 5. Copy did not open or retarget an editor buffer
+  assert_true(not workbench.editing_file_buffer(), "copy must not open an editable buffer")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task021_move_file_and_directory_and_buffer_preservation()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  -- Open editable buffers with unsaved modifications
+  local buf_main = vim.fn.bufadd(fixture .. "/main.lua")
+  vim.fn.bufload(buf_main)
+  vim.api.nvim_buf_set_lines(buf_main, 0, -1, false, { "-- UNSAVED MAIN" })
+  assert_true(vim.bo[buf_main].modified, "buf_main must be modified")
+
+  local buf_deep = vim.fn.bufadd(fixture .. "/src/nested/deep.lua")
+  vim.fn.bufload(buf_deep)
+  vim.api.nvim_buf_set_lines(buf_deep, 0, -1, false, { "-- UNSAVED DEEP" })
+  assert_true(vim.bo[buf_deep].modified, "buf_deep must be modified")
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- Expand src and src/nested
+  local src_entry = find_entry_in_files(st.project_files, "src")
+  workbench.toggle_dir_expansion(src_entry)
+  st = workbench.get_state()
+  local nested_entry = find_entry_in_files(st.project_files, "nested")
+  if nested_entry then
+    workbench.toggle_dir_expansion(nested_entry)
+  end
+  st = workbench.get_state()
+
+  -- 1. Move regular file 'main.lua' into 'docs'
+  local main_entry, main_idx = find_entry_in_files(st.project_files, "main.lua")
+  assert_true(main_entry ~= nil, "fixture must contain main.lua")
+  workbench.select_file(main_idx)
+
+  local y_cb = buffer_map_callback(st.buf_left, "y")
+  local m_upper_cb = buffer_map_callback(st.buf_left, "M")
+  assert_true(y_cb ~= nil and m_upper_cb ~= nil, "buf_left must map y and M")
+
+  assert_true(y_cb(), "copy main.lua to clipboard")
+  assert_true(workbench.get_files_clipboard() ~= nil, "clipboard must be set")
+
+  st = workbench.get_state()
+  local docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  workbench.select_file(docs_idx)
+  assert_true(m_upper_cb(), "M must move main.lua into docs")
+  -- Verification: disk state
+  assert_true(vim.fn.filereadable(fixture .. "/main.lua") == 0, "root main.lua must no longer exist")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/main.lua") == 1, "docs/main.lua must exist")
+
+  -- Verification: buffer path updated, unsaved edits preserved
+  local new_main_buf_name = vim.api.nvim_buf_get_name(buf_main)
+  assert_true(new_main_buf_name:find("docs/main.lua", 1, true) ~= nil, "buf_main path must follow move to docs")
+  assert_true(vim.bo[buf_main].modified, "buf_main must still be modified without save")
+  local main_lines = vim.api.nvim_buf_get_lines(buf_main, 0, -1, false)
+  assert_eq(main_lines[1], "-- UNSAVED MAIN", "in-memory unsaved content must be preserved")
+
+  -- Verification: move cleared clipboard
+  assert_true(workbench.get_files_clipboard() == nil, "successful move must clear clipboard record")
+
+  -- 2. Move directory 'src' into 'docs'
+  st = workbench.get_state()
+  src_entry, src_idx = find_entry_in_files(st.project_files, "src")
+  workbench.select_file(src_idx)
+  assert_true(y_cb(), "copy src directory to clipboard")
+
+  st = workbench.get_state()
+  docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  workbench.select_file(docs_idx)
+  assert_true(m_upper_cb(), "M must move src directory into docs")
+  -- Verification: disk state
+  assert_true(vim.fn.isdirectory(fixture .. "/src") == 0, "root src must no longer exist")
+  assert_true(vim.fn.isdirectory(fixture .. "/docs/src") == 1, "docs/src must exist")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/src/nested/deep.lua") == 1, "docs/src/nested/deep.lua must exist")
+
+  -- Verification: buffer for child updated and unsaved edit preserved
+  local new_deep_buf_name = vim.api.nvim_buf_get_name(buf_deep)
+  assert_true(new_deep_buf_name:find("docs/src/nested/deep.lua", 1, true) ~= nil, "buf_deep path must follow directory move")
+  assert_true(vim.bo[buf_deep].modified, "buf_deep must still be modified")
+  local deep_lines = vim.api.nvim_buf_get_lines(buf_deep, 0, -1, false)
+  assert_eq(deep_lines[1], "-- UNSAVED DEEP", "deep unsaved edits must be preserved")
+
+  -- Verification: directory expansion state migrated
+  st = workbench.get_state()
+  assert_true(st.expanded_dirs["docs/src"] == true, "docs/src must remain expanded")
+  assert_true(workbench.get_files_clipboard() == nil, "move directory must clear clipboard")
+
+  workbench.close()
+  vim.api.nvim_buf_delete(buf_main, { force = true })
+  vim.api.nvim_buf_delete(buf_deep, { force = true })
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task021_targeting_root_nested_file_parent_and_no_selection()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- Target resolution 1: Selected file uses file's parent directory
+  local main_entry = find_entry_in_files(st.project_files, "main.lua")
+  local t_dir, t_rel = require("novim.browser").resolve_create_target(main_entry, fixture)
+  local real_fixture = vim.loop.fs_realpath(fixture) or fixture
+  assert_eq(vim.loop.fs_realpath(t_dir) or t_dir, real_fixture, "file target dir must be project root")
+  assert_eq(t_rel, "", "file target rel must be empty for root file")
+
+  -- Target resolution 2: Selected directory uses directory itself
+  local docs_entry = find_entry_in_files(st.project_files, "docs")
+  t_dir, t_rel = require("novim.browser").resolve_create_target(docs_entry, fixture)
+  assert_eq(vim.loop.fs_realpath(t_dir) or t_dir, vim.loop.fs_realpath(fixture .. "/docs") or (fixture .. "/docs"), "dir target dir must be docs")
+  assert_eq(t_rel, "docs", "dir target rel must be docs")
+
+  -- Target resolution 3: nil entry uses project root
+  t_dir, t_rel = require("novim.browser").resolve_create_target(nil, fixture)
+  assert_eq(vim.loop.fs_realpath(t_dir) or t_dir, real_fixture, "nil target dir must be project root")
+  assert_eq(t_rel, "", "nil target rel must be empty")
+  -- Self/descendant move refusal
+  local src_entry = find_entry_in_files(st.project_files, "src")
+  local ok_self, err_self = require("novim.browser").move_entry(src_entry.full_path, src_entry.full_path, fixture)
+  assert_true(not ok_self, "moving directory into itself must fail")
+  assert_true(err_self:find("itself or its descendants", 1, true) ~= nil, "error must mention itself or descendants")
+
+  local ok_sub, err_sub = require("novim.browser").move_entry(src_entry.full_path, fixture .. "/src/nested", fixture)
+  assert_true(not ok_sub, "moving directory into its own descendant must fail")
+  assert_true(err_sub:find("itself or its descendants", 1, true) ~= nil, "error must mention itself or descendants")
+
+  -- Self/descendant copy refusal
+  local ok_cp_self, err_cp_self = require("novim.browser").copy_entry(src_entry.full_path, src_entry.full_path, fixture)
+  assert_true(not ok_cp_self, "copying directory into itself must fail")
+  assert_true(err_cp_self:find("itself or its descendants", 1, true) ~= nil, "error must mention itself or descendants")
+
+  local ok_cp_sub, err_cp_sub = require("novim.browser").copy_entry(src_entry.full_path, fixture .. "/src/nested", fixture)
+  assert_true(not ok_cp_sub, "copying directory into its descendant must fail")
+  assert_true(err_cp_sub:find("itself or its descendants", 1, true) ~= nil, "error must mention itself or descendants")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task021_collision_and_no_overwrite_invariance()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  -- Create docs/main.lua with different content
+  local f = io.open(fixture .. "/docs/main.lua", "w")
+  f:write("EXISTING DOCS CONTENT\n")
+  f:close()
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- Copy main.lua
+  local main_entry, main_idx = find_entry_in_files(st.project_files, "main.lua")
+  workbench.select_file(main_idx)
+  workbench.copy_entry()
+
+  -- Attempt paste into docs -> collision!
+  local docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  workbench.select_file(docs_idx)
+  local paste_ok = workbench.paste_entry()
+  assert_true(not paste_ok, "paste on collision must fail closed")
+  st = workbench.get_state()
+  assert_eq(st.write_notice.level, "error", "notice must be an error")
+  assert_true(st.write_notice.text:find("already exists", 1, true) ~= nil, "notice must report destination already exists")
+
+  -- Invariance: existing destination file is untouched
+  local docs_lines = vim.fn.readfile(fixture .. "/docs/main.lua")
+  assert_eq(docs_lines[1], "EXISTING DOCS CONTENT", "destination content must not be overwritten or truncated")
+
+  -- Invariance: source file is untouched
+  local src_lines = vim.fn.readfile(fixture .. "/main.lua")
+  assert_eq(src_lines[1], "print('hello world')", "source content must remain intact")
+
+  -- Attempt move into docs -> collision!
+  local move_ok = workbench.move_entry()
+  assert_true(not move_ok, "move on collision must fail closed")
+  st = workbench.get_state()
+  assert_eq(st.write_notice.level, "error", "notice must be an error")
+  assert_true(st.write_notice.text:find("already exists", 1, true) ~= nil, "notice must report destination already exists")
+
+  -- Invariance: both files still exist and content is untouched
+  assert_true(vim.fn.filereadable(fixture .. "/main.lua") == 1, "source file must survive failed move")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/main.lua") == 1, "destination file must survive failed move")
+  assert_eq(vim.fn.readfile(fixture .. "/docs/main.lua")[1], "EXISTING DOCS CONTENT")
+  assert_true(workbench.get_files_clipboard() ~= nil, "failed move must not clear clipboard")
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task021_fail_closed_security_boundaries()
+  local workbench = require("novim.workbench")
+  local browser = require("novim.browser")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  -- 1. Symlink source rejection
+  local uv = vim.loop
+  uv.fs_symlink(fixture .. "/main.lua", fixture .. "/symlink_file")
+  local sym_entry = { full_path = fixture .. "/symlink_file", path = "symlink_file", name = "symlink_file", is_dir = false }
+  local ok_cp, err_cp = browser.validate_copy_source(sym_entry, fixture)
+  assert_true(not ok_cp, "symlink copy must fail")
+  assert_true(err_cp:find("Symlinks cannot be copied", 1, true) ~= nil, "error must mention symlinks")
+
+  local ok_mv, err_mv = browser.validate_move_source(sym_entry, fixture)
+  assert_true(not ok_mv, "symlink move must fail")
+  assert_true(err_mv:find("Symlinks cannot be moved", 1, true) ~= nil, "error must mention symlinks")
+
+  -- 2. Directory containing symlink rejected during copy preflight
+  uv.fs_mkdir(fixture .. "/dir_with_sym", 493)
+  uv.fs_symlink(fixture .. "/main.lua", fixture .. "/dir_with_sym/link_inside")
+  local ok_dir_cp, err_dir_cp = browser.copy_entry(fixture .. "/dir_with_sym", fixture .. "/docs", fixture)
+  assert_true(not ok_dir_cp, "directory with symlink must fail copy preflight")
+  assert_true(err_dir_cp:find("Symlinks cannot be copied", 1, true) ~= nil, "error must mention symlinks")
+  assert_true(vim.fn.isdirectory(fixture .. "/docs/dir_with_sym") == 0, "failed copy must leave no destination")
+
+  -- 3. Project root as source rejection
+  local root_entry = { full_path = fixture, path = "", name = "root", is_dir = true }
+  local ok_root_cp, err_root_cp = browser.validate_copy_source(root_entry, fixture)
+  assert_true(not ok_root_cp, "root copy must be refused")
+  assert_true(err_root_cp:find("Cannot copy the project root", 1, true) ~= nil)
+
+  local ok_root_mv, err_root_mv = browser.validate_move_source(root_entry, fixture)
+  assert_true(not ok_root_mv, "root move must be refused")
+  assert_true(err_root_mv:find("Cannot move the project root", 1, true) ~= nil)
+
+  -- 4. Outside-root paths
+  local outside_path = "/tmp/outside_test_" .. uv.hrtime()
+  local ok_out, err_out = browser.copy_entry(outside_path, fixture .. "/docs", fixture)
+  assert_true(not ok_out, "outside source copy must fail")
+
+  -- 5. Stale clipboard record
+  local f_temp = io.open(fixture .. "/transient.txt", "w")
+  f_temp:write("transient\n")
+  f_temp:close()
+
+  workbench.open({ view = "files" })
+  local trans_entry = find_entry_in_files(workbench.get_state().project_files, "transient.txt")
+  workbench.copy_entry(trans_entry)
+  assert_true(workbench.get_files_clipboard() ~= nil)
+
+  -- Delete the source file from disk
+  uv.fs_unlink(fixture .. "/transient.txt")
+  local ok_stale = workbench.paste_entry()
+  assert_true(not ok_stale, "pasting stale clipboard source must fail")
+  assert_true(workbench.get_state().write_notice.text:find("no longer exists", 1, true) ~= nil)
+
+  -- 6. Empty clipboard
+  workbench.clear_files_clipboard()
+  assert_true(not workbench.paste_entry(), "paste with empty clipboard must fail")
+  assert_true(workbench.get_state().write_notice.text:find("No file or folder in clipboard", 1, true) ~= nil)
+  assert_true(not workbench.move_entry(), "move with empty clipboard must fail")
+  assert_true(workbench.get_state().write_notice.text:find("No file or folder in clipboard", 1, true) ~= nil)
+
+  -- 7. Platform unavailable directory rename fallback
+  local orig_avail = browser._native_rename_available
+  browser._native_rename_available = function() return false, nil end
+
+  uv.fs_mkdir(fixture .. "/src_dir", 493)
+  local ok_fallback_mv, err_fallback_mv = browser.move_entry(fixture .. "/src_dir", fixture .. "/docs", fixture)
+  assert_true(not ok_fallback_mv, "directory move without atomic primitive must fail closed")
+  assert_true(err_fallback_mv:find("unavailable on this platform", 1, true) ~= nil)
+  assert_true(vim.fn.isdirectory(fixture .. "/src_dir") == 1, "source directory must survive failed move")
+  assert_true(vim.fn.isdirectory(fixture .. "/docs/src_dir") == 0, "destination directory must not be created")
+
+  browser._native_rename_available = orig_avail
+
+  workbench.close()
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task021_context_aware_statusline_rendering_and_bounds()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- Set wide column for testing complete hints
+  local saved_cols = vim.o.columns
+  vim.o.columns = 120
+  vim.api.nvim_win_set_width(st.win_left, 100)
+  workbench.update_statusline()
+
+  -- 1. File selected (clipboard empty): shows New, Folder, Rename, Copy, Menu, Refresh; NO Paste or Move
+  local readme_entry, readme_idx = find_entry_in_files(st.project_files, "README.md")
+  workbench.select_file(readme_idx)
+  local sl_left = workbench.get_statusline_text("left")
+  assert_true(sl_left:find("[n]", 1, true) ~= nil, "statusline must show [n]")
+  assert_true(sl_left:find("[N]", 1, true) ~= nil, "statusline must show [N]")
+  assert_true(sl_left:find("[F2] Rename", 1, true) ~= nil, "statusline must show [F2] Rename")
+  assert_true(sl_left:find("[y] Copy", 1, true) ~= nil, "statusline must show [y] Copy")
+  assert_true(sl_left:find("[m] Menu", 1, true) ~= nil, "statusline must show [m] Menu")
+  assert_true(sl_left:find("[r] Refresh", 1, true) ~= nil, "statusline must show [r] Refresh")
+  assert_true(sl_left:find("[p] Paste", 1, true) == nil, "statusline must NOT advertise Paste when clipboard empty")
+  assert_true(sl_left:find("[M] Move", 1, true) == nil, "statusline must NOT advertise Move when clipboard empty")
+
+  -- 2. After copy: statusline includes Paste and Move
+  workbench.copy_entry(readme_entry)
+  workbench.update_statusline()
+  sl_left = workbench.get_statusline_text("left")
+  assert_true(sl_left:find("[p] Paste", 1, true) ~= nil, "statusline must advertise Paste after copy")
+  assert_true(sl_left:find("[M] Move", 1, true) ~= nil, "statusline must advertise Move after copy")
+
+  -- 3. Context menu statusline
+  workbench.open_context_menu()
+  local sl_cm = workbench.get_statusline_text("context_menu")
+  assert_true(sl_cm:find("Move", 1, true) ~= nil, "context menu statusline must show Move")
+  assert_true(sl_cm:find("Select", 1, true) ~= nil, "context menu statusline must show Select")
+  assert_true(sl_cm:find("Cancel", 1, true) ~= nil, "context menu statusline must show Cancel")
+  local esc_cm = buffer_map_callback(workbench.get_state().context_menu.buf, "<Esc>")
+  esc_cm()
+
+  -- 4. File input statusline
+  workbench.open_new_file_input()
+  local sl_fi = workbench.get_statusline_text("file_input")
+  assert_true(sl_fi:find("Confirm", 1, true) ~= nil, "file_input statusline must show Confirm")
+  assert_true(sl_fi:find("Cancel", 1, true) ~= nil, "file_input statusline must show Cancel")
+  local esc_fi = buffer_map_callback(workbench.get_state().file_input.buf, "<Esc>")
+  esc_fi()
+
+  -- 5. Diff view left statusline: stage, unstage, commit; NEVER files mutation keys
+  workbench.set_view("diff")
+  st = workbench.get_state()
+  vim.api.nvim_win_set_width(st.win_left, 80)
+  workbench.update_statusline()
+  local sl_diff = workbench.get_statusline_text("left")
+  assert_true(sl_diff:find("Stage", 1, true) ~= nil, "diff statusline must show Stage")
+  assert_true(sl_diff:find("Commit", 1, true) ~= nil, "diff statusline must show Commit")
+  assert_true(sl_diff:find("[n]", 1, true) == nil, "diff statusline must NOT show [n]")
+  assert_true(sl_diff:find("[F2]", 1, true) == nil, "diff statusline must NOT show [F2]")
+  assert_true(sl_diff:find("[y]", 1, true) == nil, "diff statusline must NOT show [y]")
+  assert_true(sl_diff:find("[p]", 1, true) == nil, "diff statusline must NOT show [p]")
+  assert_true(sl_diff:find("[M]", 1, true) == nil, "diff statusline must NOT show [M]")
+
+  -- 6. Narrow terminal width bounding and error precedence
+  workbench.set_view("files")
+  st = workbench.get_state()
+  vim.api.nvim_win_set_width(st.win_left, 26)
+  workbench.update_statusline()
+  local sl_narrow = workbench.get_statusline_text("left")
+  assert_true(#sl_narrow <= 26, "narrow statusline must stay bounded to window width")
+
+  -- An error notice takes precedence over ordinary hints at narrow width
+  workbench.clear_files_clipboard()
+  workbench.paste_entry() -- triggers "No file or folder in clipboard to paste" error
+  workbench.update_statusline()
+  local sl_err_narrow = workbench.get_statusline_text("left")
+  assert_true(sl_err_narrow:find("!", 1, true) ~= nil, "error notice must take precedence at narrow width")
+  assert_true(#sl_err_narrow <= 26, "narrow error statusline must stay bounded to window width")
+
+  workbench.close()
+  vim.o.columns = saved_cols
+  vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+  cleanup_dir(fixture)
+end
+
+function tests.test_task021_context_menu_copy_paste_move_and_shortcuts()
+  local workbench = require("novim.workbench")
+  workbench.close()
+  reset_saved_layout()
+
+  local fixture = create_project_browser_fixture()
+  local old_cwd = vim.fn.getcwd()
+  vim.cmd("cd " .. vim.fn.fnameescape(fixture))
+
+  workbench.open({ view = "files" })
+  local st = workbench.get_state()
+
+  -- 1. Context menu when file is selected and clipboard is empty has 4 items
+  local readme_entry, readme_idx = find_entry_in_files(st.project_files, "README.md")
+  workbench.select_file(readme_idx)
+  workbench.open_context_menu()
+  st = workbench.get_state()
+  assert_eq(#st.context_menu.items, 4, "context menu must have 4 items: New File, New Folder, Rename, Copy")
+  local has_copy = false
+  for _, it in ipairs(st.context_menu.items) do
+    if it.action == "copy" then has_copy = true end
+  end
+  assert_true(has_copy, "context menu must include copy item")
+
+  -- Trigger copy via 'y' keypress in context menu
+  local y_cm = buffer_map_callback(st.context_menu.buf, "y")
+  assert_true(y_cm ~= nil, "context menu must map y")
+  assert_true(y_cm(), "y keypress must perform copy")
+  assert_true(workbench.get_files_clipboard() ~= nil, "clipboard must be populated after y")
+
+  -- 2. Context menu after copy has 6 items (includes Paste and Move)
+  local docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  workbench.select_file(docs_idx)
+  workbench.open_context_menu()
+  st = workbench.get_state()
+  assert_eq(#st.context_menu.items, 6, "context menu must have 6 items when clipboard is populated")
+  local has_paste, has_move = false, false
+  for _, it in ipairs(st.context_menu.items) do
+    if it.action == "paste" then has_paste = true end
+    if it.action == "move" then has_move = true end
+  end
+  assert_true(has_paste, "context menu must include paste")
+  assert_true(has_move, "context menu must include move")
+
+  -- Trigger paste via 'p' keypress in context menu
+  local p_cm = buffer_map_callback(st.context_menu.buf, "p")
+  assert_true(p_cm ~= nil, "context menu must map p")
+  assert_true(p_cm(), "p keypress must perform paste")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/README.md") == 1, "pasted file must exist")
+
+  -- 3. Context menu with root target and clipboard has 4 items (New File, New Folder, Paste, Move; no Rename/Copy)
+  workbench.open_context_menu(nil)
+  st = workbench.get_state()
+  assert_eq(#st.context_menu.items, 4, "root target with clipboard must have 4 items: New File, New Folder, Paste, Move")
+  local esc_cm = buffer_map_callback(st.context_menu.buf, "<Esc>")
+  esc_cm()
+
+  -- 4. Move via 'M' keypress in context menu
+  -- Select docs/README.md, copy it, navigate to src, open menu, press M
+  st = workbench.get_state()
+  local main_entry, main_idx = find_entry_in_files(st.project_files, "main.lua")
+  workbench.select_file(main_idx)
+  workbench.copy_entry()
+
+  docs_entry, docs_idx = find_entry_in_files(st.project_files, "docs")
+  workbench.select_file(docs_idx)
+  workbench.open_context_menu()
+  st = workbench.get_state()
+  local m_cm = buffer_map_callback(st.context_menu.buf, "M")
+  assert_true(m_cm ~= nil, "context menu must map M")
+  assert_true(m_cm(), "M keypress must perform move")
+  assert_true(vim.fn.filereadable(fixture .. "/docs/main.lua") == 1, "moved file must exist")
+  assert_true(vim.fn.filereadable(fixture .. "/main.lua") == 0, "source file must no longer exist")
+  assert_true(workbench.get_files_clipboard() == nil, "move must clear clipboard")
+
+  -- 5. Preserved mappings check: m opens menu, Diff view c commits
+  st = workbench.get_state()
+  local m_left_cb = buffer_map_callback(st.buf_left, "m")
+  assert_true(m_left_cb ~= nil, "buf_left must map m")
+  assert_true(m_left_cb(), "m must open context menu")
+  esc_cm = buffer_map_callback(workbench.get_state().context_menu.buf, "<Esc>")
+  esc_cm()
+
+  workbench.set_view("diff")
+  st = workbench.get_state()
+  local c_diff_cb = buffer_map_callback(st.buf_left, "c")
+  assert_true(c_diff_cb ~= nil, "diff view buf_left must map c")
+  local y_diff_cb = buffer_map_callback(st.buf_left, "y")
+  assert_true(y_diff_cb ~= nil, "y must be mapped in buf_left")
+  assert_true(not y_diff_cb(), "y in diff view must be a no-op")
 
   workbench.close()
   vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))

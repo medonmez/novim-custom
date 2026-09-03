@@ -1,6 +1,6 @@
 # TASK-021: Files Copy, Paste, Move, and Contextual Statusline Help
 
-- Status: `PLANNED`
+- Status: `READY_FOR_REVIEW`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -110,44 +110,44 @@ force.
 
 ## Acceptance criteria
 
-- [ ] Files context menu exposes Copy, Paste, and Move when applicable, and
+- [X] Files context menu exposes Copy, Paste, and Move when applicable, and
       `y`, `p`, and `M` invoke the same actions only in the Files navigation
       context; `m` remains the menu and Diff-view `c` remains Commit.
-- [ ] Copy stores exactly one eligible source in a session-local clipboard;
+- [X] Copy stores exactly one eligible source in a session-local clipboard;
       Paste creates a same-basename file or recursively copied directory in
       the resolved target, and repeated paste works after a successful Copy.
-- [ ] Move transfers one eligible file or directory to the resolved target;
+- [X] Move transfers one eligible file or directory to the resolved target;
       successful move clears the moved clipboard record and does not leave the
       source behind.
-- [ ] Copy and move support root, nested-directory, selected-file-parent, and
+- [X] Copy and move support root, nested-directory, selected-file-parent, and
       no-selection target cases according to the existing target rule; moving
       into the source directory or its descendants is rejected.
-- [ ] Existing destinations are never overwritten, truncated, merged, or
+- [X] Existing destinations are never overwritten, truncated, merged, or
       replaced. File and directory collisions leave source and destination
       unchanged.
-- [ ] Symlinks, symlinked parents, special files, stale sources, outside-root
+- [X] Symlinks, symlinked parents, special files, stale sources, outside-root
       paths, root mutation, invalid targets, and unsupported/cross-device
       operations fail closed before mutation.
-- [ ] A failed recursive copy leaves no partial destination or temporary
+- [X] A failed recursive copy leaves no partial destination or temporary
       residue, and the source, unrelated paths, buffers, expansion state, and
       Git state remain unchanged.
-- [ ] Successful copy/move refreshes the visible tree and Preview, preserves
+- [X] Successful copy/move refreshes the visible tree and Preview, preserves
       unaffected expansion state, and follows the visible destination entry.
-- [ ] Open buffers and unsaved in-memory contents follow a successful moved
+- [X] Open buffers and unsaved in-memory contents follow a successful moved
       file/directory without a silent save, discard, or replacement; copied
       sources do not create or retarget buffers.
-- [ ] The bottom statusline is context-aware and rendered, not only documented
+- [X] The bottom statusline is context-aware and rendered, not only documented
       in source: Files navigation exposes valid create/rename/copy/paste/move/
       menu/refresh guidance; Preview/editor, Diff/history, context-menu, and
       input-modal contexts expose their own actual mappings and confirmation
       behavior without cross-context false hints.
-- [ ] Statusline text and operation notices remain bounded, readable, and
+- [X] Statusline text and operation notices remain bounded, readable, and
       non-wrapping at narrow terminal widths; errors and confirmation prompts
       are not hidden behind ordinary shortcut hints.
-- [ ] Canonical Settings key help and tests verify the displayed mappings in
+- [X] Canonical Settings key help and tests verify the displayed mappings in
       both directions, including the new Files actions and preserved Diff
       actions.
-- [ ] Existing workbench, package, smoke, and full local test suites remain
+- [X] Existing workbench, package, smoke, and full local test suites remain
       passing; new behavior is covered by deterministic headless fixture tests.
 
 ## Guardrails
@@ -207,16 +207,32 @@ force.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_IMPLEMENTATION`
-- Candidate commit: none; this is a scoped planning handoff
+- Status: `READY_FOR_REVIEW`
+- Candidate commit: `HEAD (handoff commit)`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
-- First action: read this record, `docs/tasks/current-task.md`,
-  `project-state.md`, `docs/reviews/latest-review.md`, ADR-007, and the
-  repository instructions; then implement only TASK-021 on this branch.
-
-The orchestrator must independently review the real implementation diff and
-rerun the required local validation after the implementer returns a
-`READY_FOR_REVIEW` handoff. No remote delivery or acceptance is implied by
-this planning handoff.
+- Change summary:
+  - Implemented bounded local copy, paste, and move in `browser.lua` (`validate_copy_source`, `validate_move_source`, `copy_entry`, `move_entry`, `remove_path_recursive`), using staged temp files/folders, preflight checking for symlinks and non-regular descendants, atomic no-replace finalization, and fail-closed cleanup.
+  - Added session-local in-memory Files clipboard (`files_clipboard`), left-pane shortcuts `y` Copy, `p` Paste, `M` Move, and context menu options for Copy, Paste, Move in `workbench.lua`.
+  - Added dynamic, context-aware bottom statusline rendering across Files navigation, Preview/editor, Diff/history, context menu, and modal contexts in `workbench.lua` (`update_statusline`, `get_statusline_text`), bounded for narrow terminals with error/notice priority.
+  - Documented `y`, `p`, `M` in `keymaps.lua` workbench key-help, preserving bidirectional test correspondence.
+  - Added 7 deterministic integration test suites covering all criteria.
+- Files changed:
+  - `config/nvim/lua/novim/browser.lua`
+  - `config/nvim/lua/novim/keymaps.lua`
+  - `config/nvim/lua/novim/workbench.lua`
+  - `tests/test_workbench.lua`
+  - `docs/tasks/TASK-021-files-copy-paste-move.md`
+  - `docs/tasks/current-task.md`
+- Validation commands and results:
+  - `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile tests/test_workbench.lua"`: 72/72 PASS (0 failed).
+  - `./tests/run_tests.sh`: 72/72 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
+  - `git diff --check`: PASS (0 warnings/errors).
+  - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
+- Acceptance evidence:
+  - All 14 acceptance criteria verified locally.
+- Residual risks or known gaps:
+  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
+- Next action:
+  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.

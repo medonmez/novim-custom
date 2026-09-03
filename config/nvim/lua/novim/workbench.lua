@@ -74,6 +74,9 @@ local state = {
   -- Files create/rename and context menu state (TASK-020)
   file_input = nil,   -- { buf, win, prev_win, mode = "new_file"|"new_folder"|"rename", target, error, config }
   context_menu = nil, -- { buf, win, prev_win, selected, items, target }
+  -- Files copy/paste/move clipboard (TASK-021)
+  -- Session-only in-memory single-source clipboard: { full_path, path, name, is_dir }
+  files_clipboard = nil,
 
   header_line_count = 4,
   buf_left = nil,
@@ -500,6 +503,7 @@ function M.render_left_pane()
       end
     end
   end
+  M.update_statusline()
 end
 
 local function diff_status_lines()
@@ -778,6 +782,182 @@ function M._clipboard_provider_available()
   return ok and type(exec) == "string" and exec ~= ""
 end
 
+-- =========================================================================
+-- Context-aware statusline rendering (TASK-021)
+-- =========================================================================
+
+--- Format dynamic statusline hints bounded to available window width, prioritizing notices.
+---@param width integer
+---@param hints string[]
+---@param notice? { level: string, text: string }
+---@return string
+local function format_statusline_hints(width, hints, notice)
+  local parts = {}
+  local avail = width - 2
+  if notice then
+    local is_err = (notice.level == "error")
+    local n_prefix = is_err and "! " or "✓ "
+    local n_text = n_prefix .. tostring(notice.text)
+    if width < 50 then
+      if #n_text > avail - 4 then
+        n_text = n_text:sub(1, math.max(4, avail - 5)) .. "…"
+      end
+      return " [" .. n_text .. "] "
+    else
+      local bound_n = n_text
+      if #bound_n > 28 then bound_n = bound_n:sub(1, 27) .. "…" end
+      table.insert(parts, "[" .. bound_n .. "]")
+    end
+  end
+
+  for _, h in ipairs(hints) do
+    local cand = (#parts > 0) and (table.concat(parts, "  ") .. "  " .. h) or h
+    if #cand <= avail then
+      table.insert(parts, h)
+    else
+      break
+    end
+  end
+
+  if #parts == 0 then
+    return " "
+  end
+  return " " .. table.concat(parts, "  ") .. " "
+end
+
+--- Update the dynamic statusline across active workbench windows according to context.
+function M.update_statusline()
+  if not state.is_open then return end
+
+  -- 1. Left window (Files navigation or Diff changes list)
+  if state.win_left and vim.api.nvim_win_is_valid(state.win_left) then
+    local width = vim.api.nvim_win_get_width(state.win_left)
+    if state.view_mode == "files" then
+      local p_entry = (state.selected_project_index and state.project_files[state.selected_project_index])
+      local can_rename_or_copy = false
+      if p_entry and p_entry.full_path then
+        local norm_root = state.root_dir and state.root_dir:gsub("/+$", "") or ""
+        local norm_entry = p_entry.full_path:gsub("/+$", "")
+        local st = uv.fs_lstat(p_entry.full_path)
+        local is_reg = st and (st.type == "file" or st.type == "directory")
+        if norm_entry ~= norm_root and p_entry.path ~= "" and p_entry.path ~= "." and is_reg then
+          can_rename_or_copy = true
+        end
+      end
+      local has_clip = (state.files_clipboard ~= nil)
+
+      local full = (width >= 85)
+      local hints = {}
+      table.insert(hints, full and "[n] New File" or "[n] New")
+      table.insert(hints, full and "[N] New Folder" or "[N] Folder")
+      if can_rename_or_copy then
+        table.insert(hints, "[F2] Rename")
+        table.insert(hints, "[y] Copy")
+      end
+      if has_clip then
+        table.insert(hints, "[p] Paste")
+        table.insert(hints, "[M] Move")
+      end
+      table.insert(hints, "[m] Menu")
+      table.insert(hints, "[r] Refresh")
+
+      vim.wo[state.win_left].statusline = format_statusline_hints(width, hints, state.write_notice)
+    else
+      local hints = { "[a] Stage", "[u] Unstage", "[c] Commit", "[H] History", "[r] Refresh" }
+      vim.wo[state.win_left].statusline = format_statusline_hints(width, hints, state.write_notice)
+    end
+  end
+
+  -- 2. Right window (Preview or Diff working tree)
+  if state.win_right and vim.api.nvim_win_is_valid(state.win_right) then
+    if state.view_mode == "files" then
+      if M.editing_file_buffer() then
+        vim.wo[state.win_right].statusline = " %f%m%=%{v:lua.get_editor_hints()} "
+      else
+        vim.wo[state.win_right].statusline = " %f %=[Tab] Explorer  [?] Help  [Esc Esc] Quit "
+      end
+    else
+      if state.win_middle and vim.api.nvim_win_is_valid(state.win_middle) then
+        vim.wo[state.win_middle].statusline =
+          " %f %=[Old: " .. tostring(state.compare.old.label) .. "]  [Tab] Next  [S-Tab] Files "
+      end
+      vim.wo[state.win_right].statusline =
+        " %f %=[New: " .. tostring(state.compare.new.label) .. "]  [S-Tab] Previous "
+    end
+  end
+
+  -- 3. History window
+  if state.win_history and vim.api.nvim_win_is_valid(state.win_history) then
+    vim.wo[state.win_history].statusline = " %f %=[History Graph]  [O]ld [N]ew [D]efault  [r] Refresh "
+  end
+
+  -- 4. Context menu window
+  if state.context_menu and state.context_menu.win and vim.api.nvim_win_is_valid(state.context_menu.win) then
+    local cm_w = vim.api.nvim_win_get_width(state.context_menu.win)
+    if cm_w < 40 then
+      vim.wo[state.context_menu.win].statusline = " [Enter] Sel  [Esc] X "
+    else
+      vim.wo[state.context_menu.win].statusline = " [j/k] Move  [Enter] Select  [Esc] Cancel "
+    end
+  end
+
+  -- 5. File input modal
+  if state.file_input and state.file_input.win and vim.api.nvim_win_is_valid(state.file_input.win) then
+    if state.file_input.error then
+      vim.wo[state.file_input.win].statusline = " [! " .. tostring(state.file_input.error) .. "]  [Enter] Confirm  [Esc] Cancel "
+    else
+      vim.wo[state.file_input.win].statusline = " [Enter] Confirm  [Esc] Cancel "
+    end
+  end
+
+  -- 6. Commit input modal
+  if state.commit_input and state.commit_input.win and vim.api.nvim_win_is_valid(state.commit_input.win) then
+    if state.commit_input.error then
+      vim.wo[state.commit_input.win].statusline = " [! " .. tostring(state.commit_input.error) .. "]  [Enter] Commit  [Esc] Cancel "
+    else
+      vim.wo[state.commit_input.win].statusline = " [Enter] Commit  [Esc] Cancel "
+    end
+  end
+
+  -- 7. Preview return confirm modal
+  if state.preview_return and state.preview_return.win and vim.api.nvim_win_is_valid(state.preview_return.win) then
+    vim.wo[state.preview_return.win].statusline = " [Enter/y] Return  [Esc/n] Cancel "
+  end
+end
+
+--- Get the rendered statusline for a given workbench window role or id
+---@param target string|integer "left"|"right"|"middle"|"history"|"context_menu"|"file_input"|"commit_input" or window id
+---@return string
+function M.get_statusline_text(target)
+  local win = nil
+  if type(target) == "number" then
+    win = target
+  elseif target == "left" then
+    win = state.win_left
+  elseif target == "right" then
+    win = state.win_right
+  elseif target == "middle" then
+    win = state.win_middle
+  elseif target == "history" then
+    win = state.win_history
+  elseif target == "context_menu" then
+    win = state.context_menu and state.context_menu.win
+  elseif target == "file_input" then
+    win = state.file_input and state.file_input.win
+  elseif target == "commit_input" then
+    win = state.commit_input and state.commit_input.win
+  end
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return ""
+  end
+  local sl = vim.wo[win].statusline or ""
+  local ok, res = pcall(vim.api.nvim_eval_statusline, sl, { winid = win })
+  if ok and res and res.str then
+    return res.str
+  end
+  return sl
+end
+
 --- Record and echo one bounded, session-only copy notice.
 local function show_copy_notice(notice)
   state.copy_notice = notice
@@ -927,6 +1107,7 @@ local function open_preview_return_confirm()
   vim.wo[win].relativenumber = false
   vim.wo[win].signcolumn = "no"
   vim.wo[win].spell = false
+  vim.wo[win].statusline = " [Enter/y] Return  [Esc/n] Cancel "
   state.preview_return = { buf = buf, win = win, prev_win = prev_win }
   -- The confirmation is a key-choice float, not a text input: whatever mode
   -- the editor was in, its Enter/y/Esc/n/q choices must be decisive, so the
@@ -1426,6 +1607,11 @@ local function set_commit_input_title(title)
     local cfg = vim.deepcopy(ci.config)
     cfg.title = title
     pcall(vim.api.nvim_win_set_config, ci.win, cfg)
+    if ci.error then
+      vim.wo[ci.win].statusline = " [! " .. tostring(ci.error) .. "]  [Enter] Commit  [Esc] Cancel "
+    else
+      vim.wo[ci.win].statusline = " [Enter] Commit  [Esc] Cancel "
+    end
   end
 end
 
@@ -1496,6 +1682,7 @@ function M.open_commit_input()
   vim.wo[win].relativenumber = false
   vim.wo[win].signcolumn = "no"
   vim.wo[win].spell = false
+  vim.wo[win].statusline = " [Enter] Commit  [Esc] Cancel "
   state.commit_input = {
     buf = buf, win = win, prev_win = prev_win, error = nil, config = input_config,
   }
@@ -1638,6 +1825,11 @@ local function set_file_input_title(title)
     local cfg = vim.deepcopy(fi.config)
     cfg.title = title
     pcall(vim.api.nvim_win_set_config, fi.win, cfg)
+    if fi.error then
+      vim.wo[fi.win].statusline = " [! " .. tostring(fi.error) .. "]  [Enter] Confirm  [Esc] Cancel "
+    else
+      vim.wo[fi.win].statusline = " [Enter] Confirm  [Esc] Cancel "
+    end
   end
 end
 
@@ -1842,6 +2034,7 @@ local function open_file_input_modal(mode, default_title, initial_text, data)
   vim.wo[win].relativenumber = false
   vim.wo[win].signcolumn = "no"
   vim.wo[win].spell = false
+  vim.wo[win].statusline = " [Enter] Confirm  [Esc] Cancel "
 
   state.file_input = {
     buf = buf,
@@ -2003,6 +2196,169 @@ function M.open_rename_input(target_entry)
   })
 end
 
+--- Copy a selected regular file or directory into the session-local Files clipboard.
+---@param target_entry? ProjectEntry
+---@return boolean success
+function M.copy_entry(target_entry)
+  if state.view_mode ~= "files" then return false end
+  close_context_menu()
+  target_entry = target_entry or (state.selected_project_index and state.project_files[state.selected_project_index])
+  local ok, err = browser.validate_copy_source(target_entry, state.root_dir)
+  if not ok then
+    state.write_notice = { level = "error", text = err }
+    M.render_left_pane()
+    return false
+  end
+
+  state.files_clipboard = {
+    full_path = target_entry.full_path,
+    path = target_entry.path,
+    name = target_entry.name,
+    is_dir = target_entry.is_dir,
+  }
+  state.write_notice = { level = "ok", text = "Copied: " .. target_entry.name }
+  M.render_left_pane()
+  return true
+end
+
+--- Expand all directory components in a relative path so its children remain visible in the tree.
+---@param expanded_dirs table<string, boolean>
+---@param rel_dir string
+local function expand_ancestors(expanded_dirs, rel_dir)
+  if not rel_dir or rel_dir == "" then return end
+  local acc = ""
+  for part in rel_dir:gmatch("[^/]+") do
+    acc = (acc == "") and part or (acc .. "/" .. part)
+    expanded_dirs[acc] = true
+  end
+end
+
+--- Paste the session-local copied source into the resolved target directory.
+---@param target_entry? ProjectEntry
+---@return boolean success
+function M.paste_entry(target_entry)
+  if state.view_mode ~= "files" then return false end
+  close_context_menu()
+  if not state.files_clipboard then
+    state.write_notice = { level = "error", text = "No file or folder in clipboard to paste" }
+    M.render_left_pane()
+    return false
+  end
+
+  local st_clip = uv.fs_lstat(state.files_clipboard.full_path)
+  if not st_clip then
+    state.write_notice = { level = "error", text = "Source in clipboard no longer exists" }
+    M.render_left_pane()
+    return false
+  end
+
+  target_entry = target_entry or (state.selected_project_index and state.project_files[state.selected_project_index])
+  local target_dir, target_rel = browser.resolve_create_target(target_entry, state.root_dir)
+
+  local ok, res = browser.copy_entry(state.files_clipboard.full_path, target_dir, state.root_dir)
+  if not ok then
+    state.write_notice = { level = "error", text = res }
+    M.render_left_pane()
+    return false
+  end
+
+  expand_ancestors(state.expanded_dirs, target_rel)
+  state.write_notice = { level = "ok", text = "Pasted: " .. state.files_clipboard.name }
+  local show_dots = settings.get("show_dotfiles")
+  rebuild_project_view(show_dots)
+  M.render_left_pane()
+
+  local found_idx = nil
+  for idx, p in ipairs(state.project_files) do
+    if p.full_path == res then
+      found_idx = idx
+      break
+    end
+  end
+  if found_idx then
+    M.select_file(found_idx)
+  else
+    M.render_right_pane()
+  end
+  return true
+end
+
+--- Move a regular file or directory (from clipboard or explicit source) into the resolved target directory.
+---@param target_entry? ProjectEntry
+---@param source_entry? ProjectEntry
+---@return boolean success
+function M.move_entry(target_entry, source_entry)
+  if state.view_mode ~= "files" then return false end
+  close_context_menu()
+  local source = source_entry or state.files_clipboard
+  if not source or not source.full_path then
+    state.write_notice = { level = "error", text = "No file or folder in clipboard to move" }
+    M.render_left_pane()
+    return false
+  end
+
+  local ok_src, src_err = browser.validate_move_source(source, state.root_dir)
+  if not ok_src then
+    state.write_notice = { level = "error", text = src_err }
+    M.render_left_pane()
+    return false
+  end
+
+  target_entry = target_entry or (state.selected_project_index and state.project_files[state.selected_project_index])
+  local target_dir, target_rel = browser.resolve_create_target(target_entry, state.root_dir)
+
+  local ok, res = browser.move_entry(source.full_path, target_dir, state.root_dir)
+  if not ok then
+    state.write_notice = { level = "error", text = res }
+    M.render_left_pane()
+    return false
+  end
+
+  migrate_open_buffers_on_rename(source.full_path, res, source.is_dir)
+  if source.is_dir then
+    local norm_root = state.root_dir:gsub("/+$", "")
+    local old_rel = source.path
+    local new_rel = res:sub(#norm_root + 2)
+    migrate_expanded_dirs_on_rename(old_rel, new_rel)
+  end
+
+  if state.files_clipboard and state.files_clipboard.full_path == source.full_path then
+    state.files_clipboard = nil
+  end
+
+  expand_ancestors(state.expanded_dirs, target_rel)
+  state.write_notice = { level = "ok", text = "Moved: " .. source.name }
+  local show_dots = settings.get("show_dotfiles")
+  rebuild_project_view(show_dots)
+  M.render_left_pane()
+
+  local found_idx = nil
+  for idx, p in ipairs(state.project_files) do
+    if p.full_path == res then
+      found_idx = idx
+      break
+    end
+  end
+  if found_idx then
+    M.select_file(found_idx)
+  else
+    M.render_right_pane()
+  end
+  return true
+end
+
+--- Get a copy of the current Files clipboard item.
+---@return table?
+function M.get_files_clipboard()
+  return state.files_clipboard and vim.deepcopy(state.files_clipboard) or nil
+end
+
+--- Clear the current Files clipboard item.
+function M.clear_files_clipboard()
+  state.files_clipboard = nil
+  M.update_statusline()
+end
+
 --- Render the context menu buffer lines and highlights.
 local function render_context_menu()
   local cm = state.context_menu
@@ -2038,6 +2394,12 @@ local function confirm_context_menu()
     return M.open_new_folder_input(target)
   elseif item.action == "rename" then
     return M.open_rename_input(target)
+  elseif item.action == "copy" then
+    return M.copy_entry(target)
+  elseif item.action == "paste" then
+    return M.paste_entry(target)
+  elseif item.action == "move" then
+    return M.move_entry(target)
   end
   return false
 end
@@ -2068,10 +2430,15 @@ function M.open_context_menu(...)
     local is_regular_or_dir = st and (st.type == "file" or st.type == "directory")
     if norm_entry ~= norm_root and target_entry.path ~= "" and target_entry.path ~= "." and is_regular_or_dir then
       table.insert(items, { label = "Rename       (F2)", action = "rename" })
+      table.insert(items, { label = "Copy         (y)", action = "copy" })
     end
   end
+  if state.files_clipboard ~= nil then
+    table.insert(items, { label = "Paste        (p)", action = "paste" })
+    table.insert(items, { label = "Move         (M)", action = "move" })
+  end
 
-  local width = 24
+  local width = math.min(vim.o.columns - 4, math.max(44, 24))
   local height = #items
   local row, col
 
@@ -2117,6 +2484,7 @@ function M.open_context_menu(...)
   vim.wo[win].signcolumn = "no"
   vim.wo[win].spell = false
   vim.wo[win].cursorline = false
+  vim.wo[win].statusline = " [j/k] Move  [Enter] Select  [Esc] Cancel "
 
   state.context_menu = {
     buf = buf,
@@ -2190,6 +2558,51 @@ function M.open_context_menu(...)
     close_context_menu()
     if has_rename then
       return M.open_rename_input(target)
+    end
+    return false
+  end, opts)
+  vim.keymap.set("n", "y", function()
+    local cm = state.context_menu
+    local has_copy = false
+    if cm then
+      for _, it in ipairs(cm.items) do
+        if it.action == "copy" then has_copy = true end
+      end
+    end
+    local target = cm and cm.target or nil
+    close_context_menu()
+    if has_copy then
+      return M.copy_entry(target)
+    end
+    return false
+  end, opts)
+  vim.keymap.set("n", "p", function()
+    local cm = state.context_menu
+    local has_paste = false
+    if cm then
+      for _, it in ipairs(cm.items) do
+        if it.action == "paste" then has_paste = true end
+      end
+    end
+    local target = cm and cm.target or nil
+    close_context_menu()
+    if has_paste then
+      return M.paste_entry(target)
+    end
+    return false
+  end, opts)
+  vim.keymap.set("n", "M", function()
+    local cm = state.context_menu
+    local has_move = false
+    if cm then
+      for _, it in ipairs(cm.items) do
+        if it.action == "move" then has_move = true end
+      end
+    end
+    local target = cm and cm.target or nil
+    close_context_menu()
+    if has_move then
+      return M.move_entry(target)
     end
     return false
   end, opts)
@@ -2418,6 +2831,7 @@ function M.set_view(mode)
     M.render_left_pane()
     M.render_right_pane()
   end
+  M.update_statusline()
 end
 
 --- Toggle between "files" and "diff" views
@@ -2983,6 +3397,7 @@ function M.close(opts)
   close_context_menu()
   state.write_notice = nil
   state.copy_notice = nil
+  state.files_clipboard = nil
   -- Persist the effective layout before any teardown path runs.
   save_current_view_geometry()
   local is_tab_mode = state.is_tab
@@ -3167,9 +3582,7 @@ function M.open(opts)
     vim.wo[win].cursorline = is_left
     vim.wo[win].spell = false
     vim.wo[win].foldenable = false
-    if is_left then
-      vim.wo[win].statusline = " %f %=[1] Files  [2] Diff  [s] Settings  [r] Refresh  [?] Help "
-    else
+    if not is_left then
       set_preview_window_options(win, state.view_mode == "diff" and "new" or "preview")
     end
   end
@@ -3245,9 +3658,24 @@ function M.open(opts)
     vim.keymap.set("n", "u", function() return M.unstage_selected_file() end, opts)
     vim.keymap.set("n", "c", function() return M.open_commit_input() end, opts)
 
-    -- Files view mutations (TASK-020): create file, create folder, rename, context menu
+    -- Files view mutations (TASK-020 and TASK-021): create, rename, copy, paste, move, context menu
     vim.keymap.set("n", "n", function() return M.open_new_file_input() end, opts)
     vim.keymap.set("n", "<F2>", function() return M.open_rename_input() end, opts)
+    vim.keymap.set("n", "y", function()
+      if state.view_mode == "files" then
+        return M.copy_entry()
+      end
+    end, opts)
+    vim.keymap.set("n", "p", function()
+      if state.view_mode == "files" then
+        return M.paste_entry()
+      end
+    end, opts)
+    vim.keymap.set("n", "M", function()
+      if state.view_mode == "files" then
+        return M.move_entry()
+      end
+    end, opts)
     vim.keymap.set("n", "m", function() return M.open_context_menu() end, opts)
     vim.keymap.set("n", "<CR>", function()
       local cursor = vim.api.nvim_win_get_cursor(0)
@@ -3510,6 +3938,7 @@ function M.get_state()
       level = state.copy_notice.level,
       text = state.copy_notice.text,
     } or nil,
+    files_clipboard = state.files_clipboard and vim.deepcopy(state.files_clipboard) or nil,
     preview_return = {
       open = M.preview_return_confirm_open(),
       buf = state.preview_return and state.preview_return.buf or nil,
