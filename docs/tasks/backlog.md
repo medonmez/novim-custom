@@ -131,15 +131,16 @@ successor task is issued.
   and context-aware bottom-bar guidance without weakening the accepted safety
   boundary.
 
-- `TASK-021` is active with changes requested against candidate `f7e1796`.
+- `TASK-021` is active with changes requested against candidate `79d5bd6`.
   It is based on `origin/main` merge commit `d7c6289`. It uses a
   session-local single-source clipboard, no-overwrite recursive copy for
   regular files/directories, atomic no-replace moves, and rendered statusline
   hints that follow Files selection/focus, Preview/editor, Diff/history,
   context-menu, and input-modal state. Delete, overwrite, bulk operations,
   system clipboard integration, and remote or Git operations remain excluded.
-  The current candidate must first correct staging-path ownership and
-  directory read/cleanup error handling before PR delivery.
+  The prior staging-ownership and directory-read findings are corrected, but
+  the candidate must first fix cleanup-lstat error propagation before PR
+  delivery.
 
 ## Preserved boundaries
 

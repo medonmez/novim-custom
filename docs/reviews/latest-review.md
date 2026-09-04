@@ -5,7 +5,7 @@ Task ID: `TASK-021`
 Local verdict: `CHANGES_REQUESTED`
 Delivery policy: `LIGHTWEIGHT`
 Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9` (`origin/main`)
-Reviewed candidate: `f7e1796998ca1fbcdca026467bb1b3d1121ac127`
+Reviewed candidate: `79d5bd6d54ade980cbe550f9ee93dd4edd7b56ba`
 Task branch: `task/TASK-021-files-copy-paste-move`
 Pull request: none
 Remote checks: none; delivery not started
@@ -14,52 +14,45 @@ Target branch contains change: `NO`
 
 ## Review result
 
-The candidate was reviewed on the recorded isolated branch with a clean
-worktree. Its merge base is exactly the expected `origin/main` baseline. The
-complete delta is scoped to TASK-021 implementation, deterministic tests, and
-the associated planning/current-task records. The normal copy, paste, move,
+The correction candidate was reviewed on the recorded isolated branch with a
+clean worktree. Its merge base is exactly the expected `origin/main` baseline.
+The staging-collision and directory-read paths from the prior review are
+covered by the correction and pass locally. The normal copy, paste, move,
 targeting, menu, statusline, buffer-preservation, and existing-suite checks
-pass locally, but the filesystem failure boundary is not safe to accept yet.
+also pass locally, but one cleanup failure boundary remains unsafe to accept.
 
 ## Findings
 
-### P1 - A staging-name collision can delete a pre-existing unrelated path
+### Resolved from the prior review
 
-`config/nvim/lua/novim/browser.lua:773-776` opens a file staging path
-exclusively, but `copy_entry` unconditionally unlinks that path at
-`1080-1081` when the open fails. The directory path has the same ownership
-problem: `copy_directory_recursive` fails at `867-870`, then `copy_entry`
-recursively removes the path at `1063-1066`. A failed operation must never
-remove a path it did not create.
+The candidate now reserves file staging paths with exclusive creation and
+directory staging roots with exclusive `mkdir`, and leaves pre-existing
+collision sentinels untouched. It also distinguishes `fs_readdir` errors from
+EOF, rejects non-ENOENT cleanup inspection failures, closes directory handles
+on the reported error paths, and propagates the directory cleanup failure
+tested by `test_task021_staging_collisions_and_cleanup_error_propagation`.
 
-This was independently reproduced locally by fixing `uv.hrtime()` to
-`123456`, pre-creating the target sentinel
-`.tmp_copy_file_123456_source.txt`, and calling `browser.copy_entry`. The
-operation returned the expected `EEXIST` failure, but the sentinel no longer
-existed. This violates the no-overwrite and unrelated-path invariance
-contract.
+### P1 - A cleanup lstat error can hide cleanup failure and leave staging residue
 
-Required correction: reserve the staging path atomically and track ownership
-of every created staging root/file. On any collision, fail without cleanup of
-the pre-existing path; on later failures, clean only paths created by this
-operation. Add deterministic file and directory staging-collision regressions.
+After a file-copy failure, `copy_file_contents` unlinks the staging path at
+`config/nvim/lua/novim/browser.lua:817`, but only reports `cleanup failed` when
+the following `uv.fs_lstat(dst_path) ~= nil` succeeds at line 818. If unlink
+fails and lstat itself fails with a non-ENOENT error, the expression is false,
+so the function returns only the original copy error even though the staging
+file may still exist. The file rename-failure cleanup at lines 1118-1119 has
+the same error-classification problem.
 
-### P1 - Directory read and cleanup errors are treated as success or hidden
+This was independently reproduced locally with a temporary fixture by
+injecting a source read error, an `EACCES` unlink failure, and an `EACCES`
+staging-path lstat failure. The result was:
+`ok=false err=Failed to read from source: EIO staging_exists=true`.
+The required cleanup context was absent and the staging file remained.
 
-`uv.fs_readdir()` returns an entries table plus optional error values; an empty
-table is the end-of-directory result. The loops at
-`browser.lua:734-735`, `824-825`, and `877-879` treat `nil` entries as normal
-end-of-directory. A read/permission error can therefore make preflight pass or
-finalize an incomplete recursive copy. In addition, cleanup results are
-ignored at `1065`, `1071`, and `1080`, and `remove_path_recursive:726-727`
-treats any `lstat` failure as if the path were already absent. Cleanup failure
-can leave residue while the original operation still reports only its first
-error.
-
-Required correction: distinguish empty end-of-directory from read errors,
-close handles on every error path, propagate cleanup failure (while retaining
-the original failure context), and add deterministic read-failure and cleanup
-failure/partial-residue coverage.
+Required correction: after an unsuccessful unlink, treat only an explicit
+ENOENT result from lstat as confirmation that cleanup completed; propagate a
+non-ENOENT lstat error as `cleanup failed` (including the original operation
+error), and add deterministic coverage for both copy-failure and
+rename-failure cleanup paths.
 
 ## Acceptance evidence
 
@@ -71,13 +64,13 @@ failure/partial-residue coverage.
 | Root, nested, file-parent, no-selection targeting and descendant refusal | PASS locally | `test_task021_targeting_root_nested_file_parent_and_no_selection` passes. |
 | Collision and ordinary no-overwrite invariance | PASS locally | `test_task021_collision_and_no_overwrite_invariance` passes. |
 | Static symlink, special-file, stale-source, root, outside-root, and unavailable-primitive boundaries | PASS locally | `test_task021_fail_closed_security_boundaries` passes. |
-| Recursive-copy preflight, partial cleanup, and staging ownership | FAIL / correction required | No mid-copy or staging-collision regression exists; the independent staging-collision probe deletes its sentinel. |
+| Recursive-copy preflight, partial cleanup, and staging ownership | FAIL / correction required | Collision and directory-read corrections pass, but an independent cleanup-lstat probe leaves a staging file and hides the cleanup failure. |
 | Refresh, Preview, selection follow, and expansion migration | PASS locally | Copy/move integration tests pass. |
 | Open moved buffers and unsaved content | PASS locally | File and descendant-buffer assertions pass. |
 | Rendered context-aware statusline with no Diff/Preview mutation hints | PASS locally | `test_task021_context_aware_statusline_rendering_and_bounds` passes. |
 | Narrow statusline/error visibility | PASS locally | The 26-column bounded/error-priority assertions pass. |
 | Canonical key-help correspondence | PASS locally | Existing key-help and TASK-021 mapping checks pass. |
-| Existing workbench/package/smoke compatibility | PASS locally | 72/72 workbench tests, offline package/installer suite, and 9/9 smoke tests pass. |
+| Existing workbench/package/smoke compatibility | PASS locally | 73/73 workbench tests, offline package/installer suite, and 9/9 smoke tests pass. |
 
 ## Validation performed
 
@@ -89,12 +82,12 @@ failure/partial-residue coverage.
 - Inspected the complete baseline-to-candidate delta. Protected
   `bin/novim` and `config/nvim/init.lua` are unchanged.
 - Reran `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile
-  tests/test_workbench.lua"`: 72/72 passed.
-- Reran `./tests/run_tests.sh`: 72/72 workbench tests passed, the offline
+  tests/test_workbench.lua"`: 73/73 passed.
+- Reran `./tests/run_tests.sh`: 73/73 workbench tests passed, the offline
   package/installer suite passed, and the regression smoke suite passed 9/9.
 - Reran the applicable `bash -n` checks and `git diff --check`; both passed.
-- Ran a local staging-collision probe; it reproduced deletion of a sentinel
-  path as described in P1 above.
+- Ran a local cleanup-lstat probe; it reproduced hidden cleanup failure and
+  staging residue as described in P1 above.
 
 All test and probe results above are local observations. No production,
 recovery, hosted, or customer-acceptance evidence is claimed. No push, PR, or
@@ -103,12 +96,13 @@ merge was performed.
 ## Delivery decision
 
 `CHANGES_REQUESTED`. Keep TASK-021 active on the same isolated branch and
-return it to `$stateless-implementer` for the two P1 corrections and focused
-regressions. Do not push or open a PR until the corrected candidate receives a
-new local `APPROVED` verdict.
+return it to `$stateless-implementer` for the remaining P1 cleanup-error
+correction and focused regressions. Do not push or open a PR until the
+corrected candidate receives a new local `APPROVED` verdict.
 
 ## Next action
 
-Implement the required staging ownership and read/cleanup error handling on
-`task/TASK-021-files-copy-paste-move`, then rerun the focused and full local
-validation before requesting review again.
+Implement the remaining cleanup-lstat error handling on
+`task/TASK-021-files-copy-paste-move`, add copy- and rename-cleanup regression
+coverage, then rerun the focused and full local validation before requesting
+review again.

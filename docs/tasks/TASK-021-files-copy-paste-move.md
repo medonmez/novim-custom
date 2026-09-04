@@ -1,6 +1,6 @@
 # TASK-021: Files Copy, Paste, Move, and Contextual Statusline Help
 
-- Status: `READY_FOR_REVIEW`
+- Status: `CHANGES_REQUESTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -128,7 +128,7 @@ force.
 - [X] Symlinks, symlinked parents, special files, stale sources, outside-root
       paths, root mutation, invalid targets, and unsupported/cross-device
       operations fail closed before mutation.
-- [X] A failed recursive copy leaves no partial destination or temporary
+- [ ] A failed recursive copy leaves no partial destination or temporary
       residue, and the source, unrelated paths, buffers, expansion state, and
       Git state remain unchanged.
 - [X] Successful copy/move refreshes the visible tree and Preview, preserves
@@ -207,15 +207,15 @@ force.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_REVIEW`
-- Candidate commit: `HEAD (handoff commit)`
+- Status: `CHANGES_REQUESTED`
+- Candidate commit: `79d5bd6d54ade980cbe550f9ee93dd4edd7b56ba`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
 - Change summary:
   - Implemented bounded local copy, paste, and move in `browser.lua` (`validate_copy_source`, `validate_move_source`, `copy_entry`, `move_entry`, `remove_path_recursive`), using staged temp files/folders, preflight checking for symlinks and non-regular descendants, atomic no-replace finalization, and fail-closed cleanup.
   - Corrected staging-path ownership (P1): staging paths are reserved exclusively (`uv.fs_open` with `"wx"` for files and `uv.fs_mkdir` for directories), and neither `copy_file_contents` nor `copy_entry` unlinks or removes staging paths that collided on creation; only paths created by this operation are ever cleaned up on failure. Pre-existing sentinel files and directories survive staging collisions untouched.
-  - Corrected directory read and cleanup error handling (P1): `uv.fs_readdir` distinguishes EOF (`nil, nil`) from read errors (`nil, err`) across `remove_path_recursive`, `preflight_directory`, and `copy_directory_contents`; handles are closed on all error paths; `remove_path_recursive` treats only `ENOENT` as absent and returns failure on other `lstat` errors; cleanup failures are propagated alongside the original failure reason.
+  - Corrected directory read and cleanup error handling (P1): `uv.fs_readdir` distinguishes EOF (`nil, nil`) from read errors (`nil, err`) across `remove_path_recursive`, `preflight_directory`, and `copy_directory_contents`; handles are closed on all error paths; `remove_path_recursive` treats only `ENOENT` as absent and returns failure on other `lstat` errors; directory cleanup failures are propagated alongside the original failure reason.
   - Added session-local in-memory Files clipboard (`files_clipboard`), left-pane shortcuts `y` Copy, `p` Paste, `M` Move, and context menu options for Copy, Paste, Move in `workbench.lua`.
   - Added dynamic, context-aware bottom statusline rendering across Files navigation, Preview/editor, Diff/history, context menu, and modal contexts in `workbench.lua` (`update_statusline`, `get_statusline_text`), bounded for narrow terminals with error/notice priority.
   - Documented `y`, `p`, `M` in `keymaps.lua` workbench key-help, preserving bidirectional test correspondence.
@@ -233,8 +233,14 @@ force.
   - `git diff --check`: PASS (0 warnings/errors).
   - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
 - Acceptance evidence:
-  - All 14 acceptance criteria verified locally.
+  - 13 of 14 acceptance criteria verified locally; cleanup-lstat failure
+    propagation remains outstanding.
 - Residual risks or known gaps:
-  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
+  - Blocking: file staging cleanup can hide a non-ENOENT lstat error and leave
+    residue after unlink failure. Directory move and directory copy rely on
+    platform-native atomic no-replace primitives (`renamex_np` on macOS,
+    `renameat2` on Linux); platforms lacking these primitives fail closed with
+    a bounded notice.
 - Next action:
-  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.
+  - Return to `$stateless-implementer` for the remaining cleanup-error
+    correction and focused regression coverage, then request re-review.

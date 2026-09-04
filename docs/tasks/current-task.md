@@ -2,7 +2,7 @@
 
 Updated: 2026-09-04
 Task ID: `TASK-021`
-- Status: `READY_FOR_REVIEW`
+- Status: `CHANGES_REQUESTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -44,8 +44,9 @@ after TASK-020:
   visible at narrow terminal widths.
 
 The complete acceptance criteria and guardrails are in the detailed task
-record. The first implementation candidate was reviewed and has two blocking
-filesystem failure-boundary findings recorded in
+record. The correction candidate was independently reviewed: the earlier
+staging-collision and directory-read findings are resolved, but cleanup error
+classification still has one blocking filesystem finding recorded in
 `docs/reviews/latest-review.md`.
 
 ## Required validation
@@ -78,8 +79,8 @@ filesystem failure-boundary findings recorded in
 
 ## Implementer handoff
 
-- Status: `READY_FOR_REVIEW`
-- Candidate commit: `HEAD (handoff commit)`
+- Status: `CHANGES_REQUESTED`
+- Candidate commit: `79d5bd6d54ade980cbe550f9ee93dd4edd7b56ba`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
@@ -104,8 +105,14 @@ filesystem failure-boundary findings recorded in
   - `git diff --check`: PASS (0 warnings/errors).
   - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
 - Acceptance evidence:
-  - All 14 acceptance criteria verified locally.
+  - 13 of 14 acceptance criteria verified locally; cleanup-lstat failure
+    propagation remains outstanding.
 - Residual risks or known gaps:
-  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
+  - Blocking: file staging cleanup can hide a non-ENOENT lstat error and leave
+    residue after unlink failure. Directory move and directory copy rely on
+    platform-native atomic no-replace primitives (`renamex_np` on macOS,
+    `renameat2` on Linux); platforms lacking these primitives fail closed with
+    a bounded notice.
 - Next action:
-  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.
+  - Return to `$stateless-implementer` for the remaining cleanup-error
+    correction and focused regression coverage, then request re-review.
