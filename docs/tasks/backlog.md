@@ -1,6 +1,6 @@
 # Backlog
 
-Updated: 2026-09-03
+Updated: 2026-09-04
 
 Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 `CHANGES_REQUESTED`, `BLOCKED`, or `ACCEPTED`.
@@ -27,13 +27,14 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | ACCEPTED | TASK-015 through TASK-018 (accepted) |
 | 20 | TASK-020 | Add Files-pane creation of files/folders and complete-name rename of files/folders | ACCEPTED | TASK-019 (accepted) |
-| 21 | TASK-021 | Add bounded Files-pane copy, paste, move, and contextual statusline guidance | PLANNED | TASK-020 (accepted) |
+| 21 | TASK-021 | Add bounded Files-pane copy, paste, move, and contextual statusline guidance | CHANGES_REQUESTED | TASK-020 (accepted) |
 
 TASK-001 through TASK-020 are accepted. `TASK-021` is the only actionable task
-and is issued on `task/TASK-021-files-copy-paste-move` from the verified
-`origin/main` baseline. It owns the clipboard/source-target contract for
-copy/paste/move and the contextual bottom statusline guidance for Files and
-related workbench contexts. No successor task is issued.
+and remains on `task/TASK-021-files-copy-paste-move` from the verified
+`origin/main` baseline after local review requested changes. It owns the
+clipboard/source-target contract for copy/paste/move and the contextual
+bottom statusline guidance for Files and related workbench contexts. No
+successor task is issued.
 
 ## Accepted task notes
 
@@ -130,12 +131,15 @@ related workbench contexts. No successor task is issued.
   and context-aware bottom-bar guidance without weakening the accepted safety
   boundary.
 
-- `TASK-021` is planned from `origin/main` merge commit `d7c6289`. It uses a
+- `TASK-021` is active with changes requested against candidate `f7e1796`.
+  It is based on `origin/main` merge commit `d7c6289`. It uses a
   session-local single-source clipboard, no-overwrite recursive copy for
   regular files/directories, atomic no-replace moves, and rendered statusline
   hints that follow Files selection/focus, Preview/editor, Diff/history,
   context-menu, and input-modal state. Delete, overwrite, bulk operations,
   system clipboard integration, and remote or Git operations remain excluded.
+  The current candidate must first correct staging-path ownership and
+  directory read/cleanup error handling before PR delivery.
 
 ## Preserved boundaries
 

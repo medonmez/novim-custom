@@ -1,10 +1,10 @@
 # Project State
 
-Updated: 2026-09-03
+Updated: 2026-09-04
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-021` (`PLANNED`; Files copy/paste/move and contextual statusline guidance)
+Current task: `TASK-021` (`CHANGES_REQUESTED`; Files copy/paste/move and contextual statusline guidance)
 Base branch: `main`
 Task branch: `task/TASK-021-files-copy-paste-move`
 Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
@@ -158,11 +158,13 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
   `b1de569`. It adds bounded Files-pane creation and complete-name rename,
   with root-contained validation, no-overwrite behavior, symlink/special-file
   refusals, preview/tree refresh, and open-buffer preservation.
-- `TASK-021` is now the only actionable task. It is planned from verified
+- `TASK-021` is now the only actionable task. Its first implementation
+  candidate `f7e1796998ca1fbcdca026467bb1b3d1121ac127` is based on verified
   `origin/main` merge commit `d7c6289` on
   `task/TASK-021-files-copy-paste-move`, and adds bounded Files-pane
-  copy/paste/move plus context-aware bottom statusline guidance. It has no
-  implementation or PR yet.
+  copy/paste/move plus context-aware bottom statusline guidance. Local review
+  requested changes for staging-path ownership and directory read/cleanup
+  error handling; no PR or remote delivery has started.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -173,15 +175,17 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
 
 ## Active blockers
 
-- No active product blocker remains. `TASK-021` has an explicit source/target,
-  clipboard, no-overwrite, and statusline contract and is ready for
-  implementation. No successor task is issued.
+- `TASK-021` has two local P1 review blockers recorded in
+  `docs/reviews/latest-review.md`: a staging collision can delete a
+  pre-existing unrelated path, and directory read/cleanup errors can be
+  treated as success or hidden. The same task branch must be corrected and
+  re-reviewed; no successor task is issued.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Run `$stateless-implementer` on
-`task/TASK-021-files-copy-paste-move` from verified `origin/main` merge commit
-`d7c6289`. The orchestrator reviews the resulting handoff before delivery.
+Run `$stateless-implementer` on the same
+`task/TASK-021-files-copy-paste-move` branch to correct the two P1 findings,
+then request another orchestrator review before delivery.

@@ -1,6 +1,6 @@
 # TASK-021: Files Copy, Paste, Move, and Contextual Statusline Help
 
-- Status: `READY_FOR_REVIEW`
+- Status: `CHANGES_REQUESTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -207,8 +207,8 @@ force.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_REVIEW`
-- Candidate commit: `HEAD (handoff commit)`
+- Status: `CHANGES_REQUESTED`
+- Candidate commit: `f7e1796998ca1fbcdca026467bb1b3d1121ac127`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
@@ -230,9 +230,18 @@ force.
   - `./tests/run_tests.sh`: 72/72 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
   - `git diff --check`: PASS (0 warnings/errors).
   - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
-- Acceptance evidence:
-  - All 14 acceptance criteria verified locally.
-- Residual risks or known gaps:
-  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
+- Review result: `CHANGES_REQUESTED`; see `docs/reviews/latest-review.md`.
+- Blocking findings:
+  - Staging-path collisions can delete a pre-existing unrelated temporary path;
+    staging ownership must be tracked and cleanup must be limited to paths
+    created by the operation.
+  - Directory read and cleanup errors are treated as success or hidden;
+    distinguish read errors from end-of-directory and propagate visible cleanup
+    failures.
+- Local evidence: 72/72 focused workbench tests, the full offline
+  package/installer suite, 9/9 smoke tests, shell syntax checks, and
+  `git diff --check` pass; an independent staging-collision probe fails the
+  required invariant.
 - Next action:
-  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.
+  - Return the same task branch to `$stateless-implementer` for the blocking
+    corrections and focused regressions. Do not push or open a PR yet.
