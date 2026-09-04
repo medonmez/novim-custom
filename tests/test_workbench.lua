@@ -5550,6 +5550,195 @@ function tests.test_task021_staging_collisions_and_cleanup_error_propagation()
   vim.fn.delete(fixture, "rf")
 end
 
+function tests.test_task021_copy_and_rename_cleanup_lstat_error_handling()
+  local browser = require("novim.browser")
+  local uv = vim.loop
+  local fixture = vim.fn.tempname() .. "_cleanup_lstat_test"
+  vim.fn.mkdir(fixture, "p")
+  vim.fn.mkdir(fixture .. "/docs", "p")
+
+  local f = io.open(fixture .. "/source.txt", "w")
+  f:write("source data for cleanup test\n")
+  f:close()
+
+  -- 1. Direct unit test of cleanup_unlinked_file:
+  -- 1a. Unlink succeeds
+  local test_file = fixture .. "/test_direct.txt"
+  local df = io.open(test_file, "w")
+  df:write("data")
+  df:close()
+  local ok_c1, err_c1 = browser.cleanup_unlinked_file(test_file)
+  assert_true(ok_c1, "cleanup_unlinked_file must succeed when unlink succeeds")
+  assert_true(err_c1 == nil, "cleanup_unlinked_file error must be nil on success")
+
+  -- 1b. Unlink fails with EACCES and lstat fails with non-ENOENT (EACCES)
+  local orig_unlink = uv.fs_unlink
+  local orig_lstat = uv.fs_lstat
+
+  uv.fs_unlink = function(p)
+    return nil, "EACCES: permission denied"
+  end
+  uv.fs_lstat = function(p)
+    return nil, "EACCES: permission denied", "EACCES"
+  end
+
+  local ok_c2, err_c2 = browser.cleanup_unlinked_file(test_file)
+  assert_true(not ok_c2, "cleanup_unlinked_file must fail when unlink and lstat fail non-ENOENT")
+  assert_true(err_c2:find("EACCES: permission denied", 1, true) ~= nil, "error must contain unlink error")
+  assert_true(err_c2:find("inspection failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must contain inspection failure")
+
+  -- 1c. Unlink fails with EACCES and lstat succeeds (file still exists)
+  uv.fs_lstat = function(p)
+    return { type = "file" }, nil
+  end
+  local ok_c3, err_c3 = browser.cleanup_unlinked_file(test_file)
+  assert_true(not ok_c3, "cleanup_unlinked_file must fail when file still exists")
+  assert_eq(err_c3, "EACCES: permission denied", "error must be unlink error when file still exists")
+
+  -- 1d. Unlink fails with ENOENT and lstat confirms ENOENT (file already gone)
+  uv.fs_unlink = function(p)
+    return nil, "ENOENT: no such file or directory"
+  end
+  uv.fs_lstat = function(p)
+    return nil, "ENOENT: no such file or directory", "ENOENT"
+  end
+  local ok_c4, err_c4 = browser.cleanup_unlinked_file(test_file)
+  assert_true(ok_c4, "cleanup_unlinked_file must succeed when file is confirmed absent via ENOENT")
+  assert_true(err_c4 == nil, "error must be nil when file is confirmed absent")
+
+  uv.fs_unlink = orig_unlink
+  uv.fs_lstat = orig_lstat
+
+  -- 2. Copy-failure cleanup path:
+  -- When copy fails (e.g. source read error), unlink fails (EACCES), and staging lstat fails (EACCES)
+  local orig_read = uv.fs_read
+  local staging_seen = nil
+
+  uv.fs_read = function(fd, size, offset)
+    return nil, "EIO: i/o error"
+  end
+  uv.fs_unlink = function(p)
+    if p:find(".tmp_copy_file_", 1, true) then
+      staging_seen = p
+      return nil, "EACCES: permission denied"
+    end
+    return orig_unlink(p)
+  end
+  uv.fs_lstat = function(p)
+    if p:find(".tmp_copy_file_", 1, true) then
+      return nil, "EACCES: permission denied", "EACCES"
+    end
+    return orig_lstat(p)
+  end
+
+  local ok_cp1, err_cp1 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok_cp1, "copy_entry must fail when read fails")
+  assert_true(err_cp1:find("Failed to read from source: EIO: i/o error", 1, true) ~= nil,
+    "error must report original read failure")
+  assert_true(err_cp1:find("cleanup failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must report cleanup failure")
+  assert_true(err_cp1:find("inspection failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must report inspection failure")
+
+  -- 2b. Copy-failure cleanup when unlink fails but lstat succeeds (staging file still exists)
+  uv.fs_lstat = function(p)
+    if p:find(".tmp_copy_file_", 1, true) then
+      return { type = "file" }, nil
+    end
+    return orig_lstat(p)
+  end
+
+  local ok_cp2, err_cp2 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok_cp2, "copy_entry must fail when read fails")
+  assert_true(err_cp2:find("cleanup failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must report cleanup failure when file still exists")
+
+  -- 2c. Copy-failure cleanup when unlink succeeds
+  uv.fs_unlink = orig_unlink
+  uv.fs_lstat = orig_lstat
+
+  local ok_cp3, err_cp3 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok_cp3, "copy_entry must fail when read fails")
+  assert_true(err_cp3:find("Failed to read from source: EIO: i/o error", 1, true) ~= nil,
+    "error must report original read failure")
+  assert_true(err_cp3:find("cleanup failed", 1, true) == nil,
+    "error must NOT report cleanup failure when unlink succeeds")
+
+  -- Restore fs_read
+  uv.fs_read = orig_read
+
+  -- Clean up any residual staging file from mock tests
+  if staging_seen then
+    pcall(orig_unlink, staging_seen)
+  end
+
+  -- 3. Rename-failure cleanup path:
+  -- When file copy succeeds but atomic rename fails, and cleanup unlink/lstat fail non-ENOENT
+  local orig_rename = browser._native_rename_noreplace
+  browser._native_rename_noreplace = function(old_p, new_p)
+    return false, "Failed to rename: EPERM: operation not permitted"
+  end
+
+  local rename_staging_seen = nil
+  uv.fs_unlink = function(p)
+    if p:find(".tmp_copy_file_", 1, true) then
+      rename_staging_seen = p
+      return nil, "EACCES: permission denied"
+    end
+    return orig_unlink(p)
+  end
+  uv.fs_lstat = function(p)
+    if p:find(".tmp_copy_file_", 1, true) then
+      return nil, "EACCES: permission denied", "EACCES"
+    end
+    return orig_lstat(p)
+  end
+
+  local ok_rn1, err_rn1 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok_rn1, "copy_entry must fail when rename fails")
+  assert_true(err_rn1:find("Failed to rename: EPERM: operation not permitted", 1, true) ~= nil,
+    "error must report original rename failure")
+  assert_true(err_rn1:find("cleanup failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must report cleanup failure on rename failure")
+  assert_true(err_rn1:find("inspection failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must report inspection failure on rename failure")
+
+  -- 3b. Rename-failure cleanup when unlink fails but lstat succeeds (staging file still exists)
+  uv.fs_lstat = function(p)
+    if p:find(".tmp_copy_file_", 1, true) then
+      return { type = "file" }, nil
+    end
+    return orig_lstat(p)
+  end
+
+  local ok_rn2, err_rn2 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok_rn2, "copy_entry must fail when rename fails")
+  assert_true(err_rn2:find("cleanup failed: EACCES: permission denied", 1, true) ~= nil,
+    "error must report cleanup failure on rename failure when file still exists")
+
+  -- 3c. Rename-failure cleanup when unlink succeeds
+  uv.fs_unlink = orig_unlink
+  uv.fs_lstat = orig_lstat
+
+  local ok_rn3, err_rn3 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok_rn3, "copy_entry must fail when rename fails")
+  assert_true(err_rn3:find("Failed to rename: EPERM: operation not permitted", 1, true) ~= nil,
+    "error must report original rename failure")
+  assert_true(err_rn3:find("cleanup failed", 1, true) == nil,
+    "error must NOT report cleanup failure when unlink succeeds")
+
+  -- Restore rename mock
+  browser._native_rename_noreplace = orig_rename
+
+  -- Clean up any residual staging file
+  if rename_staging_seen then
+    pcall(orig_unlink, rename_staging_seen)
+  end
+
+  vim.fn.delete(fixture, "rf")
+end
+
 -- =========================================================================
 -- Run all tests
 -- =========================================================================

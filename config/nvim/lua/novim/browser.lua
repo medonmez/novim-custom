@@ -717,6 +717,28 @@ end
 -- Files copy, paste, and move operations (TASK-021)
 -- =========================================================================
 
+--- Attempt to unlink a file during cleanup, and verify absence.
+--- Returns true, nil if unlink succeeded or path is confirmed absent (ENOENT).
+--- Returns false, err if unlink failed and path still exists or cannot be confirmed absent.
+---@param path string
+---@return boolean ok
+---@return string? err
+local function cleanup_unlinked_file(path)
+  local ok_un, un_err = uv.fs_unlink(path)
+  if ok_un then
+    return true, nil
+  end
+  local st, st_err, st_code = uv.fs_lstat(path)
+  if not st then
+    if st_code == "ENOENT" or (st_err and tostring(st_err):find("ENOENT", 1, true) ~= nil) then
+      return true, nil
+    end
+    return false, tostring(un_err or "unlink failed") .. " (inspection failed: " .. tostring(st_err) .. ")"
+  end
+  return false, tostring(un_err or "unlink failed")
+end
+M.cleanup_unlinked_file = cleanup_unlinked_file
+
 --- Remove a path recursively (unlinks files and rmdirs directories bottom-up).
 --- Exposed on M for testability.
 ---@param path string
@@ -758,7 +780,7 @@ function M.remove_path_recursive(path)
     end
     return true, nil
   else
-    local ok_un, un_err = uv.fs_unlink(path)
+    local ok_un, un_err = cleanup_unlinked_file(path)
     if not ok_un then
       return false, "Failed to unlink file: " .. tostring(un_err)
     end
@@ -814,9 +836,9 @@ local function copy_file_contents(src_path, dst_path)
   uv.fs_close(fd_dst)
 
   if not copy_ok then
-    local ok_un, un_err = uv.fs_unlink(dst_path)
-    if not ok_un and uv.fs_lstat(dst_path) ~= nil then
-      return false, copy_err .. " (cleanup failed: " .. tostring(un_err) .. ")", created
+    local ok_cl, cl_err = cleanup_unlinked_file(dst_path)
+    if not ok_cl then
+      return false, copy_err .. " (cleanup failed: " .. tostring(cl_err) .. ")", created
     end
     return false, copy_err, created
   end
@@ -1115,9 +1137,9 @@ function M.copy_entry(source_full_path, target_dir, root_dir)
 
     local ren_ok, ren_err = atomic_rename_noreplace(temp_stage, dest_full_path, false)
     if not ren_ok then
-      local ok_un, un_err = uv.fs_unlink(temp_stage)
-      if not ok_un and uv.fs_lstat(temp_stage) ~= nil then
-        return false, ren_err .. " (cleanup failed: " .. tostring(un_err) .. ")"
+      local ok_cl, cl_err = cleanup_unlinked_file(temp_stage)
+      if not ok_cl then
+        return false, ren_err .. " (cleanup failed: " .. tostring(cl_err) .. ")"
       end
       return false, ren_err
     end
