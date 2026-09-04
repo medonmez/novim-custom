@@ -5455,6 +5455,101 @@ function tests.test_task021_context_menu_copy_paste_move_and_shortcuts()
   cleanup_dir(fixture)
 end
 
+function tests.test_task021_staging_collisions_and_cleanup_error_propagation()
+  local browser = require("novim.browser")
+  local uv = vim.loop
+  local fixture = vim.fn.tempname() .. "_staging_test"
+  vim.fn.mkdir(fixture, "p")
+  vim.fn.mkdir(fixture .. "/docs", "p")
+
+  local f = io.open(fixture .. "/source.txt", "w")
+  f:write("source data\n")
+  f:close()
+
+  -- 1. File staging collision: sentinel file must NOT be unlinked on collision
+  local orig_hrtime = uv.hrtime
+  uv.hrtime = function() return 123456 end
+
+  local sentinel_file = fixture .. "/docs/.tmp_copy_file_123456_source.txt"
+  local sf = io.open(sentinel_file, "w")
+  sf:write("SENTINEL FILE DATA\n")
+  sf:close()
+
+  local ok1, err1 = browser.copy_entry(fixture .. "/source.txt", fixture .. "/docs", fixture)
+  assert_true(not ok1, "copy_entry must fail on file staging collision")
+  assert_true(err1:find("Failed to create destination file", 1, true) ~= nil, "error must report destination creation failure")
+  assert_true(uv.fs_lstat(sentinel_file) ~= nil, "sentinel file must survive staging collision")
+  local sf_read = io.open(sentinel_file, "r")
+  local sf_content = sf_read:read("*a")
+  sf_read:close()
+  assert_eq(sf_content, "SENTINEL FILE DATA\n", "sentinel file content must remain untouched")
+
+  -- 2. Directory staging collision: sentinel dir and its contents must NOT be removed on collision
+  vim.fn.mkdir(fixture .. "/my_folder", "p")
+  local mf = io.open(fixture .. "/my_folder/inner.txt", "w")
+  mf:write("inner\n")
+  mf:close()
+
+  uv.hrtime = function() return 654321 end
+  local sentinel_dir = fixture .. "/docs/.tmp_copy_dir_654321_my_folder"
+  vim.fn.mkdir(sentinel_dir, "p")
+  local sdf = io.open(sentinel_dir .. "/keep.txt", "w")
+  sdf:write("KEEP THIS DATA\n")
+  sdf:close()
+
+  local ok2, err2 = browser.copy_entry(fixture .. "/my_folder", fixture .. "/docs", fixture)
+  assert_true(not ok2, "copy_entry must fail on directory staging collision")
+  assert_true(err2:find("Failed to create staging directory", 1, true) ~= nil, "error must report staging dir creation failure")
+  assert_true(uv.fs_lstat(sentinel_dir) ~= nil, "sentinel dir must survive staging collision")
+  local sdf_read = io.open(sentinel_dir .. "/keep.txt", "r")
+  local sdf_content = sdf_read:read("*a")
+  sdf_read:close()
+  assert_eq(sdf_content, "KEEP THIS DATA\n", "sentinel dir content must remain untouched")
+
+  uv.hrtime = orig_hrtime
+
+  -- 3. Cleanup error propagation on directory copy failure
+  local orig_rm = browser.remove_path_recursive
+  browser.remove_path_recursive = function(p)
+    return false, "EPERM: cannot remove"
+  end
+
+  local orig_rename = browser._native_rename_available
+  browser._native_rename_available = function() return false, nil end
+
+  local ok3, err3 = browser.copy_entry(fixture .. "/my_folder", fixture .. "/docs", fixture)
+  assert_true(not ok3, "copy_entry must fail when rename fails")
+  assert_true(err3 and err3:find("cleanup failed: EPERM: cannot remove", 1, true) ~= nil,
+    "error must propagate cleanup failure")
+
+  browser._native_rename_available = orig_rename
+  browser.remove_path_recursive = orig_rm
+
+  -- 4. fs_readdir error during preflight
+  local orig_readdir = uv.fs_readdir
+  uv.fs_readdir = function(dir)
+    return nil, "EACCES: permission denied"
+  end
+  local ok4, err4 = browser.copy_entry(fixture .. "/my_folder", fixture .. "/docs", fixture)
+  assert_true(not ok4, "copy_entry must fail when readdir fails in preflight")
+  assert_true(err4 and err4:find("Failed to read directory entries", 1, true) ~= nil,
+    "error must report directory read failure")
+  uv.fs_readdir = orig_readdir
+
+  -- 5. remove_path_recursive lstat non-ENOENT error handling
+  local orig_lstat = uv.fs_lstat
+  uv.fs_lstat = function(p)
+    return nil, "EACCES: permission denied", "EACCES"
+  end
+  local ok5, err5 = browser.remove_path_recursive("/some/path")
+  assert_true(not ok5, "remove_path_recursive must fail when lstat returns non-ENOENT")
+  assert_true(err5 and err5:find("Failed to inspect path for cleanup", 1, true) ~= nil,
+    "error must report inspection failure")
+  uv.fs_lstat = orig_lstat
+
+  vim.fn.delete(fixture, "rf")
+end
+
 -- =========================================================================
 -- Run all tests
 -- =========================================================================

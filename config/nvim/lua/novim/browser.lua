@@ -723,15 +723,24 @@ end
 ---@return boolean ok
 ---@return string? err
 function M.remove_path_recursive(path)
-  local st = uv.fs_lstat(path)
-  if not st then return true, nil end
+  local st, err, code = uv.fs_lstat(path)
+  if not st then
+    if code == "ENOENT" or (err and err:find("ENOENT", 1, true)) then
+      return true, nil
+    end
+    return false, "Failed to inspect path for cleanup: " .. tostring(err)
+  end
   if st.type == "directory" then
     local fd, open_err = uv.fs_opendir(path, nil, 100)
     if not fd then
       return false, "Failed to open directory for cleanup: " .. tostring(open_err)
     end
     while true do
-      local entries = uv.fs_readdir(fd)
+      local entries, read_err = uv.fs_readdir(fd)
+      if read_err then
+        uv.fs_closedir(fd)
+        return false, "Failed to read directory for cleanup: " .. tostring(read_err)
+      end
       if not entries or #entries == 0 then break end
       for _, e in ipairs(entries) do
         local child = path .. "/" .. e.name
@@ -765,7 +774,7 @@ end
 local function copy_file_contents(src_path, dst_path)
   local fd_src, src_err = uv.fs_open(src_path, "r", 420)
   if not fd_src then
-    return false, "Failed to read source file: " .. tostring(src_err)
+    return false, "Failed to read source file: " .. tostring(src_err), false
   end
   local st_src = uv.fs_fstat(fd_src)
   local mode = (st_src and st_src.mode) or 420
@@ -773,9 +782,10 @@ local function copy_file_contents(src_path, dst_path)
   local fd_dst, dst_err = uv.fs_open(dst_path, "wx", mode)
   if not fd_dst then
     uv.fs_close(fd_src)
-    return false, "Failed to create destination file: " .. tostring(dst_err)
+    return false, "Failed to create destination file: " .. tostring(dst_err), false
   end
 
+  local created = true
   local chunk_size = 65536
   local offset = 0
   local copy_ok = true
@@ -783,18 +793,18 @@ local function copy_file_contents(src_path, dst_path)
 
   while true do
     local data, r_err = uv.fs_read(fd_src, chunk_size, offset)
-    if not data then
+    if r_err then
       copy_ok = false
       copy_err = "Failed to read from source: " .. tostring(r_err)
       break
     end
-    if #data == 0 then
+    if not data or #data == 0 then
       break
     end
     local written, w_err = uv.fs_write(fd_dst, data, offset)
     if not written or written < #data then
       copy_ok = false
-      copy_err = "Failed to write to destination: " .. tostring(w_err)
+      copy_err = "Failed to write to destination: " .. tostring(w_err or "incomplete write")
       break
     end
     offset = offset + #data
@@ -804,10 +814,13 @@ local function copy_file_contents(src_path, dst_path)
   uv.fs_close(fd_dst)
 
   if not copy_ok then
-    pcall(uv.fs_unlink, dst_path)
-    return false, copy_err
+    local ok_un, un_err = uv.fs_unlink(dst_path)
+    if not ok_un and uv.fs_lstat(dst_path) ~= nil then
+      return false, copy_err .. " (cleanup failed: " .. tostring(un_err) .. ")", created
+    end
+    return false, copy_err, created
   end
-  return true, nil
+  return true, nil, created
 end
 
 --- Recursively preflight a directory tree: ensure every descendant is regular file or directory
@@ -821,14 +834,18 @@ local function preflight_directory(dir_path, root_dir)
     return false, "Failed to inspect directory: " .. tostring(open_err)
   end
   while true do
-    local entries = uv.fs_readdir(fd)
+    local entries, read_err = uv.fs_readdir(fd)
+    if read_err then
+      uv.fs_closedir(fd)
+      return false, "Failed to read directory entries: " .. tostring(read_err)
+    end
     if not entries or #entries == 0 then break end
     for _, e in ipairs(entries) do
       local child_path = dir_path .. "/" .. e.name
-      local st = uv.fs_lstat(child_path)
+      local st, st_err = uv.fs_lstat(child_path)
       if not st then
         uv.fs_closedir(fd)
-        return false, "Failed to inspect descendant: " .. e.name
+        return false, "Failed to inspect descendant: " .. e.name .. " (" .. tostring(st_err) .. ")"
       end
       if st.type == "link" then
         uv.fs_closedir(fd)
@@ -861,32 +878,35 @@ end
 ---@param dst_dir string
 ---@return boolean ok
 ---@return string? err
-local function copy_directory_recursive(src_dir, dst_dir)
-  local st_src = uv.fs_lstat(src_dir)
-  local mode = (st_src and st_src.mode) or 493 -- 0755
-  local ok_mkdir, mk_err = uv.fs_mkdir(dst_dir, mode)
-  if not ok_mkdir then
-    return false, "Failed to create staging directory: " .. tostring(mk_err)
-  end
-
+local function copy_directory_contents(src_dir, dst_dir)
   local fd, open_err = uv.fs_opendir(src_dir, nil, 100)
   if not fd then
     return false, "Failed to open source directory: " .. tostring(open_err)
   end
 
   while true do
-    local entries = uv.fs_readdir(fd)
+    local entries, read_err = uv.fs_readdir(fd)
+    if read_err then
+      uv.fs_closedir(fd)
+      return false, "Failed to read source directory entries: " .. tostring(read_err)
+    end
     if not entries or #entries == 0 then break end
     for _, e in ipairs(entries) do
       local s_child = src_dir .. "/" .. e.name
       local d_child = dst_dir .. "/" .. e.name
-      local st_child = uv.fs_lstat(s_child)
+      local st_child, st_err = uv.fs_lstat(s_child)
       if not st_child then
         uv.fs_closedir(fd)
-        return false, "Source child vanished: " .. e.name
+        return false, "Source child vanished: " .. e.name .. " (" .. tostring(st_err) .. ")"
       end
       if st_child.type == "directory" then
-        local ok_sub, sub_err = copy_directory_recursive(s_child, d_child)
+        local mode = st_child.mode or 493 -- 0755
+        local ok_mkdir, mk_err = uv.fs_mkdir(d_child, mode)
+        if not ok_mkdir then
+          uv.fs_closedir(fd)
+          return false, "Failed to create directory: " .. tostring(mk_err) .. " (" .. e.name .. ")"
+        end
+        local ok_sub, sub_err = copy_directory_contents(s_child, d_child)
         if not ok_sub then
           uv.fs_closedir(fd)
           return false, sub_err
@@ -1060,30 +1080,45 @@ function M.copy_entry(source_full_path, target_dir, root_dir)
     end
 
     local temp_stage = norm_target .. "/.tmp_copy_dir_" .. tostring(uv.hrtime()) .. "_" .. basename
-    local cp_ok, cp_err = copy_directory_recursive(norm_source, temp_stage)
+    local st_src_dir = uv.fs_lstat(norm_source)
+    local mode = (st_src_dir and st_src_dir.mode) or 493 -- 0755
+    local ok_mkdir, mk_err = uv.fs_mkdir(temp_stage, mode)
+    if not ok_mkdir then
+      return false, "Failed to create staging directory: " .. tostring(mk_err)
+    end
+
+    local cp_ok, cp_err = copy_directory_contents(norm_source, temp_stage)
     if not cp_ok then
-      M.remove_path_recursive(temp_stage)
+      local ok_rm, rm_err = M.remove_path_recursive(temp_stage)
+      if not ok_rm then
+        return false, cp_err .. " (cleanup failed: " .. tostring(rm_err) .. ")"
+      end
       return false, cp_err
     end
 
     local ren_ok, ren_err = atomic_rename_noreplace(temp_stage, dest_full_path, true)
     if not ren_ok then
-      M.remove_path_recursive(temp_stage)
+      local ok_rm, rm_err = M.remove_path_recursive(temp_stage)
+      if not ok_rm then
+        return false, ren_err .. " (cleanup failed: " .. tostring(rm_err) .. ")"
+      end
       return false, ren_err
     end
 
     return true, dest_full_path
   else
     local temp_stage = norm_target .. "/.tmp_copy_file_" .. tostring(uv.hrtime()) .. "_" .. basename
-    local cp_ok, cp_err = copy_file_contents(norm_source, temp_stage)
+    local cp_ok, cp_err, created = copy_file_contents(norm_source, temp_stage)
     if not cp_ok then
-      pcall(uv.fs_unlink, temp_stage)
       return false, cp_err
     end
 
     local ren_ok, ren_err = atomic_rename_noreplace(temp_stage, dest_full_path, false)
     if not ren_ok then
-      pcall(uv.fs_unlink, temp_stage)
+      local ok_un, un_err = uv.fs_unlink(temp_stage)
+      if not ok_un and uv.fs_lstat(temp_stage) ~= nil then
+        return false, ren_err .. " (cleanup failed: " .. tostring(un_err) .. ")"
+      end
       return false, ren_err
     end
 

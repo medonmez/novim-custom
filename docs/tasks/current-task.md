@@ -2,7 +2,7 @@
 
 Updated: 2026-09-04
 Task ID: `TASK-021`
-- Status: `CHANGES_REQUESTED`
+- Status: `READY_FOR_REVIEW`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -78,17 +78,19 @@ filesystem failure-boundary findings recorded in
 
 ## Implementer handoff
 
-- Status: `CHANGES_REQUESTED`
-- Candidate commit: `f7e1796998ca1fbcdca026467bb1b3d1121ac127`
+- Status: `READY_FOR_REVIEW`
+- Candidate commit: `HEAD (handoff commit)`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
 - Change summary:
   - Implemented bounded local copy, paste, and move in `browser.lua` (`validate_copy_source`, `validate_move_source`, `copy_entry`, `move_entry`, `remove_path_recursive`), using staged temp files/folders, preflight checking for symlinks and non-regular descendants, atomic no-replace finalization, and fail-closed cleanup.
+  - Corrected staging-path ownership (P1): staging paths are reserved exclusively (`uv.fs_open` with `"wx"` for files and `uv.fs_mkdir` for directories), and neither `copy_file_contents` nor `copy_entry` unlinks or removes staging paths that collided on creation; only paths created by this operation are ever cleaned up on failure. Pre-existing sentinel files and directories survive staging collisions untouched.
+  - Corrected directory read and cleanup error handling (P1): `uv.fs_readdir` distinguishes EOF (`nil, nil`) from read errors (`nil, err`) across `remove_path_recursive`, `preflight_directory`, and `copy_directory_contents`; handles are closed on all error paths; `remove_path_recursive` treats only `ENOENT` as absent and returns failure on other `lstat` errors; cleanup failures are propagated alongside the original failure reason.
   - Added session-local in-memory Files clipboard (`files_clipboard`), left-pane shortcuts `y` Copy, `p` Paste, `M` Move, and context menu options for Copy, Paste, Move in `workbench.lua`.
   - Added dynamic, context-aware bottom statusline rendering across Files navigation, Preview/editor, Diff/history, context menu, and modal contexts in `workbench.lua` (`update_statusline`, `get_statusline_text`), bounded for narrow terminals with error/notice priority.
   - Documented `y`, `p`, `M` in `keymaps.lua` workbench key-help, preserving bidirectional test correspondence.
-  - Added 7 deterministic integration test suites covering all criteria.
+  - Added 8 deterministic integration test suites in `tests/test_workbench.lua`, including `test_task021_staging_collisions_and_cleanup_error_propagation` which tests sentinel preservation on staging collision, cleanup error propagation, `fs_readdir` preflight errors, and `lstat` inspection failures.
 - Files changed:
   - `config/nvim/lua/novim/browser.lua`
   - `config/nvim/lua/novim/keymaps.lua`
@@ -97,22 +99,13 @@ filesystem failure-boundary findings recorded in
   - `docs/tasks/TASK-021-files-copy-paste-move.md`
   - `docs/tasks/current-task.md`
 - Validation commands and results:
-  - `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile tests/test_workbench.lua"`: 72/72 PASS (0 failed).
-  - `./tests/run_tests.sh`: 72/72 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
+  - `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile tests/test_workbench.lua"`: 73/73 PASS (0 failed).
+  - `./tests/run_tests.sh`: 73/73 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
   - `git diff --check`: PASS (0 warnings/errors).
   - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
-- Review result: `CHANGES_REQUESTED`; see `docs/reviews/latest-review.md`.
-- Blocking findings:
-  - Staging-path collisions can delete a pre-existing unrelated temporary path;
-    staging ownership must be tracked and cleanup must be limited to paths
-    created by the operation.
-  - Directory read and cleanup errors are treated as success or hidden;
-    distinguish read errors from end-of-directory and propagate visible cleanup
-    failures.
-- Local evidence: 72/72 focused workbench tests, the full offline
-  package/installer suite, 9/9 smoke tests, shell syntax checks, and
-  `git diff --check` pass; an independent staging-collision probe fails the
-  required invariant.
+- Acceptance evidence:
+  - All 14 acceptance criteria verified locally.
+- Residual risks or known gaps:
+  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
 - Next action:
-  - Return the same task branch to `$stateless-implementer` for the blocking
-    corrections and focused regressions. Do not push or open a PR yet.
+  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.
