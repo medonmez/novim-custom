@@ -1,183 +1,112 @@
 # Current Task
 
-Updated: 2026-09-03
-Task ID: `TASK-020`
-- Status: `ACCEPTED`
-Delivery policy: `LIGHTWEIGHT`
-Base branch: `main`
-Task branch: `task/TASK-020-files-create-rename`
-Expected baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
-Pull request: `#38 <https://github.com/medonmez/oh-my-code/pull/38>` (`MERGED` at
-`b1de569410682dd1a4fc3ed13dc476e26d69e824`)
-PR target: `origin/main`
-Dependency: `TASK-019` (accepted in PR #36)
-Detailed task record: `docs/tasks/TASK-020-files-create-rename.md`
+Updated: 2026-09-05
+Task ID: `TASK-021`
+- Status: `READY_FOR_REVIEW`
+- Delivery policy: `LIGHTWEIGHT`
+- Base branch: `main`
+- Task branch: `task/TASK-021-files-copy-paste-move`
+- Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
+- Pull request: none
+- PR target: `origin/main`
+- Dependency: `TASK-020` (accepted in PR #38)
+- Detailed task record: `docs/tasks/TASK-021-files-copy-paste-move.md`
 
 ## Outcome
 
-Make the Files view useful for everyday project setup by adding local,
-discoverable creation of files and folders and full-name renaming of files and
-folders, while preserving the existing terminal workbench and filesystem
-safety boundaries.
+Extend the Files pane with bounded local copy, paste, and move actions and
+make the available file operations visible in the bottom statusline. A user
+should be able to discover the valid action keys from the current Files,
+Preview, Diff, context-menu, and name-input context without relying on memory.
 
-## In scope
+## Scope and contract
 
-- Create a regular file as a child of the selected directory, the selected
-  file's parent, or the project root when there is no usable selection.
-- Create a directory using the same target-selection rule.
-- Rename a regular file or directory by editing its complete single name,
-  including a file extension.
-- Expose create and rename through a Files-pane context menu and keyboard
-  shortcuts: `n` New File, `N` New Folder, and `F2` Rename. Keep `r` as
-  Refresh.
-- Use a bounded name input where `Enter` confirms and `Esc` cancels.
-- Refresh the visible lazy tree and right-side preview after successful
-  mutation, following the created or renamed entry when visible.
-- Preserve an open file buffer's in-memory content and update its path when
-  the corresponding file is renamed.
-- Add deterministic local tests for success, cancellation, selection/preview
-  refresh, extension changes, hidden names, and fail-closed path boundaries.
+TASK-021 owns the explicit source/target and clipboard contract left proposed
+after TASK-020:
 
-## Out of scope
+- `y` copies one selected regular file or directory into a session-local
+  single-source clipboard; `p` pastes it into the resolved target directory;
+  `M` moves one selected regular file or directory. `m` remains the Files
+  context-menu shortcut, and Diff-view `c` remains Commit.
+- Directory copies recursively copy regular-file descendants only. Symlinks,
+  special files, stale sources, self/descendant moves, outside-root paths,
+  root mutations, invalid targets, collisions, and unsupported/cross-device
+  operations fail closed.
+- Copy and move never overwrite, truncate, merge, or replace an existing path.
+  Failed recursive copies remove temporary/partial output and leave the source
+  and destination unchanged.
+- Successful operations refresh the visible lazy tree and Preview, preserve
+  unaffected expansion state, and follow the visible destination. Moved open
+  buffers and unsaved content follow the new path without save/discard.
+- The bottom statusline is rendered dynamically for Files navigation,
+  Preview/editor, Diff/history, context-menu, and input-modal contexts. It
+  shows only actual valid mappings and keeps bounded operation/error feedback
+  visible at narrow terminal widths.
 
-- Copy, paste, move, delete, duplicate, trash/recovery, bulk operations, or
-  recursive filesystem transformations. Copy/paste/move are proposed for
-  `TASK-021` after this slice is accepted.
-- Git stage, unstage, commit, push, pull, fetch, checkout, merge, rebase,
-  discard, amend, or remote synchronization.
-- Network access, plugin installation, normal Neovim configuration changes,
-  installed upstream `novim` changes, or public-release changes.
-- Arbitrary multi-component paths entered in the name prompt.
-
-## Acceptance criteria
-
-- [x] Files-pane context menu exposes New File, New Folder, and Rename for the
-      appropriate selection, and keyboard shortcuts invoke the same actions.
-- [x] New File creates an empty regular file at the selected directory, the
-      selected file's parent, or the project root; New Folder creates a
-      directory at the same resolved target.
-- [x] Rename changes a file's complete basename, including its extension, and
-      changes a directory's name without changing its contents.
-- [x] `Enter` confirms a valid name and `Esc` cancels without filesystem or
-      selection mutation; empty names, `.`/`..`, separators, NULs, absolute
-      paths, invalid targets, and existing-name collisions are rejected.
-- [x] Symlinked sources or parents, project-root rename attempts, and any
-      resolved target outside the project root fail closed before mutation.
-- [x] Dot-prefixed names can be created or renamed explicitly and obey the
-      existing show-dotfiles setting in the refreshed tree.
-- [x] A successful operation refreshes the visible tree and preview, keeps
-      unaffected expansion state, and selects the created or renamed entry when
-      it is visible.
-- [x] If a renamed file is open for editing, its buffer and unsaved in-memory
-      content remain intact and follow the new path; no silent save or discard
-      occurs.
-- [x] Failed operations produce a bounded visible error and leave the source,
-      target, open buffers, Git state, unrelated paths, installed `novim`, and
-      normal Neovim configuration unchanged.
-- [x] Existing workbench, package, smoke, and full local test suites remain
-      passing; new behavior is covered by deterministic headless fixture tests.
-
-## Guardrails
-
-- Keep all filesystem mutations below the current project root and validate
-  with non-following metadata checks before the write.
-- Never overwrite an existing path, follow a symlink for a mutation parent,
-  rename the project root, or interpret user input as a multi-component path.
-- Do not add a delete action in this task. Do not stage or commit new files
-  automatically and do not invoke any remote Git operation.
-- Preserve lazy expansion, hidden-dotfile filtering, right-pane preview
-  behavior, editable-buffer safety, launcher XDG isolation, and the installed
-  `novim`/normal Neovim configuration boundaries.
-- Keep the context menu and keyboard shortcuts backed by real mappings and
-  document them through the canonical key-help source used by the Settings
-  panel.
-- Do not claim copy/paste/move support until the separate `TASK-021` contract
-  is planned and implemented.
-
-## Relevant files and discovery hints
-
-- `config/nvim/lua/novim/browser.lua`
-- `config/nvim/lua/novim/workbench.lua`
-- `config/nvim/lua/novim/keymaps.lua`
-- `config/nvim/lua/novim/settings_ui.lua`
-- `tests/test_workbench.lua`
-- `tests/test_smoke.lua`
-- `docs/product/product.md`
-- `docs/adr/ADR-007-files-create-rename-boundary.md`
+The complete acceptance criteria and guardrails are in the detailed task
+record. The correction candidate was independently reviewed and approved;
+the earlier staging-collision, directory-read, and cleanup-lstat findings are
+resolved. The lightweight delivery path is now pending.
 
 ## Required validation
 
-- Verify the task branch starts at the expected `origin/main` baseline and
-  contains only this task's implementation and tests.
-- Exercise create/rename through the real Files-pane callbacks and the
-  context-menu/input path, not only direct filesystem helper calls.
-- Test root and nested expanded directories, file-parent targeting, extension
-  changes, dotfile visibility, cancellation, collisions, invalid names,
-  symlink boundaries, outside-root attempts, and open-buffer preservation.
-- Verify after success/failure that Git status is not staged or committed,
-  unrelated fixture paths are unchanged, and no network or plugin activity is
-  introduced.
-- Run `bash -n` for applicable shell launchers, `./tests/run_tests.sh`, and
-  `git diff --check`; classify all evidence as local.
+- Inspect the real branch delta and exercise the Files callbacks, context menu,
+  keyboard actions, target resolution, recursive copy, atomic move, buffer
+  migration, and cleanup paths.
+- Verify rendered statusline behavior after view/focus/selection changes and
+  while context menus or input modals are active; assert no Diff/Preview
+  cross-context false hints.
+- Cover files, nested directories, repeated paste, root/no-selection and
+  selected-file-parent targets, dotfiles, collisions, symlink/special-file
+  rejection, self/descendant moves, stale clipboard, partial-copy cleanup,
+  unavailable atomic primitives, and open unsaved buffers.
+- Run applicable shell syntax checks, `./tests/run_tests.sh`, and
+  `git diff --check`. Classify all evidence as local or repository-provider
+  observations, never as production, recovery, or customer-acceptance
+  evidence.
+
+## Guardrails
+
+- Preserve TASK-020's fail-closed root containment, non-following metadata
+  checks, atomic no-overwrite behavior, dot-file setting, lazy expansion,
+  Preview refresh, open-buffer migration, and local-only boundary.
+- Do not use the OS clipboard for Files operations, invoke shell/network/
+  plugins, mutate Git, add delete/overwrite/bulk behavior, or touch installed
+  `novim` or the normal Neovim configuration.
+- Do not weaken the unavailable-native-directory-rename failure behavior or
+  use copy-then-delete as an unsafe move fallback.
 
 ## Implementer handoff
 
 - Status: `READY_FOR_REVIEW`
-- Candidate commit: `HEAD (handoff commit)`
-- Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98`
-- Task branch: `task/TASK-020-files-create-rename`
-
-### Summary of changes and review corrections
-
-1. **Diff-view `N` mapping context separation (`config/nvim/lua/novim/workbench.lua`)**:
-   - Made `N` mapping context-aware on `buf_left`: in Files view it invokes `open_new_folder_input`, while in Diff view it preserves `assign_compare_endpoint("new", "changes")`.
-   - Added regression asserting `N` in Diff view assigns comparison endpoint without opening file input modal, while in Files view it opens New Folder.
-
-2. **New Folder symlink preflight (`config/nvim/lua/novim/workbench.lua`)**:
-   - Added the missing `local is_sym, sym_err = browser.is_symlink_or_has_symlink_parent(target_dir, state.root_dir)` assignment in `open_new_folder_input`.
-   - Added regression verifying New Folder targeting a symlinked directory fails closed before opening the modal.
-
-3. **Reject non-regular special files at rename (`config/nvim/lua/novim/browser.lua`, `config/nvim/lua/novim/workbench.lua`)**:
-   - Enforced `st_source.type == "file" or st_source.type == "directory"` in `rename_entry` and `open_rename_input`. Non-regular nodes (FIFOs, devices, sockets) are rejected with `"Only regular files and directories can be renamed"`.
-   - Added FIFO fixture regression testing rejection in both `workbench.open_rename_input` and `browser.rename_entry`.
-
-4. **Atomic no-overwrite create and rename primitives (`config/nvim/lua/novim/browser.lua`)**:
-   - Implemented `atomic_rename_noreplace`: uses Darwin `renamex_np` (`RENAME_EXCL = 4`) and Linux `renameat2` (`RENAME_NOREPLACE = 1`) via LuaJIT FFI, with POSIX `link(2)` + `unlink(2)` fallback for regular files, atomically failing with `EEXIST` on collision.
-   - In `create_file`, used `bit.bor(uv.constants.O_CREAT, uv.constants.O_EXCL, uv.constants.O_WRONLY)` so file opening atomically fails on existing destination without truncation.
-   - In `create_folder`, handled `uv.fs_mkdir` `EEXIST` atomically.
-   - In `is_symlink_or_has_symlink_parent`, stopped parent traversal when path matches project root, preventing false positives on OS-level symlinks above root.
-   - Added regressions verifying existing files are neither truncated on file creation collision nor replaced on rename collision.
-
-5. **Fail-closed directory rename when native primitive is unavailable (`config/nvim/lua/novim/browser.lua`, `tests/test_workbench.lua`)**:
-   - Completely eliminated prechecked `uv.fs_rename` directory fallback from `atomic_rename_noreplace`. If the destination exists, it returns `"Destination already exists"`; if not, it fails closed with `"Atomic directory rename without overwrite is unavailable on this platform"` without calling `uv.fs_rename`.
-   - Exposed `_native_rename_available` and `_native_rename_noreplace` on `browser` so platforms without kernel no-replace primitives can be deterministically simulated and verified.
-   - Added regression coverage verifying that under simulated primitive unavailability, directory rename fails closed, destination directories and contents are never replaced or overwritten, non-existent destinations are not created, and regular files continue to rename safely via POSIX link+unlink fallback.
-
-### Verification evidence
-
-- `git diff --check`: PASS (clean diff, no whitespace errors).
-- `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/run_smoke_tests.sh tests/run_package_tests.sh`: PASS.
-- `./tests/run_tests.sh`: PASS (65/65 unit/integration tests in test_workbench.lua, all package/installer suite tests, and 9/9 regression smoke tests under public ohc launcher).
-
-### Residual risks
-
-- None blocking. Copy, paste, and move remain deferred to proposed `TASK-021` per ADR-007.
-
-### Next action
-
-TASK-020 is accepted. Keep the repository idle until an explicit successor
-brief is issued; TASK-021 remains proposed and unissued.
-
-## Delivery record
-
-Implementer handoff: `48c9c642d98b4ac8c98922dbb73dcd2d108540fe`.
-Local review record `f4f250adbb9bece794758acff0cd88aeb4e3c396` was
-`APPROVED`. PR #38 merged the reviewed implementation into `origin/main` at
-`b1de569410682dd1a4fc3ed13dc476e26d69e824`; the required `shellcheck` check
-passed.
-
-Local validation passed: `./tests/run_tests.sh` reported 65/65 workbench
-tests, the offline package/installer suite passed, and the public `ohc` smoke
-suite passed 9/9, alongside applicable `bash -n` and `git diff --check`.
-These are local or repository-CI observations, not production, recovery, or
-customer-acceptance evidence.
+- Candidate commit: `d9dfdda78d273660a817bf726a3c7807fa2042a8`
+- Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
+- Task branch: `task/TASK-021-files-copy-paste-move`
+- Implementation agent: `$stateless-implementer`
+- Change summary:
+  - Implemented bounded local copy, paste, and move in `browser.lua` (`validate_copy_source`, `validate_move_source`, `copy_entry`, `move_entry`, `remove_path_recursive`), using staged temp files/folders, preflight checking for symlinks and non-regular descendants, atomic no-replace finalization, and fail-closed cleanup.
+  - Corrected staging-path ownership (P1): staging paths are reserved exclusively (`uv.fs_open` with `"wx"` for files and `uv.fs_mkdir` for directories), and neither `copy_file_contents` nor `copy_entry` unlinks or removes staging paths that collided on creation; only paths created by this operation are ever cleaned up on failure. Pre-existing sentinel files and directories survive staging collisions untouched.
+  - Corrected directory read and cleanup error handling (P1): `uv.fs_readdir` distinguishes EOF (`nil, nil`) from read errors (`nil, err`) across `remove_path_recursive`, `preflight_directory`, and `copy_directory_contents`; handles are closed on all error paths; `remove_path_recursive` treats only `ENOENT` as absent and returns failure on other `lstat` errors; directory cleanup failures are propagated alongside the original failure reason.
+  - Corrected cleanup lstat error propagation (P1): implemented `cleanup_unlinked_file` in `browser.lua` which treats only an explicit `ENOENT` from `lstat` as confirmation that cleanup completed. On unlink failure, if `lstat` returns non-ENOENT (such as `EACCES` or inspection errors) or confirms file existence, `cleanup failed: <un_err> (inspection failed: <st_err>)` is propagated alongside the original failure reason, preventing hidden cleanup failures and unnoticed staging residue. Applied across `copy_file_contents`, `copy_entry` (file rename failure), and `remove_path_recursive`.
+  - Added session-local in-memory Files clipboard (`files_clipboard`), left-pane shortcuts `y` Copy, `p` Paste, `M` Move, and context menu options for Copy, Paste, Move in `workbench.lua`.
+  - Added dynamic, context-aware bottom statusline rendering across Files navigation, Preview/editor, Diff/history, context menu, and modal contexts in `workbench.lua` (`update_statusline`, `get_statusline_text`), bounded for narrow terminals with error/notice priority.
+  - Documented `y`, `p`, `M` in `keymaps.lua` workbench key-help, preserving bidirectional test correspondence.
+  - Added 9 deterministic integration test suites in `tests/test_workbench.lua`, including `test_task021_staging_collisions_and_cleanup_error_propagation` and `test_task021_copy_and_rename_cleanup_lstat_error_handling` which tests `cleanup_unlinked_file` direct branches, copy-failure cleanup paths, and rename-failure cleanup paths.
+- Files changed:
+  - `config/nvim/lua/novim/browser.lua`
+  - `config/nvim/lua/novim/keymaps.lua`
+  - `config/nvim/lua/novim/workbench.lua`
+  - `tests/test_workbench.lua`
+  - `docs/tasks/TASK-021-files-copy-paste-move.md`
+  - `docs/tasks/current-task.md`
+- Validation commands and results:
+  - `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile tests/test_workbench.lua"`: 74/74 PASS (0 failed).
+  - `./tests/run_tests.sh`: 74/74 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
+  - `git diff --check`: PASS (0 warnings/errors).
+  - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
+  - Acceptance evidence:
+  - All 13 acceptance criteria listed in the canonical task record verified locally.
+- Residual risks or known gaps:
+  - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
+- Next action:
+  - Proceed with the authorized lightweight delivery workflow.

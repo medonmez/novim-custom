@@ -713,4 +713,525 @@ function M.rename_entry(entry, new_name, root_dir)
   return true, dest_full_path, false
 end
 
+-- =========================================================================
+-- Files copy, paste, and move operations (TASK-021)
+-- =========================================================================
+
+--- Attempt to unlink a file during cleanup, and verify absence.
+--- Returns true, nil if unlink succeeded or path is confirmed absent (ENOENT).
+--- Returns false, err if unlink failed and path still exists or cannot be confirmed absent.
+---@param path string
+---@return boolean ok
+---@return string? err
+local function cleanup_unlinked_file(path)
+  local ok_un, un_err = uv.fs_unlink(path)
+  if ok_un then
+    return true, nil
+  end
+  local st, st_err, st_code = uv.fs_lstat(path)
+  if not st then
+    if st_code == "ENOENT" or (st_err and tostring(st_err):find("ENOENT", 1, true) ~= nil) then
+      return true, nil
+    end
+    return false, tostring(un_err or "unlink failed") .. " (inspection failed: " .. tostring(st_err) .. ")"
+  end
+  return false, tostring(un_err or "unlink failed")
+end
+M.cleanup_unlinked_file = cleanup_unlinked_file
+
+--- Remove a path recursively (unlinks files and rmdirs directories bottom-up).
+--- Exposed on M for testability.
+---@param path string
+---@return boolean ok
+---@return string? err
+function M.remove_path_recursive(path)
+  local st, err, code = uv.fs_lstat(path)
+  if not st then
+    if code == "ENOENT" or (err and err:find("ENOENT", 1, true)) then
+      return true, nil
+    end
+    return false, "Failed to inspect path for cleanup: " .. tostring(err)
+  end
+  if st.type == "directory" then
+    local fd, open_err = uv.fs_opendir(path, nil, 100)
+    if not fd then
+      return false, "Failed to open directory for cleanup: " .. tostring(open_err)
+    end
+    while true do
+      local entries, read_err = uv.fs_readdir(fd)
+      if read_err then
+        uv.fs_closedir(fd)
+        return false, "Failed to read directory for cleanup: " .. tostring(read_err)
+      end
+      if not entries or #entries == 0 then break end
+      for _, e in ipairs(entries) do
+        local child = path .. "/" .. e.name
+        local ok_rm, rm_err = M.remove_path_recursive(child)
+        if not ok_rm then
+          uv.fs_closedir(fd)
+          return false, rm_err
+        end
+      end
+    end
+    uv.fs_closedir(fd)
+    local ok_rmdir, rmdir_err = uv.fs_rmdir(path)
+    if not ok_rmdir then
+      return false, "Failed to remove directory: " .. tostring(rmdir_err)
+    end
+    return true, nil
+  else
+    local ok_un, un_err = cleanup_unlinked_file(path)
+    if not ok_un then
+      return false, "Failed to unlink file: " .. tostring(un_err)
+    end
+    return true, nil
+  end
+end
+
+--- Copy file contents in chunks with exclusive creation
+---@param src_path string
+---@param dst_path string
+---@return boolean ok
+---@return string? err
+local function copy_file_contents(src_path, dst_path)
+  local fd_src, src_err = uv.fs_open(src_path, "r", 420)
+  if not fd_src then
+    return false, "Failed to read source file: " .. tostring(src_err), false
+  end
+  local st_src = uv.fs_fstat(fd_src)
+  local mode = (st_src and st_src.mode) or 420
+
+  local fd_dst, dst_err = uv.fs_open(dst_path, "wx", mode)
+  if not fd_dst then
+    uv.fs_close(fd_src)
+    return false, "Failed to create destination file: " .. tostring(dst_err), false
+  end
+
+  local created = true
+  local chunk_size = 65536
+  local offset = 0
+  local copy_ok = true
+  local copy_err = nil
+
+  while true do
+    local data, r_err = uv.fs_read(fd_src, chunk_size, offset)
+    if r_err then
+      copy_ok = false
+      copy_err = "Failed to read from source: " .. tostring(r_err)
+      break
+    end
+    if not data or #data == 0 then
+      break
+    end
+    local written, w_err = uv.fs_write(fd_dst, data, offset)
+    if not written or written < #data then
+      copy_ok = false
+      copy_err = "Failed to write to destination: " .. tostring(w_err or "incomplete write")
+      break
+    end
+    offset = offset + #data
+  end
+
+  uv.fs_close(fd_src)
+  uv.fs_close(fd_dst)
+
+  if not copy_ok then
+    local ok_cl, cl_err = cleanup_unlinked_file(dst_path)
+    if not ok_cl then
+      return false, copy_err .. " (cleanup failed: " .. tostring(cl_err) .. ")", created
+    end
+    return false, copy_err, created
+  end
+  return true, nil, created
+end
+
+--- Recursively preflight a directory tree: ensure every descendant is regular file or directory
+---@param dir_path string
+---@param root_dir string
+---@return boolean ok
+---@return string? err
+local function preflight_directory(dir_path, root_dir)
+  local fd, open_err = uv.fs_opendir(dir_path, nil, 100)
+  if not fd then
+    return false, "Failed to inspect directory: " .. tostring(open_err)
+  end
+  while true do
+    local entries, read_err = uv.fs_readdir(fd)
+    if read_err then
+      uv.fs_closedir(fd)
+      return false, "Failed to read directory entries: " .. tostring(read_err)
+    end
+    if not entries or #entries == 0 then break end
+    for _, e in ipairs(entries) do
+      local child_path = dir_path .. "/" .. e.name
+      local st, st_err = uv.fs_lstat(child_path)
+      if not st then
+        uv.fs_closedir(fd)
+        return false, "Failed to inspect descendant: " .. e.name .. " (" .. tostring(st_err) .. ")"
+      end
+      if st.type == "link" then
+        uv.fs_closedir(fd)
+        return false, "Symlinks cannot be copied"
+      end
+      if st.type ~= "file" and st.type ~= "directory" then
+        uv.fs_closedir(fd)
+        return false, "Only regular files and directories can be copied"
+      end
+      local is_out, out_err = M.is_path_outside_root(child_path, root_dir)
+      if is_out then
+        uv.fs_closedir(fd)
+        return false, out_err
+      end
+      if st.type == "directory" then
+        local sub_ok, sub_err = preflight_directory(child_path, root_dir)
+        if not sub_ok then
+          uv.fs_closedir(fd)
+          return false, sub_err
+        end
+      end
+    end
+  end
+  uv.fs_closedir(fd)
+  return true, nil
+end
+
+--- Recursively copy directory tree into staged destination directory
+---@param src_dir string
+---@param dst_dir string
+---@return boolean ok
+---@return string? err
+local function copy_directory_contents(src_dir, dst_dir)
+  local fd, open_err = uv.fs_opendir(src_dir, nil, 100)
+  if not fd then
+    return false, "Failed to open source directory: " .. tostring(open_err)
+  end
+
+  while true do
+    local entries, read_err = uv.fs_readdir(fd)
+    if read_err then
+      uv.fs_closedir(fd)
+      return false, "Failed to read source directory entries: " .. tostring(read_err)
+    end
+    if not entries or #entries == 0 then break end
+    for _, e in ipairs(entries) do
+      local s_child = src_dir .. "/" .. e.name
+      local d_child = dst_dir .. "/" .. e.name
+      local st_child, st_err = uv.fs_lstat(s_child)
+      if not st_child then
+        uv.fs_closedir(fd)
+        return false, "Source child vanished: " .. e.name .. " (" .. tostring(st_err) .. ")"
+      end
+      if st_child.type == "directory" then
+        local mode = st_child.mode or 493 -- 0755
+        local ok_mkdir, mk_err = uv.fs_mkdir(d_child, mode)
+        if not ok_mkdir then
+          uv.fs_closedir(fd)
+          return false, "Failed to create directory: " .. tostring(mk_err) .. " (" .. e.name .. ")"
+        end
+        local ok_sub, sub_err = copy_directory_contents(s_child, d_child)
+        if not ok_sub then
+          uv.fs_closedir(fd)
+          return false, sub_err
+        end
+      elseif st_child.type == "file" then
+        local ok_cp, cp_err = copy_file_contents(s_child, d_child)
+        if not ok_cp then
+          uv.fs_closedir(fd)
+          return false, cp_err
+        end
+      else
+        uv.fs_closedir(fd)
+        return false, "Only regular files and directories can be copied"
+      end
+    end
+  end
+  uv.fs_closedir(fd)
+  return true, nil
+end
+
+--- Validate an entry as an eligible copy source
+---@param entry? ProjectEntry
+---@param root_dir? string
+---@return boolean ok
+---@return string? err
+function M.validate_copy_source(entry, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  if not entry or not entry.full_path then
+    return false, "No file or folder selected to copy"
+  end
+  local norm_root = root_dir:gsub("/+$", "")
+  local norm_entry = entry.full_path:gsub("/+$", "")
+  if norm_entry == norm_root or entry.path == "" or entry.path == "." then
+    return false, "Cannot copy the project root"
+  end
+  local is_out, out_err = M.is_path_outside_root(entry.full_path, root_dir)
+  if is_out then
+    return false, out_err
+  end
+  local st = uv.fs_lstat(entry.full_path)
+  if not st then
+    return false, "Source does not exist"
+  end
+  if st.type == "link" then
+    return false, "Symlinks cannot be copied"
+  end
+  if st.type ~= "file" and st.type ~= "directory" then
+    return false, "Only regular files and directories can be copied"
+  end
+  local is_sym, sym_err = M.is_symlink_or_has_symlink_parent(entry.full_path, root_dir)
+  if is_sym then
+    return false, sym_err
+  end
+  return true, nil
+end
+
+--- Validate an entry as an eligible move source
+---@param entry? ProjectEntry
+---@param root_dir? string
+---@return boolean ok
+---@return string? err
+function M.validate_move_source(entry, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  if not entry or not entry.full_path then
+    return false, "No file or folder selected to move"
+  end
+  local norm_root = root_dir:gsub("/+$", "")
+  local norm_entry = entry.full_path:gsub("/+$", "")
+  if norm_entry == norm_root or entry.path == "" or entry.path == "." then
+    return false, "Cannot move the project root"
+  end
+  local is_out, out_err = M.is_path_outside_root(entry.full_path, root_dir)
+  if is_out then
+    return false, out_err
+  end
+  local st = uv.fs_lstat(entry.full_path)
+  if not st then
+    return false, "Source does not exist"
+  end
+  if st.type == "link" then
+    return false, "Symlinks cannot be moved"
+  end
+  if st.type ~= "file" and st.type ~= "directory" then
+    return false, "Only regular files and directories can be moved"
+  end
+  local is_sym, sym_err = M.is_symlink_or_has_symlink_parent(entry.full_path, root_dir)
+  if is_sym then
+    return false, sym_err
+  end
+  return true, nil
+end
+
+--- Copy a regular file or directory into target_dir
+---@param source_full_path string
+---@param target_dir string
+---@param root_dir? string
+---@return boolean ok
+---@return string result dest_full_path on success or error string on failure
+function M.copy_entry(source_full_path, target_dir, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  if not source_full_path or source_full_path == "" then
+    return false, "No source specified to copy"
+  end
+  if not target_dir or target_dir == "" then
+    return false, "Target directory does not exist or is not a directory"
+  end
+
+  local norm_root = root_dir:gsub("/+$", "")
+  local norm_source = source_full_path:gsub("/+$", "")
+  if norm_source == norm_root then
+    return false, "Cannot copy the project root"
+  end
+
+  local st_src = uv.fs_lstat(norm_source)
+  if not st_src then
+    return false, "Source does not exist"
+  end
+  if st_src.type == "link" then
+    return false, "Symlinks cannot be copied"
+  end
+  if st_src.type ~= "file" and st_src.type ~= "directory" then
+    return false, "Only regular files and directories can be copied"
+  end
+
+  local is_src_out, src_out_err = M.is_path_outside_root(norm_source, root_dir)
+  if is_src_out then
+    return false, src_out_err
+  end
+  local is_src_sym, src_sym_err = M.is_symlink_or_has_symlink_parent(norm_source, root_dir)
+  if is_src_sym then
+    return false, src_sym_err
+  end
+
+  local norm_target = target_dir:gsub("/+$", "")
+  local is_tgt_out, tgt_out_err = M.is_path_outside_root(norm_target, root_dir)
+  if is_tgt_out then
+    return false, tgt_out_err
+  end
+  local is_tgt_sym, tgt_sym_err = M.is_symlink_or_has_symlink_parent(norm_target, root_dir)
+  if is_tgt_sym then
+    return false, tgt_sym_err
+  end
+  local st_tgt = uv.fs_lstat(norm_target)
+  if not st_tgt or st_tgt.type ~= "directory" then
+    return false, "Target directory does not exist or is not a directory"
+  end
+
+  local basename = vim.fs.basename(norm_source)
+  local dest_full_path = norm_target .. "/" .. basename
+
+  local is_dest_out, dest_out_err = M.is_path_outside_root(dest_full_path, root_dir)
+  if is_dest_out then
+    return false, dest_out_err
+  end
+
+  if uv.fs_lstat(dest_full_path) ~= nil then
+    return false, "Destination already exists"
+  end
+
+  if st_src.type == "directory" then
+    local src_real = uv.fs_realpath(norm_source) or norm_source
+    local tgt_real = uv.fs_realpath(norm_target) or norm_target
+    src_real = src_real:gsub("/+$", "")
+    tgt_real = tgt_real:gsub("/+$", "")
+    if tgt_real == src_real or tgt_real:sub(1, #src_real + 1) == src_real .. "/" then
+      return false, "Cannot copy directory into itself or its descendants"
+    end
+    local pf_ok, pf_err = preflight_directory(norm_source, root_dir)
+    if not pf_ok then
+      return false, pf_err
+    end
+
+    local temp_stage = norm_target .. "/.tmp_copy_dir_" .. tostring(uv.hrtime()) .. "_" .. basename
+    local st_src_dir = uv.fs_lstat(norm_source)
+    local mode = (st_src_dir and st_src_dir.mode) or 493 -- 0755
+    local ok_mkdir, mk_err = uv.fs_mkdir(temp_stage, mode)
+    if not ok_mkdir then
+      return false, "Failed to create staging directory: " .. tostring(mk_err)
+    end
+
+    local cp_ok, cp_err = copy_directory_contents(norm_source, temp_stage)
+    if not cp_ok then
+      local ok_rm, rm_err = M.remove_path_recursive(temp_stage)
+      if not ok_rm then
+        return false, cp_err .. " (cleanup failed: " .. tostring(rm_err) .. ")"
+      end
+      return false, cp_err
+    end
+
+    local ren_ok, ren_err = atomic_rename_noreplace(temp_stage, dest_full_path, true)
+    if not ren_ok then
+      local ok_rm, rm_err = M.remove_path_recursive(temp_stage)
+      if not ok_rm then
+        return false, ren_err .. " (cleanup failed: " .. tostring(rm_err) .. ")"
+      end
+      return false, ren_err
+    end
+
+    return true, dest_full_path
+  else
+    local temp_stage = norm_target .. "/.tmp_copy_file_" .. tostring(uv.hrtime()) .. "_" .. basename
+    local cp_ok, cp_err, created = copy_file_contents(norm_source, temp_stage)
+    if not cp_ok then
+      return false, cp_err
+    end
+
+    local ren_ok, ren_err = atomic_rename_noreplace(temp_stage, dest_full_path, false)
+    if not ren_ok then
+      local ok_cl, cl_err = cleanup_unlinked_file(temp_stage)
+      if not ok_cl then
+        return false, ren_err .. " (cleanup failed: " .. tostring(cl_err) .. ")"
+      end
+      return false, ren_err
+    end
+
+    return true, dest_full_path
+  end
+end
+
+--- Move a regular file or directory into target_dir using atomic no-replace
+---@param source_full_path string
+---@param target_dir string
+---@param root_dir? string
+---@return boolean ok
+---@return string result dest_full_path on success or error string on failure
+function M.move_entry(source_full_path, target_dir, root_dir)
+  root_dir = root_dir or vim.fn.getcwd()
+  if not source_full_path or source_full_path == "" then
+    return false, "No source specified to move"
+  end
+  if not target_dir or target_dir == "" then
+    return false, "Target directory does not exist or is not a directory"
+  end
+
+  local norm_root = root_dir:gsub("/+$", "")
+  local norm_source = source_full_path:gsub("/+$", "")
+  if norm_source == norm_root then
+    return false, "Cannot move the project root"
+  end
+
+  local st_src = uv.fs_lstat(norm_source)
+  if not st_src then
+    return false, "Source does not exist"
+  end
+  if st_src.type == "link" then
+    return false, "Symlinks cannot be moved"
+  end
+  if st_src.type ~= "file" and st_src.type ~= "directory" then
+    return false, "Only regular files and directories can be moved"
+  end
+
+  local is_src_out, src_out_err = M.is_path_outside_root(norm_source, root_dir)
+  if is_src_out then
+    return false, src_out_err
+  end
+  local is_src_sym, src_sym_err = M.is_symlink_or_has_symlink_parent(norm_source, root_dir)
+  if is_src_sym then
+    return false, src_sym_err
+  end
+
+  local norm_target = target_dir:gsub("/+$", "")
+  local is_tgt_out, tgt_out_err = M.is_path_outside_root(norm_target, root_dir)
+  if is_tgt_out then
+    return false, tgt_out_err
+  end
+  local is_tgt_sym, tgt_sym_err = M.is_symlink_or_has_symlink_parent(norm_target, root_dir)
+  if is_tgt_sym then
+    return false, tgt_sym_err
+  end
+  local st_tgt = uv.fs_lstat(norm_target)
+  if not st_tgt or st_tgt.type ~= "directory" then
+    return false, "Target directory does not exist or is not a directory"
+  end
+
+  local basename = vim.fs.basename(norm_source)
+  local dest_full_path = norm_target .. "/" .. basename
+
+  local is_dest_out, dest_out_err = M.is_path_outside_root(dest_full_path, root_dir)
+  if is_dest_out then
+    return false, dest_out_err
+  end
+
+  if uv.fs_lstat(dest_full_path) ~= nil then
+    return false, "Destination already exists"
+  end
+
+  local is_dir = (st_src.type == "directory")
+  if is_dir then
+    local src_real = uv.fs_realpath(norm_source) or norm_source
+    local tgt_real = uv.fs_realpath(norm_target) or norm_target
+    src_real = src_real:gsub("/+$", "")
+    tgt_real = tgt_real:gsub("/+$", "")
+    if tgt_real == src_real or tgt_real:sub(1, #src_real + 1) == src_real .. "/" then
+      return false, "Cannot move directory into itself or its descendants"
+    end
+  end
+
+  local ren_ok, ren_err = atomic_rename_noreplace(norm_source, dest_full_path, is_dir)
+  if not ren_ok then
+    return false, ren_err
+  end
+
+  return true, dest_full_path
+end
+
 return M

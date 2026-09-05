@@ -1,13 +1,13 @@
 # Project State
 
-Updated: 2026-09-03
+Updated: 2026-09-05
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `NONE` (`IDLE`; TASK-020 accepted)
+Current task: `TASK-021` (`READY_FOR_REVIEW`; Files copy/paste/move and contextual statusline guidance)
 Base branch: `main`
-Task branch: none
-Expected baseline: `b1de569410682dd1a4fc3ed13dc476e26d69e824`
+Task branch: `task/TASK-021-files-copy-paste-move`
+Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 Pull request: none
 Last accepted task: `TASK-020`
 Last accepted commit: `b1de569410682dd1a4fc3ed13dc476e26d69e824` (`origin/main` merge of PR #38)
@@ -157,8 +157,14 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
 - `TASK-020` was accepted in PR #38 at verified `origin/main` merge commit
   `b1de569`. It adds bounded Files-pane creation and complete-name rename,
   with root-contained validation, no-overwrite behavior, symlink/special-file
-  refusals, preview/tree refresh, and open-buffer preservation. `TASK-021`
-  remains proposed follow-up scope for copy, paste, and move.
+  refusals, preview/tree refresh, and open-buffer preservation.
+- `TASK-021` is now the only actionable task. Its current correction candidate
+  `d9dfdda78d273660a817bf726a3c7807fa2042a8` is based on verified
+  `origin/main` merge commit `d7c6289` on
+  `task/TASK-021-files-copy-paste-move`, and adds bounded Files-pane
+  copy/paste/move plus context-aware bottom statusline guidance. The prior
+  staging-ownership, directory-read, and cleanup-lstat findings are corrected.
+  Local re-review approved the candidate; remote delivery has not started.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -169,13 +175,14 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
 
 ## Active blockers
 
-- No active product blocker remains. No successor task is issued without an
-  explicit new brief; `TASK-021` remains proposed until its contract is ready.
+- `TASK-021` has no active local review blocker. The candidate is approved for
+  lightweight PR delivery; no successor task is issued.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Keep the repository idle at verified `origin/main` merge commit `b1de569`
-until an explicit successor brief is provided.
+Push `task/TASK-021-files-copy-paste-move`, open the single delivery PR, merge
+if mergeable with no required check failure, verify `origin/main`, and then
+reconcile the acceptance records.

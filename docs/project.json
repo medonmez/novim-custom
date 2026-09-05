@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": null,
+    "taskBranch": "task/TASK-021-files-copy-paste-move",
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/oh-my-code.git",
@@ -28,10 +28,10 @@
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "NONE",
-    "currentTaskStatus": "IDLE",
+    "currentTask": "TASK-021",
+    "currentTaskStatus": "READY_FOR_REVIEW",
     "pullRequest": null,
-    "remoteChecks": "TASK-020 LIGHTWEIGHT DELIVERY COMPLETED; PR #38 shellcheck PASSED",
+    "remoteChecks": "TASK-021 local review APPROVED; no remote checks run",
     "lastAcceptedTask": "TASK-020",
     "lastAcceptedCommit": "b1de569410682dd1a4fc3ed13dc476e26d69e824",
     "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/38"
@@ -96,13 +96,15 @@
       "unifiedFallback": false
     },
     "filesystemMutation": {
-      "currentTask": "TASK-020",
-      "interaction": "Files-pane context menu plus n New File, N New Folder, and F2 Rename; Enter confirms and Esc cancels",
+      "currentTask": "TASK-021",
+      "interaction": "Files-pane context menu plus n New File, N New Folder, F2 Rename, y Copy, p Paste, and M Move; Enter confirms and Esc cancels",
       "targeting": "Selected directory, selected file parent, or project root when no usable selection exists",
       "nameInput": "One complete path component, including file extension; dot-prefixed names allowed",
       "boundary": "Local only; root-contained; reject absolute paths, parent traversal, separators, NULs, symlinked sources/parents, root rename, collisions, and overwrite",
-      "refresh": "Refresh visible lazy tree and preview, preserve unaffected expansion, follow created/renamed selection, preserve open renamed-file buffers",
-      "deferred": "TASK-021 proposed for copy, paste, and move; delete and bulk operations remain out of scope"
+      "refresh": "Refresh visible lazy tree and preview, preserve unaffected expansion, follow created/renamed/copied/moved selection, preserve open moved-file buffers",
+      "statusline": "Context-aware bottom-bar hints show only active Files, Preview/editor, Diff/history, context-menu, and input-modal mappings with bounded notices",
+      "clipboard": "Session-local single-source clipboard for regular files/directories; no OS clipboard, no overwrite, symlink/special-file rejection, atomic no-replace moves",
+      "deferred": "Delete, overwrite, bulk operations, drag-and-drop, and remote/system clipboard behavior remain out of scope"
     },
     "themes": {
       "default": "Tokyo Night",

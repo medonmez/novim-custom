@@ -1,78 +1,87 @@
 # Latest Review
 
-Updated: 2026-09-03
-Task ID: `TASK-020`
+Updated: 2026-09-05
+Task ID: `TASK-021`
 Local verdict: `APPROVED`
 Delivery policy: `LIGHTWEIGHT`
-Baseline: `6b8ca01312fcb1052b2fa8021606354636037b98` (`origin/main`)
-Reviewed candidate: `48c9c642d98b4ac8c98922dbb73dcd2d108540fe`
-Review record: `f4f250adbb9bece794758acff0cd88aeb4e3c396`
-Task branch: `task/TASK-020-files-create-rename`
-Pull request: `#38 <https://github.com/medonmez/oh-my-code/pull/38>`
-Remote checks: `shellcheck SUCCESS`
-Merge status: `MERGED`
-Merge commit: `b1de569410682dd1a4fc3ed13dc476e26d69e824`
-Target branch contains change: `YES`
+Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9` (`origin/main`)
+Reviewed candidate: `d9dfdda78d273660a817bf726a3c7807fa2042a8`
+Task branch: `task/TASK-021-files-copy-paste-move`
+Pull request: none at review time
+Remote checks: none at review time
+Merge status: not applicable
+Target branch contains change: `NO`
 
 ## Review result
 
-The candidate was reviewed on the recorded isolated branch with a clean
-worktree. Its merge base was exactly the fetched `origin/main` baseline, and
-the complete delta was scoped to TASK-020 implementation, tests, and project
-records. The previous four blocking findings were corrected. Directory
-renames now use the native atomic no-replace primitive or fail closed with a
-bounded error; the fallback regression confirms no unsafe directory rename
-occurs. No unresolved correctness, security, data-integrity, regression,
-public-contract, or scope issue remained for local review.
+The candidate was reviewed on the recorded isolated task branch with a clean
+worktree. Its merge base is exactly the expected `origin/main` baseline. The
+complete delta is scoped to TASK-021 product code, deterministic tests, and
+the associated durable task/review records. The previous staging-ownership
+and directory-read findings are corrected. The cleanup-lstat correction now
+verifies file absence explicitly and propagates inspection failures without
+hiding the original copy or rename error. No unresolved correctness,
+security, data-integrity, regression, public-contract, or scope issue remains
+for local review.
 
 ## Findings
 
 None blocking.
 
-Non-blocking boundary: directory rename is intentionally unavailable on
-platforms without a native atomic no-replace primitive. Regular-file rename
-retains the POSIX `link(2)` plus `unlink(2)` no-overwrite fallback. Copy, paste,
-and move remain deferred to proposed TASK-021.
+Non-blocking boundary: directory copy and move continue to require the
+platform-native atomic no-replace primitives (`renamex_np` on macOS and
+`renameat2` on Linux); unsupported platforms fail closed with a bounded
+notice. This is the accepted TASK-020/TASK-021 boundary.
 
 ## Acceptance evidence
 
 | Criterion | Result | Evidence |
 |---|---|---|
-| Files context menu, shortcuts, and key-help documentation | PASS locally | Context-menu and mapping regressions pass; Diff-view `N` keeps the comparison action and Files-view `N` opens New Folder. |
-| Create file/folder at resolved root, directory, and file-parent targets | PASS locally | Real Files-pane input tests pass, including root, nested directory, and file-parent targeting. |
-| Complete-name file/directory rename | PASS locally | File, extension, directory, expansion, and open-buffer preservation tests pass; FIFO rename is rejected. |
-| Validation, cancellation, collisions, and visible errors | PASS locally | Input, cancellation, invalid names, symlink preflight, sequential collisions, and exclusive file creation pass. |
-| Symlink, root, and outside-root fail-closed boundaries | PASS locally | Symlinked New Folder targets, symlink sources/parents, project-root rename, and outside-root attempts are covered. |
-| Dot-prefixed visibility behavior | PASS locally | `test_task020_dotfile_creation_and_visibility` passes. |
-| Refresh, preview, expansion, and visible selection | PASS locally | Create/rename refresh and selection-follow behavior pass in the focused suite. |
-| Open-buffer and unsaved-content preservation | PASS locally | `test_task020_rename_file_and_directory_and_buffer_preservation` passes. |
-| Failure invariance and existing-suite compatibility | PASS locally | FIFO and collision failures preserve source/destination content; unavailable directory primitives fail closed without creating a destination. |
-| Focused/full local validation | PASS | `./tests/run_tests.sh` passed 65/65 workbench tests, the offline package/installer suite, and 9/9 smoke tests; shell syntax and `git diff --check` passed. |
+| Files menu, `y`/`p`/`M`, preserved `m` and Diff `c` mappings | PASS locally | `test_task021_context_menu_copy_paste_move_and_shortcuts` passes. |
+| Session clipboard, same-basename copy, repeated paste | PASS locally | `test_task021_copy_paste_files_and_directories_and_repeated_paste` passes. |
+| File/directory move, source removal, clipboard clearing | PASS locally | `test_task021_move_file_and_directory_and_buffer_preservation` passes. |
+| Root, nested, file-parent, no-selection targeting and descendant refusal | PASS locally | `test_task021_targeting_root_nested_file_parent_and_no_selection` passes. |
+| Collision and ordinary no-overwrite invariance | PASS locally | `test_task021_collision_and_no_overwrite_invariance` passes. |
+| Static symlink, special-file, stale-source, root, outside-root, and unavailable-primitive boundaries | PASS locally | `test_task021_fail_closed_security_boundaries` passes. |
+| Recursive-copy preflight, partial cleanup, and staging ownership | PASS locally | `test_task021_staging_collisions_and_cleanup_error_propagation` and `test_task021_copy_and_rename_cleanup_lstat_error_handling` pass; independent copy/rename cleanup probe reports the original error plus `cleanup failed` and confirms residue is not silently treated as absent. |
+| Refresh, Preview, selection follow, and expansion migration | PASS locally | Copy/move integration tests pass. |
+| Open moved buffers and unsaved content | PASS locally | File and descendant-buffer assertions pass. |
+| Rendered context-aware statusline with no Diff/Preview mutation hints | PASS locally | `test_task021_context_aware_statusline_rendering_and_bounds` passes. |
+| Narrow statusline/error visibility | PASS locally | The narrow-width bounded/error-priority assertions pass. |
+| Canonical key-help correspondence | PASS locally | Existing key-help and TASK-021 mapping checks pass. |
+| Existing workbench/package/smoke compatibility | PASS locally | 74/74 workbench tests, offline package/installer suite, and 9/9 smoke tests pass. |
 
 ## Validation performed
 
 - Read `AGENTS.md`, `docs/repository.md`, `project-state.md`, the current
-  task, backlog, prior review, architecture, and ADR-007.
-- Fetched `origin/main` and confirmed the reviewed candidate and review record
-  are ancestors of remote merge commit `b1de569`.
-- Inspected the complete TASK-020 delta and confirmed it was scoped to the
-  Files mutation slice, deterministic tests, and durable project records.
-- Reran `git diff --check` and the applicable shell syntax checks.
-- Reran `./tests/run_tests.sh` independently: 65/65 workbench tests passed,
-  the offline package/installer suite passed, and the smoke suite passed 9/9.
-- Verified PR #38 was mergeable, merged into `main`, and its `shellcheck`
-  check completed successfully.
+  task, backlog, prior review, architecture, product brief, and ADR-007.
+- Confirmed the checked-out branch is
+  `task/TASK-021-files-copy-paste-move`, its worktree is clean, and
+  `git merge-base HEAD origin/main` equals the recorded baseline.
+- Inspected the complete baseline-to-candidate delta. Protected
+  `bin/novim` and `config/nvim/init.lua` are unchanged.
+- Reran `bin/novim-dev -u config/nvim/init.lua --headless -c "luafile
+  tests/test_workbench.lua"`: 74/74 passed.
+- Reran `./tests/run_tests.sh`: 74/74 workbench tests passed, the offline
+  package/installer suite passed, and the regression smoke suite passed 9/9.
+- Reran the applicable `bash -n` checks and `git diff --check`; both passed.
+- Ran an independent temporary-fixture probe that injected copy/rename
+  failures, unlink `EACCES`, and staging-path lstat `EACCES`; both paths
+  returned `cleanup failed` with the original error and left residue visible
+  rather than silently claiming cleanup success.
 
-All local evidence above is local review evidence. The PR merge and CI result
-are repository-provider observations; no production, recovery, or
-customer-acceptance claim is made.
+All local and synthetic results above are local review evidence. No
+production, recovery, hosted, or customer-acceptance evidence is claimed.
+No push, PR, or merge has been performed at the time of this review.
 
 ## Delivery decision
 
-`ACCEPTED` after verified lightweight delivery through PR #38. The remote
-default branch contains the reviewed implementation at merge commit `b1de569`.
+`APPROVED` for the lightweight delivery flow. Push the reviewed task branch,
+open one PR targeting `origin/main`, merge promptly if it is mergeable and no
+required check fails, verify the remote default branch contains the reviewed
+implementation, then reconcile the canonical records.
 
 ## Next action
 
-Keep the repository idle until an explicit successor brief is issued. TASK-021
-remains proposed and unissued.
+Start the authorized lightweight delivery for
+`task/TASK-021-files-copy-paste-move`.
