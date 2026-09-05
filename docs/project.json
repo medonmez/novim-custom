@@ -29,9 +29,9 @@
   },
   "workflow": {
     "currentTask": "TASK-021",
-    "currentTaskStatus": "CHANGES_REQUESTED",
+    "currentTaskStatus": "READY_FOR_REVIEW",
     "pullRequest": null,
-    "remoteChecks": "TASK-021 local review CHANGES_REQUESTED; no remote checks run",
+    "remoteChecks": "TASK-021 local review APPROVED; no remote checks run",
     "lastAcceptedTask": "TASK-020",
     "lastAcceptedCommit": "b1de569410682dd1a4fc3ed13dc476e26d69e824",
     "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/38"

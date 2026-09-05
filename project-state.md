@@ -1,10 +1,10 @@
 # Project State
 
-Updated: 2026-09-04
+Updated: 2026-09-05
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-021` (`CHANGES_REQUESTED`; Files copy/paste/move and contextual statusline guidance)
+Current task: `TASK-021` (`READY_FOR_REVIEW`; Files copy/paste/move and contextual statusline guidance)
 Base branch: `main`
 Task branch: `task/TASK-021-files-copy-paste-move`
 Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
@@ -159,13 +159,12 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
   with root-contained validation, no-overwrite behavior, symlink/special-file
   refusals, preview/tree refresh, and open-buffer preservation.
 - `TASK-021` is now the only actionable task. Its current correction candidate
-  `79d5bd6d54ade980cbe550f9ee93dd4edd7b56ba` is based on verified
+  `d9dfdda78d273660a817bf726a3c7807fa2042a8` is based on verified
   `origin/main` merge commit `d7c6289` on
   `task/TASK-021-files-copy-paste-move`, and adds bounded Files-pane
   copy/paste/move plus context-aware bottom statusline guidance. The prior
-  staging-ownership and directory-read findings are corrected, but local
-  re-review found one remaining cleanup-lstat failure boundary; no PR or
-  remote delivery has started.
+  staging-ownership, directory-read, and cleanup-lstat findings are corrected.
+  Local re-review approved the candidate; remote delivery has not started.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -176,18 +175,14 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
 
 ## Active blockers
 
-- `TASK-021` has one local P1 review blocker recorded in
-  `docs/reviews/latest-review.md`: after a staging unlink failure, a
-  non-ENOENT lstat failure can hide the cleanup error and leave residue. The
-  same task branch must be corrected and re-reviewed; no successor task is
-  issued.
+- `TASK-021` has no active local review blocker. The candidate is approved for
+  lightweight PR delivery; no successor task is issued.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Run `$stateless-implementer` on the same
-`task/TASK-021-files-copy-paste-move` branch to correct the remaining cleanup
-error finding and add focused regression coverage, then request another
-orchestrator review before delivery.
+Push `task/TASK-021-files-copy-paste-move`, open the single delivery PR, merge
+if mergeable with no required check failure, verify `origin/main`, and then
+reconcile the acceptance records.

@@ -1,6 +1,6 @@
 # Backlog
 
-Updated: 2026-09-04
+Updated: 2026-09-05
 
 Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 `CHANGES_REQUESTED`, `BLOCKED`, or `ACCEPTED`.
@@ -27,7 +27,7 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | ACCEPTED | TASK-015 through TASK-018 (accepted) |
 | 20 | TASK-020 | Add Files-pane creation of files/folders and complete-name rename of files/folders | ACCEPTED | TASK-019 (accepted) |
-| 21 | TASK-021 | Add bounded Files-pane copy, paste, move, and contextual statusline guidance | CHANGES_REQUESTED | TASK-020 (accepted) |
+| 21 | TASK-021 | Add bounded Files-pane copy, paste, move, and contextual statusline guidance | READY_FOR_REVIEW | TASK-020 (accepted) |
 
 TASK-001 through TASK-020 are accepted. `TASK-021` is the only actionable task
 and remains on `task/TASK-021-files-copy-paste-move` from the verified
@@ -131,16 +131,16 @@ successor task is issued.
   and context-aware bottom-bar guidance without weakening the accepted safety
   boundary.
 
-- `TASK-021` is active with changes requested against candidate `79d5bd6`.
+- `TASK-021` is ready for lightweight delivery against approved candidate
+  `d9dfdda`.
   It is based on `origin/main` merge commit `d7c6289`. It uses a
   session-local single-source clipboard, no-overwrite recursive copy for
   regular files/directories, atomic no-replace moves, and rendered statusline
   hints that follow Files selection/focus, Preview/editor, Diff/history,
   context-menu, and input-modal state. Delete, overwrite, bulk operations,
   system clipboard integration, and remote or Git operations remain excluded.
-  The prior staging-ownership and directory-read findings are corrected, but
-  the candidate must first fix cleanup-lstat error propagation before PR
-  delivery.
+  The prior staging-ownership, directory-read, and cleanup-lstat findings are
+  corrected. No successor task is issued until delivery is reconciled.
 
 ## Preserved boundaries
 

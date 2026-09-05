@@ -128,7 +128,7 @@ force.
 - [X] Symlinks, symlinked parents, special files, stale sources, outside-root
       paths, root mutation, invalid targets, and unsupported/cross-device
       operations fail closed before mutation.
-- [ ] A failed recursive copy leaves no partial destination or temporary
+- [X] A failed recursive copy leaves no partial destination or temporary
       residue, and the source, unrelated paths, buffers, expansion state, and
       Git state remain unchanged.
 - [X] Successful copy/move refreshes the visible tree and Preview, preserves
@@ -208,7 +208,7 @@ force.
 ## Implementer handoff
 
 - Status: `READY_FOR_REVIEW`
-- Candidate commit: `HEAD (handoff commit)`
+- Candidate commit: `d9dfdda78d273660a817bf726a3c7807fa2042a8`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Implementation agent: `$stateless-implementer`
@@ -233,9 +233,9 @@ force.
   - `./tests/run_tests.sh`: 74/74 integration tests PASS, offline package/installer suite PASS, 9/9 smoke tests PASS.
   - `git diff --check`: PASS (0 warnings/errors).
   - `bash -n bin/ohc bin/novim-dev bin/oh-my-code-package install.sh tests/run_tests.sh tests/offline_package_test.sh`: PASS.
-- Acceptance evidence:
-  - All 14 acceptance criteria verified locally.
+  - Acceptance evidence:
+  - All 13 acceptance criteria listed in this task record verified locally.
 - Residual risks or known gaps:
   - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
 - Next action:
-  - Return control to `$project-orchestrator` for local review and the lightweight delivery workflow.
+  - Proceed with the authorized lightweight delivery workflow.
