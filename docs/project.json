@@ -9,7 +9,7 @@
   "repository": {
     "localPath": "/Users/mert/novim-custom",
     "baseBranch": "main",
-    "taskBranch": "task/TASK-021-files-copy-paste-move",
+    "taskBranch": null,
     "upstreamUrl": "https://github.com/link2004/novim.git",
     "currentRemoteName": "origin",
     "originUrl": "https://github.com/medonmez/oh-my-code.git",
@@ -28,13 +28,13 @@
     "developmentCommandTask": "TASK-015"
   },
   "workflow": {
-    "currentTask": "TASK-021",
-    "currentTaskStatus": "READY_FOR_REVIEW",
+    "currentTask": "NONE",
+    "currentTaskStatus": "IDLE",
     "pullRequest": null,
-    "remoteChecks": "TASK-021 local review APPROVED; no remote checks run",
-    "lastAcceptedTask": "TASK-020",
-    "lastAcceptedCommit": "b1de569410682dd1a4fc3ed13dc476e26d69e824",
-    "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/38"
+    "remoteChecks": "TASK-021 LIGHTWEIGHT DELIVERY COMPLETED; PR #40 shellcheck PASSED",
+    "lastAcceptedTask": "TASK-021",
+    "lastAcceptedCommit": "bce875ae93e86bc12b5a33d758168940fd7a4993",
+    "lastMergedPullRequest": "https://github.com/medonmez/oh-my-code/pull/40"
   },
   "canonicalDocs": {
     "repository": "docs/repository.md",

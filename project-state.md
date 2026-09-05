@@ -4,14 +4,14 @@ Updated: 2026-09-05
 Repository: `novim-custom` (public target: `oh-my-code`)
 Lifecycle: `ACTIVE_DEVELOPMENT`
 Delivery policy: `LIGHTWEIGHT`
-Current task: `TASK-021` (`READY_FOR_REVIEW`; Files copy/paste/move and contextual statusline guidance)
+Current task: `NONE` (`IDLE`; TASK-021 accepted)
 Base branch: `main`
-Task branch: `task/TASK-021-files-copy-paste-move`
-Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
+Task branch: none
+Expected baseline: `bce875ae93e86bc12b5a33d758168940fd7a4993`
 Pull request: none
-Last accepted task: `TASK-020`
-Last accepted commit: `b1de569410682dd1a4fc3ed13dc476e26d69e824` (`origin/main` merge of PR #38)
-Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
+Last accepted task: `TASK-021`
+Last accepted commit: `bce875ae93e86bc12b5a33d758168940fd7a4993` (`origin/main` merge of PR #40)
+Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/40`
 
 ## Current truth
 
@@ -158,13 +158,12 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
   `b1de569`. It adds bounded Files-pane creation and complete-name rename,
   with root-contained validation, no-overwrite behavior, symlink/special-file
   refusals, preview/tree refresh, and open-buffer preservation.
-- `TASK-021` is now the only actionable task. Its current correction candidate
-  `d9dfdda78d273660a817bf726a3c7807fa2042a8` is based on verified
-  `origin/main` merge commit `d7c6289` on
-  `task/TASK-021-files-copy-paste-move`, and adds bounded Files-pane
-  copy/paste/move plus context-aware bottom statusline guidance. The prior
-  staging-ownership, directory-read, and cleanup-lstat findings are corrected.
-  Local re-review approved the candidate; remote delivery has not started.
+- `TASK-021` was approved at candidate
+  `d9dfdda78d273660a817bf726a3c7807fa2042a8`, delivered through PR #40, and
+  verified in merge commit `bce875ae93e86bc12b5a33d758168940fd7a4993` on
+  `origin/main`. It adds bounded Files-pane copy/paste/move plus context-aware
+  bottom statusline guidance with the prior staging-ownership, directory-read,
+  and cleanup-lstat findings corrected.
 - `TASK-011` covers focus-driven Settings navigation and a mouse close
   affordance. `TASK-012` covers the accepted Source Control layout and
   selectable history. `TASK-013` covers the accepted local stage/commit
@@ -175,14 +174,13 @@ Last merged pull request: `https://github.com/medonmez/oh-my-code/pull/38`
 
 ## Active blockers
 
-- `TASK-021` has no active local review blocker. The candidate is approved for
-  lightweight PR delivery; no successor task is issued.
+- No active product blocker remains. TASK-021 is accepted, and no successor
+  task is issued without an explicit new brief.
 - No production, recovery, or customer-acceptance claim is made; the hosted
   evidence is limited to the GitHub repository/release and installer
   observations recorded for TASK-019.
 
 ## Next orchestration action
 
-Push `task/TASK-021-files-copy-paste-move`, open the single delivery PR, merge
-if mergeable with no required check failure, verify `origin/main`, and then
-reconcile the acceptance records.
+Keep the repository idle at verified `origin/main` merge commit `bce875a`
+until an explicit successor brief is provided.

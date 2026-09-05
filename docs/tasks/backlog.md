@@ -27,14 +27,12 @@ Statuses: `PROPOSED`, `PLANNED`, `IN_PROGRESS`, `READY_FOR_REVIEW`,
 | 18 | TASK-018 | Replace the upstream README with a discoverable oh-my-code guide and real terminal demo assets | ACCEPTED | TASK-015, TASK-016, TASK-017 (accepted) |
 | 19 | TASK-019 | Run the strict release candidate gate, rename the GitHub repository, and publish `v1.0.0` | ACCEPTED | TASK-015 through TASK-018 (accepted) |
 | 20 | TASK-020 | Add Files-pane creation of files/folders and complete-name rename of files/folders | ACCEPTED | TASK-019 (accepted) |
-| 21 | TASK-021 | Add bounded Files-pane copy, paste, move, and contextual statusline guidance | READY_FOR_REVIEW | TASK-020 (accepted) |
+| 21 | TASK-021 | Add bounded Files-pane copy, paste, move, and contextual statusline guidance | ACCEPTED | TASK-020 (accepted) |
 
-TASK-001 through TASK-020 are accepted. `TASK-021` is the only actionable task
-and remains on `task/TASK-021-files-copy-paste-move` from the verified
-`origin/main` baseline after local review requested changes. It owns the
-clipboard/source-target contract for copy/paste/move and the contextual
-bottom statusline guidance for Files and related workbench contexts. No
-successor task is issued.
+TASK-001 through TASK-021 are accepted. No successor task is currently issued.
+TASK-021 owns the clipboard/source-target contract for copy/paste/move and the
+contextual bottom statusline guidance for Files and related workbench
+contexts.
 
 ## Accepted task notes
 
@@ -131,8 +129,8 @@ successor task is issued.
   and context-aware bottom-bar guidance without weakening the accepted safety
   boundary.
 
-- `TASK-021` is ready for lightweight delivery against approved candidate
-  `d9dfdda`.
+- `TASK-021` was accepted through PR #40 at merge commit `bce875a` after local
+  review approved candidate `d9dfdda`.
   It is based on `origin/main` merge commit `d7c6289`. It uses a
   session-local single-source clipboard, no-overwrite recursive copy for
   regular files/directories, atomic no-replace moves, and rendered statusline
@@ -140,7 +138,7 @@ successor task is issued.
   context-menu, and input-modal state. Delete, overwrite, bulk operations,
   system clipboard integration, and remote or Git operations remain excluded.
   The prior staging-ownership, directory-read, and cleanup-lstat findings are
-  corrected. No successor task is issued until delivery is reconciled.
+  corrected. No successor task is issued without an explicit new brief.
 
 ## Preserved boundaries
 

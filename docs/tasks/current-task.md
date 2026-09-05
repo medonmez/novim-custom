@@ -2,12 +2,12 @@
 
 Updated: 2026-09-05
 Task ID: `TASK-021`
-- Status: `READY_FOR_REVIEW`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
-- Pull request: none
+- Pull request: `#40 <https://github.com/medonmez/oh-my-code/pull/40>` (merged at `bce875ae93e86bc12b5a33d758168940fd7a4993`)
 - PR target: `origin/main`
 - Dependency: `TASK-020` (accepted in PR #38)
 - Detailed task record: `docs/tasks/TASK-021-files-copy-paste-move.md`
@@ -44,9 +44,9 @@ after TASK-020:
   visible at narrow terminal widths.
 
 The complete acceptance criteria and guardrails are in the detailed task
-record. The correction candidate was independently reviewed and approved;
-the earlier staging-collision, directory-read, and cleanup-lstat findings are
-resolved. The lightweight delivery path is now pending.
+record. The correction candidate was independently reviewed, approved, and
+merged through PR #40. The earlier staging-collision, directory-read, and
+cleanup-lstat findings are resolved. No successor task is issued.
 
 ## Required validation
 
@@ -78,7 +78,7 @@ resolved. The lightweight delivery path is now pending.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_REVIEW`
+- Status: `ACCEPTED`
 - Candidate commit: `d9dfdda78d273660a817bf726a3c7807fa2042a8`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -109,4 +109,4 @@ resolved. The lightweight delivery path is now pending.
 - Residual risks or known gaps:
   - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
 - Next action:
-  - Proceed with the authorized lightweight delivery workflow.
+  - Keep the repository idle until an explicit successor brief is issued.
