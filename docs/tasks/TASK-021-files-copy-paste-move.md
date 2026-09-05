@@ -1,12 +1,14 @@
 # TASK-021: Files Copy, Paste, Move, and Contextual Statusline Help
 
-- Status: `READY_FOR_REVIEW`
+- Status: `ACCEPTED`
 - Delivery policy: `LIGHTWEIGHT`
 - Base branch: `main`
 - Task branch: `task/TASK-021-files-copy-paste-move`
 - Expected baseline: `d7c6289893a04b2da021e0c2591632c319a829b9` (`origin/main`)
 - Dependency: `TASK-020` (accepted in PR #38)
 - PR target: `origin/main`
+- Pull request: `#40 <https://github.com/medonmez/oh-my-code/pull/40>`
+- Merge commit: `bce875ae93e86bc12b5a33d758168940fd7a4993`
 
 ## Outcome
 
@@ -207,7 +209,7 @@ force.
 
 ## Implementer handoff
 
-- Status: `READY_FOR_REVIEW`
+- Status: `ACCEPTED`
 - Candidate commit: `d9dfdda78d273660a817bf726a3c7807fa2042a8`
 - Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9`
 - Task branch: `task/TASK-021-files-copy-paste-move`
@@ -238,4 +240,4 @@ force.
 - Residual risks or known gaps:
   - None blocking. Directory move and directory copy rely on platform-native atomic no-replace primitives (`renamex_np` on macOS, `renameat2` on Linux); platforms lacking these primitives fail closed with a bounded notice.
 - Next action:
-  - Proceed with the authorized lightweight delivery workflow.
+  - Keep the repository idle until an explicit successor brief is issued.

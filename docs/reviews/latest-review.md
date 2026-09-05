@@ -7,22 +7,23 @@ Delivery policy: `LIGHTWEIGHT`
 Baseline: `d7c6289893a04b2da021e0c2591632c319a829b9` (`origin/main`)
 Reviewed candidate: `d9dfdda78d273660a817bf726a3c7807fa2042a8`
 Task branch: `task/TASK-021-files-copy-paste-move`
-Pull request: none at review time
-Remote checks: none at review time
-Merge status: not applicable
-Target branch contains change: `NO`
+Review record: `91cc9f4a4043f93e2c0eeaf6b4eff97c02d6a984`
+Pull request: `#40 <https://github.com/medonmez/oh-my-code/pull/40>`
+Remote checks: `shellcheck SUCCESS`
+Merge status: `MERGED`
+Merge commit: `bce875ae93e86bc12b5a33d758168940fd7a4993`
+Target branch contains change: `YES`
 
 ## Review result
 
 The candidate was reviewed on the recorded isolated task branch with a clean
-worktree. Its merge base is exactly the expected `origin/main` baseline. The
-complete delta is scoped to TASK-021 product code, deterministic tests, and
-the associated durable task/review records. The previous staging-ownership
-and directory-read findings are corrected. The cleanup-lstat correction now
-verifies file absence explicitly and propagates inspection failures without
-hiding the original copy or rename error. No unresolved correctness,
-security, data-integrity, regression, public-contract, or scope issue remains
-for local review.
+worktree. Its merge base was exactly the expected `origin/main` baseline. The
+complete delta was scoped to TASK-021 product code, deterministic tests, and
+the associated durable task/review records. The previous staging-ownership,
+directory-read, and cleanup-lstat findings were corrected. The candidate
+passed local acceptance and was delivered through PR #40; remote `main` now
+contains the reviewed implementation at merge commit
+`bce875ae93e86bc12b5a33d758168940fd7a4993`.
 
 ## Findings
 
@@ -70,18 +71,16 @@ notice. This is the accepted TASK-020/TASK-021 boundary.
   returned `cleanup failed` with the original error and left residue visible
   rather than silently claiming cleanup success.
 
-All local and synthetic results above are local review evidence. No
-production, recovery, hosted, or customer-acceptance evidence is claimed.
-No push, PR, or merge has been performed at the time of this review.
+All local and synthetic results above are local review evidence. The PR merge,
+remote check, and remote default-branch ancestry are repository-provider
+observations; no production, recovery, or customer-acceptance claim is made.
 
 ## Delivery decision
 
-`APPROVED` for the lightweight delivery flow. Push the reviewed task branch,
-open one PR targeting `origin/main`, merge promptly if it is mergeable and no
-required check fails, verify the remote default branch contains the reviewed
-implementation, then reconcile the canonical records.
+`ACCEPTED` after verified lightweight delivery through PR #40. The remote
+default branch contains the reviewed implementation at merge commit
+`bce875ae93e86bc12b5a33d758168940fd7a4993`.
 
 ## Next action
 
-Start the authorized lightweight delivery for
-`task/TASK-021-files-copy-paste-move`.
+Keep the repository idle until an explicit successor brief is issued.
